@@ -1,0 +1,10 @@
+{
+  "job": "reconcile",
+  "job_name": "請求と入金の突合（2026年8月）",
+  "left":  { "path": "samples/請求データ_2026-08.xlsx", "label": "請求", "key": "請求番号",   "value": "請求金額" },
+  "right": { "path": "samples/入金データ_2026-08.xlsx", "label": "入金", "key": "振込依頼人", "value": "入金額" },
+  "key_rules": { "upper": true, "strip_spaces": true },
+  "tolerance": 0,
+  "output": "out/突合結果_2026-08.xlsx",
+  "summary": "out/突合サマリー.md"
+}

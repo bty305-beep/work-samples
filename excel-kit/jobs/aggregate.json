@@ -1,0 +1,13 @@
+{
+  "job": "aggregate",
+  "job_name": "拠点別・メニュー別の売上集計（2026年8月）",
+  "inputs": [
+    { "path": "samples/売上_本店.xlsx",     "label_column": "拠点", "label": "本店" },
+    { "path": "samples/売上_北営業所.xlsx", "label_column": "拠点", "label": "北営業所" },
+    { "path": "samples/売上_南工場.xlsx",   "label_column": "拠点", "label": "南工場" }
+  ],
+  "group_by": ["拠点", "メニュー"],
+  "value_column": "金額",
+  "output": "out/売上集計_2026-08.xlsx",
+  "summary": "out/集計サマリー.md"
+}

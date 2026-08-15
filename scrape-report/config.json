@@ -1,0 +1,22 @@
+{
+  "job_name": "取扱商品リスト収集",
+  "sources": ["samples/page1.html", "samples/page2.html"],
+  "wait_seconds": 1.0,
+  "timeout_seconds": 20,
+  "dedupe_by": "url",
+  "rules": {
+    "row_selector": "li.item",
+    "fields": [
+      { "name": "商品名", "selector": "a.name", "clean": "text" },
+      { "name": "url",    "selector": "a.name", "attr": "href", "clean": "text" },
+      { "name": "分類",   "selector": "span.cat", "clean": "text" },
+      { "name": "価格",   "selector": "span.price", "clean": "number" },
+      { "name": "更新日", "selector": "span.upd", "clean": "date" }
+    ]
+  },
+  "report": {
+    "breakdown": [{ "field": "分類", "label": "分類", "top": 10 }],
+    "stats": ["価格"]
+  },
+  "output": { "csv": "out/products.csv", "report": "out/report.md" }
+}

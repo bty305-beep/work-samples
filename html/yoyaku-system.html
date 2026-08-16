@@ -1,0 +1,580 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>予約・受付システム デモ | サロン・飲食店・教室で使える予約管理</title>
+<meta name="description" content="お客さま向けの予約画面と店舗向けの管理画面。重複予約の防止、時間軸での空き状況表示、CSV出力に対応。">
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" data-presets="react">
+const { useState, useMemo } = React;
+
+/* ------------------------------------------------------------------
+   業種定義。ここを差し替えるだけで別業種の予約システムになります。
+   実案件では管理画面から編集できるようにし、DBに持たせます。
+------------------------------------------------------------------ */
+const BUSINESSES = {
+  salon: {
+    label: "サロン・整体",
+    shopName: "kotone 整体院",
+    resourceLabel: "担当",
+    slotMinutes: 30,
+    open: "10:00",
+    close: "19:00",
+    closedDays: [1],
+    resources: ["高梨", "白石"],
+    menus: [
+      { id: "m1", name: "全身整体", minutes: 60, price: 6600 },
+      { id: "m2", name: "肩・首集中", minutes: 30, price: 3850 },
+      { id: "m3", name: "産後骨盤ケア", minutes: 90, price: 9900 },
+    ],
+    askFields: [{ key: "note", label: "気になる部位・ご要望", type: "textarea" }],
+  },
+  restaurant: {
+    label: "飲食店",
+    shopName: "ビストロ 灯（あかり）",
+    resourceLabel: "席",
+    slotMinutes: 30,
+    open: "17:30",
+    close: "21:30",
+    closedDays: [2],
+    resources: ["カウンター", "テーブルA", "テーブルB", "個室"],
+    menus: [
+      { id: "m1", name: "ディナーコース", minutes: 120, price: 5500 },
+      { id: "m2", name: "アラカルト利用", minutes: 90, price: 0 },
+      { id: "m3", name: "貸切相談", minutes: 180, price: 0 },
+    ],
+    askFields: [
+      { key: "people", label: "人数", type: "number" },
+      { key: "note", label: "アレルギー・ご要望", type: "textarea" },
+    ],
+  },
+  school: {
+    label: "教室・スクール",
+    shopName: "みなみ書道教室",
+    resourceLabel: "講師",
+    slotMinutes: 60,
+    open: "14:00",
+    close: "20:00",
+    closedDays: [0, 3],
+    resources: ["南 先生", "岡崎 先生"],
+    menus: [
+      { id: "m1", name: "体験レッスン", minutes: 60, price: 2200 },
+      { id: "m2", name: "通常レッスン", minutes: 60, price: 4400 },
+      { id: "m3", name: "作品仕上げ講座", minutes: 120, price: 8800 },
+    ],
+    askFields: [{ key: "note", label: "経験の有無・持ち物の相談", type: "textarea" }],
+  },
+};
+
+const STATUS = {
+  reserved: { label: "予約済み", tone: "bg-emerald-50 text-emerald-800 ring-emerald-200" },
+  visited: { label: "来店済み", tone: "bg-stone-100 text-stone-600 ring-stone-300" },
+  canceled: { label: "キャンセル", tone: "bg-stone-50 text-stone-400 ring-stone-200" },
+  noshow: { label: "無断キャンセル", tone: "bg-rose-50 text-rose-700 ring-rose-200" },
+};
+
+const toMin = (hhmm) => {
+  const [h, m] = hhmm.split(":").map(Number);
+  return h * 60 + m;
+};
+const toHHMM = (min) => `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
+const ymd = (d) => d.toISOString().slice(0, 10);
+const jpDay = ["日", "月", "火", "水", "木", "金", "土"];
+
+const today = new Date();
+const dayAfter = (n) => {
+  const d = new Date(today);
+  d.setDate(d.getDate() + n);
+  return d;
+};
+
+const SEED = {
+  salon: [
+    { id: 1, date: ymd(today), start: "11:00", menuId: "m1", resource: "高梨", name: "村瀬 咲", tel: "090-1234-5678", status: "visited", note: "腰の張り" },
+    { id: 2, date: ymd(today), start: "14:30", menuId: "m2", resource: "白石", name: "堀内 亮太", tel: "080-2222-1111", status: "reserved", note: "" },
+    { id: 3, date: ymd(dayAfter(1)), start: "10:00", menuId: "m3", resource: "高梨", name: "斉藤 みか", tel: "070-3333-4444", status: "reserved", note: "産後4ヶ月" },
+  ],
+  restaurant: [
+    { id: 1, date: ymd(today), start: "18:00", menuId: "m1", resource: "テーブルA", name: "金子", tel: "090-5555-6666", status: "reserved", people: 4, note: "甲殻類アレルギーあり" },
+    { id: 2, date: ymd(today), start: "19:30", menuId: "m2", resource: "カウンター", name: "山内", tel: "080-7777-8888", status: "reserved", people: 2, note: "" },
+  ],
+  school: [
+    { id: 1, date: ymd(today), start: "16:00", menuId: "m1", resource: "南 先生", name: "小林 楓", tel: "090-9999-0000", status: "reserved", note: "初めてです" },
+  ],
+};
+
+function App() {
+  const [bizKey, setBizKey] = useState("salon");
+  const [view, setView] = useState("customer");
+  const [bookings, setBookings] = useState(SEED);
+  const [date, setDate] = useState(ymd(today));
+
+  const biz = BUSINESSES[bizKey];
+  const rows = bookings[bizKey];
+
+  const switchBiz = (key) => {
+    setBizKey(key);
+    setDate(ymd(today));
+  };
+
+  const addBooking = (b) =>
+    setBookings((prev) => ({
+      ...prev,
+      [bizKey]: [...prev[bizKey], { ...b, id: Math.max(0, ...prev[bizKey].map((r) => r.id)) + 1 }],
+    }));
+
+  const setStatus = (id, status) =>
+    setBookings((prev) => ({
+      ...prev,
+      [bizKey]: prev[bizKey].map((r) => (r.id === id ? { ...r, status } : r)),
+    }));
+
+  return (
+    <div className="min-h-screen bg-stone-50 text-stone-900">
+      <div className="border-b border-stone-200 bg-white">
+        <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-5 gap-y-3 px-4 py-3">
+          <span className="text-sm font-semibold tracking-tight">予約・受付システム</span>
+          <span className="text-xs text-stone-400">デモ</span>
+
+          <label className="flex items-center gap-2 text-xs text-stone-500">
+            業種
+            <select
+              value={bizKey}
+              onChange={(e) => switchBiz(e.target.value)}
+              className="rounded border border-stone-300 bg-white px-2 py-1 text-xs text-stone-900"
+            >
+              {Object.entries(BUSINESSES).map(([k, b]) => (
+                <option key={k} value={k}>{b.label}</option>
+              ))}
+            </select>
+          </label>
+
+          <div className="ml-auto flex rounded border border-stone-300 text-xs">
+            <button
+              onClick={() => setView("customer")}
+              className={`px-3 py-1.5 ${view === "customer" ? "bg-emerald-800 text-white" : "text-stone-600"}`}
+            >
+              お客さま画面
+            </button>
+            <button
+              onClick={() => setView("admin")}
+              className={`px-3 py-1.5 ${view === "admin" ? "bg-emerald-800 text-white" : "text-stone-600"}`}
+            >
+              店舗の管理画面
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {view === "customer" ? (
+        <CustomerView biz={biz} rows={rows} onBook={addBooking} />
+      ) : (
+        <AdminView biz={biz} rows={rows} date={date} setDate={setDate} onStatus={setStatus} />
+      )}
+
+      <p className="mx-auto max-w-5xl px-4 pb-10 text-xs leading-relaxed text-stone-400">
+        メニュー・{biz.resourceLabel}・営業時間・定休日を設定として外に出しているため、
+        上部の「業種」を切り替えると同じ仕組みがサロン・飲食店・教室に変わります。
+        実案件ではこの設定を管理画面から編集できるようにし、予約の重複判定はサーバー側で行います。
+      </p>
+    </div>
+  );
+}
+
+/* ----------------------------- お客さま画面 ----------------------------- */
+
+function CustomerView({ biz, rows, onBook }) {
+  const [menuId, setMenuId] = useState(biz.menus[0].id);
+  const [dayOffset, setDayOffset] = useState(0);
+  const [picked, setPicked] = useState(null);
+  const [done, setDone] = useState(null);
+
+  const menu = biz.menus.find((m) => m.id === menuId) ?? biz.menus[0];
+  const days = [0, 1, 2, 3, 4, 5, 6].map(dayAfter);
+
+  const targetDate = days[dayOffset];
+  const closed = biz.closedDays.includes(targetDate.getDay());
+
+  const slots = useMemo(() => {
+    if (closed) return [];
+    const list = [];
+    const openMin = toMin(biz.open);
+    const closeMin = toMin(biz.close);
+    for (let t = openMin; t + menu.minutes <= closeMin; t += biz.slotMinutes) {
+      const free = biz.resources.filter((res) => {
+        return !rows.some((r) => {
+          if (r.date !== ymd(targetDate) || r.resource !== res) return false;
+          if (r.status === "canceled") return false;
+          const rMenu = biz.menus.find((m) => m.id === r.menuId);
+          const rStart = toMin(r.start);
+          const rEnd = rStart + (rMenu?.minutes ?? biz.slotMinutes);
+          return t < rEnd && rStart < t + menu.minutes;
+        });
+      });
+      list.push({ start: toHHMM(t), free });
+    }
+    return list;
+  }, [biz, rows, menu, targetDate, closed]);
+
+  if (done) {
+    return (
+      <main className="mx-auto max-w-5xl px-4 py-16">
+        <div className="mx-auto max-w-md rounded border border-emerald-200 bg-white px-6 py-10 text-center">
+          <p className="text-sm text-emerald-800">ご予約を受け付けました</p>
+          <p className="mt-4 text-2xl font-semibold tracking-tight">
+            {done.date} {done.start}
+          </p>
+          <p className="mt-2 text-sm text-stone-600">
+            {biz.menus.find((m) => m.id === done.menuId).name} ／ {biz.resourceLabel}：{done.resource}
+          </p>
+          <p className="mt-6 text-xs text-stone-500">
+            確認のご連絡を {done.tel} 宛にお送りします。
+          </p>
+          <button
+            onClick={() => { setDone(null); setPicked(null); }}
+            className="mt-8 rounded border border-stone-300 px-4 py-2 text-sm hover:bg-stone-100"
+          >
+            続けて予約する
+          </button>
+        </div>
+      </main>
+    );
+  }
+
+  return (
+    <main className="mx-auto max-w-5xl px-4 py-8">
+      <h1 className="text-2xl font-semibold tracking-tight">{biz.shopName}</h1>
+      <p className="mt-1 text-sm text-stone-500">
+        {biz.open}〜{biz.close}／定休日 {biz.closedDays.map((d) => jpDay[d]).join("・")}曜
+      </p>
+
+      <section className="mt-8">
+        <h2 className="text-sm font-medium text-stone-500">1. メニューを選ぶ</h2>
+        <div className="mt-3 grid gap-3 sm:grid-cols-3">
+          {biz.menus.map((m) => (
+            <button
+              key={m.id}
+              onClick={() => { setMenuId(m.id); setPicked(null); }}
+              className={`rounded border px-4 py-3 text-left ${
+                m.id === menuId ? "border-emerald-800 bg-emerald-50" : "border-stone-300 bg-white hover:bg-stone-100"
+              }`}
+            >
+              <span className="block text-sm font-medium">{m.name}</span>
+              <span className="mt-1 block text-xs text-stone-500">
+                {m.minutes}分{m.price > 0 ? ` ／ ${m.price.toLocaleString()}円` : ""}
+              </span>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className="mt-8">
+        <h2 className="text-sm font-medium text-stone-500">2. 日付を選ぶ</h2>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {days.map((d, i) => {
+            const isClosed = biz.closedDays.includes(d.getDay());
+            return (
+              <button
+                key={i}
+                disabled={isClosed}
+                onClick={() => { setDayOffset(i); setPicked(null); }}
+                className={`w-16 rounded border py-2 text-center text-xs ${
+                  isClosed
+                    ? "cursor-not-allowed border-stone-200 bg-stone-100 text-stone-300"
+                    : i === dayOffset
+                    ? "border-emerald-800 bg-emerald-800 text-white"
+                    : "border-stone-300 bg-white hover:bg-stone-100"
+                }`}
+              >
+                <span className="block">{d.getMonth() + 1}/{d.getDate()}</span>
+                <span className="block">{jpDay[d.getDay()]}</span>
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="mt-8">
+        <h2 className="text-sm font-medium text-stone-500">3. 時間を選ぶ</h2>
+        {closed ? (
+          <p className="mt-3 rounded border border-dashed border-stone-300 bg-white px-4 py-8 text-center text-sm text-stone-500">
+            この日は定休日です。別の日付を選んでください。
+          </p>
+        ) : (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {slots.map((s) => {
+              const full = s.free.length === 0;
+              return (
+                <button
+                  key={s.start}
+                  disabled={full}
+                  onClick={() => setPicked({ start: s.start, resource: s.free[0] })}
+                  className={`w-20 rounded border py-2 text-center text-sm ${
+                    full
+                      ? "cursor-not-allowed border-stone-200 bg-stone-100 text-stone-300 line-through"
+                      : picked?.start === s.start
+                      ? "border-emerald-800 bg-emerald-800 text-white"
+                      : "border-stone-300 bg-white hover:bg-stone-100"
+                  }`}
+                >
+                  {s.start}
+                </button>
+              );
+            })}
+          </div>
+        )}
+        {!closed && slots.every((s) => s.free.length === 0) && (
+          <p className="mt-3 text-sm text-stone-500">この日は空きがありません。別の日付をお試しください。</p>
+        )}
+      </section>
+
+      {picked && (
+        <BookingForm
+          biz={biz}
+          menu={menu}
+          date={ymd(targetDate)}
+          picked={picked}
+          onCancel={() => setPicked(null)}
+          onSubmit={(b) => { onBook(b); setDone(b); }}
+        />
+      )}
+    </main>
+  );
+}
+
+function BookingForm({ biz, menu, date, picked, onCancel, onSubmit }) {
+  const [form, setForm] = useState({ name: "", tel: "", ...Object.fromEntries(biz.askFields.map((f) => [f.key, ""])) });
+  const [touched, setTouched] = useState(false);
+
+  const invalid = { name: !form.name.trim(), tel: !/^[\d-]{10,}$/.test(form.tel.trim()) };
+  const hasError = invalid.name || invalid.tel;
+
+  const submit = () => {
+    setTouched(true);
+    if (hasError) return;
+    onSubmit({ ...form, date, start: picked.start, resource: picked.resource, menuId: menu.id, status: "reserved" });
+  };
+
+  return (
+    <section className="mt-8 rounded border border-stone-300 bg-white p-5">
+      <h2 className="text-sm font-medium text-stone-500">4. お名前とご連絡先</h2>
+      <p className="mt-2 text-sm">
+        <span className="font-medium">{date} {picked.start}</span>
+        <span className="text-stone-500">　{menu.name}（{menu.minutes}分）／{biz.resourceLabel}：{picked.resource}</span>
+      </p>
+
+      <div className="mt-4 grid gap-4 sm:grid-cols-2">
+        <div>
+          <label className="mb-1 block text-xs text-stone-500">お名前<span className="ml-1 text-rose-500">必須</span></label>
+          <input
+            value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
+            className={`w-full rounded border px-3 py-2 text-sm ${touched && invalid.name ? "border-rose-400" : "border-stone-300"}`}
+          />
+          {touched && invalid.name && <p className="mt-1 text-xs text-rose-600">お名前を入力してください。</p>}
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-stone-500">電話番号<span className="ml-1 text-rose-500">必須</span></label>
+          <input
+            value={form.tel}
+            inputMode="tel"
+            placeholder="090-1234-5678"
+            onChange={(e) => setForm({ ...form, tel: e.target.value })}
+            className={`w-full rounded border px-3 py-2 text-sm ${touched && invalid.tel ? "border-rose-400" : "border-stone-300"}`}
+          />
+          {touched && invalid.tel && <p className="mt-1 text-xs text-rose-600">ハイフンを含む電話番号を入力してください。</p>}
+        </div>
+
+        {biz.askFields.map((f) => (
+          <div key={f.key} className={f.type === "textarea" ? "sm:col-span-2" : ""}>
+            <label className="mb-1 block text-xs text-stone-500">{f.label}</label>
+            {f.type === "textarea" ? (
+              <textarea
+                rows={2}
+                value={form[f.key]}
+                onChange={(e) => setForm({ ...form, [f.key]: e.target.value })}
+                className="w-full rounded border border-stone-300 px-3 py-2 text-sm"
+              />
+            ) : (
+              <input
+                type="number"
+                value={form[f.key]}
+                onChange={(e) => setForm({ ...form, [f.key]: e.target.value })}
+                className="w-full rounded border border-stone-300 px-3 py-2 text-sm"
+              />
+            )}
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-5 flex gap-2">
+        <button onClick={submit} className="rounded bg-emerald-800 px-5 py-2 text-sm text-white hover:bg-emerald-700">
+          この内容で予約する
+        </button>
+        <button onClick={onCancel} className="rounded border border-stone-300 px-4 py-2 text-sm hover:bg-stone-100">
+          時間を選び直す
+        </button>
+      </div>
+    </section>
+  );
+}
+
+/* ------------------------------ 管理画面 ------------------------------ */
+
+function AdminView({ biz, rows, date, setDate, onStatus }) {
+  const dayRows = rows
+    .filter((r) => r.date === date)
+    .sort((a, b) => toMin(a.start) - toMin(b.start));
+
+  const openMin = toMin(biz.open);
+  const closeMin = toMin(biz.close);
+  const span = closeMin - openMin;
+
+  const sales = dayRows
+    .filter((r) => r.status === "visited")
+    .reduce((sum, r) => sum + (biz.menus.find((m) => m.id === r.menuId)?.price ?? 0), 0);
+
+  const exportCsv = () => {
+    const header = ["日付", "開始", "メニュー", biz.resourceLabel, "お名前", "電話番号", "状態", "備考"];
+    const body = dayRows.map((r) => [
+      r.date, r.start, biz.menus.find((m) => m.id === r.menuId)?.name ?? "",
+      r.resource, r.name, r.tel, STATUS[r.status].label, r.note ?? "",
+    ]);
+    const csv = [header, ...body].map((l) => l.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\r\n");
+    const url = URL.createObjectURL(new Blob(["\uFEFF" + csv], { type: "text/csv" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `予約_${date}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <main className="mx-auto max-w-5xl px-4 py-8">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight">予約台帳</h1>
+          <p className="mt-1 text-sm text-stone-500">
+            {dayRows.filter((r) => r.status !== "canceled").length}件の予約／来店済みの売上 {sales.toLocaleString()}円
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <input
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            className="rounded border border-stone-300 px-3 py-2 text-sm"
+          />
+          <button onClick={exportCsv} className="rounded border border-stone-300 bg-white px-3 py-2 text-sm hover:bg-stone-100">
+            CSVで書き出す
+          </button>
+        </div>
+      </div>
+
+      {/* 時間軸。何時が埋まっていて何時が空いているかを一目で見せます */}
+      <div className="mt-6 overflow-x-auto rounded border border-stone-200 bg-white p-4">
+        <div className="min-w-[640px]">
+          <div className="mb-2 flex text-xs text-stone-400">
+            <div className="w-24 shrink-0" />
+            <div className="relative h-4 flex-1">
+              {Array.from({ length: Math.floor(span / 60) + 1 }, (_, i) => (
+                <span key={i} className="absolute -translate-x-1/2" style={{ left: `${((i * 60) / span) * 100}%` }}>
+                  {toHHMM(openMin + i * 60)}
+                </span>
+              ))}
+            </div>
+          </div>
+          {biz.resources.map((res) => (
+            <div key={res} className="flex items-center border-t border-stone-100 py-2">
+              <div className="w-24 shrink-0 truncate text-sm text-stone-600">{res}</div>
+              <div className="relative h-8 flex-1 rounded bg-stone-100">
+                {dayRows
+                  .filter((r) => r.resource === res && r.status !== "canceled")
+                  .map((r) => {
+                    const m = biz.menus.find((x) => x.id === r.menuId);
+                    const left = ((toMin(r.start) - openMin) / span) * 100;
+                    const width = ((m?.minutes ?? biz.slotMinutes) / span) * 100;
+                    return (
+                      <div
+                        key={r.id}
+                        title={`${r.start} ${r.name}様 ${m?.name ?? ""}`}
+                        className={`absolute top-0 flex h-8 items-center overflow-hidden rounded px-2 text-xs text-white ${
+                          r.status === "visited" ? "bg-stone-500" : r.status === "noshow" ? "bg-rose-600" : "bg-emerald-800"
+                        }`}
+                        style={{ left: `${left}%`, width: `${width}%` }}
+                      >
+                        <span className="truncate">{r.name}</span>
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {dayRows.length === 0 ? (
+        <p className="mt-6 rounded border border-dashed border-stone-300 bg-white px-6 py-12 text-center text-sm text-stone-500">
+          この日の予約はまだありません。
+        </p>
+      ) : (
+        <div className="mt-6 overflow-hidden rounded border border-stone-200 bg-white">
+          <table className="w-full text-left text-sm">
+            <thead className="bg-stone-50 text-xs text-stone-500">
+              <tr>
+                <th className="px-4 py-3 font-medium">開始</th>
+                <th className="px-4 py-3 font-medium">メニュー</th>
+                <th className="px-4 py-3 font-medium">{biz.resourceLabel}</th>
+                <th className="px-4 py-3 font-medium">お客さま</th>
+                <th className="px-4 py-3 font-medium">状態</th>
+                <th className="px-4 py-3" />
+              </tr>
+            </thead>
+            <tbody>
+              {dayRows.map((r) => (
+                <tr key={r.id} className="border-t border-stone-100">
+                  <td className="px-4 py-3 font-mono">{r.start}</td>
+                  <td className="px-4 py-3">{biz.menus.find((m) => m.id === r.menuId)?.name}</td>
+                  <td className="px-4 py-3 text-stone-600">{r.resource}</td>
+                  <td className="px-4 py-3">
+                    <span className="block">{r.name}</span>
+                    <span className="block font-mono text-xs text-stone-500">{r.tel}</span>
+                    {r.note && <span className="mt-1 block text-xs text-stone-500">{r.note}</span>}
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs ring-1 ${STATUS[r.status].tone}`}>
+                      {STATUS[r.status].label}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <select
+                      value={r.status}
+                      onChange={(e) => onStatus(r.id, e.target.value)}
+                      className="rounded border border-stone-300 px-2 py-1 text-xs"
+                    >
+                      {Object.entries(STATUS).map(([k, s]) => (
+                        <option key={k} value={k}>{s.label}</option>
+                      ))}
+                    </select>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </main>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>

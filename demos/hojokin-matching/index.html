@@ -1,0 +1,1257 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>補助金・助成金マッチング PoC（デモ）| 適合度の根拠を画面に出す</title>
+<meta name="description" content="事業者情報から利用できる可能性の高い補助金・助成金を提案するPoCデモ。適合度の内訳・該当理由・満たしていない条件を画面に表示します。掲載データはすべて架空です。">
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-[#f3f1ec]">
+<div id="root"></div>
+<script>Babel.registerPreset("react-classic", { presets: [[Babel.availablePresets["react"], { runtime: "classic" }]] });</script>
+<script type="text/babel" data-presets="react-classic">
+const { useState, useMemo } = React;
+
+/* ==================================================================
+   重要 — 掲載している制度はすべて架空です。
+   実在する補助金・助成金の名称・要件・金額を示すものではありません。
+   本番実装では、公募中の制度データ（出典URL・取得日時つき）を
+   取り込んで同じ構造に流し込みます。データ構造は変えません。
+================================================================== */
+
+const NOW_YEAR = new Date().getFullYear();
+
+/* ------------------------------------------------------------------
+   1. マスタ定義
+------------------------------------------------------------------ */
+const ENTITY_TYPES = ["法人", "個人事業主"];
+
+const INDUSTRIES = [
+  "製造業", "建設業", "情報通信業", "運輸業", "卸売業", "小売業",
+  "飲食業", "宿泊業", "医療・福祉", "教育・学習支援", "サービス業",
+  "不動産業", "農林水産業",
+];
+
+const PREFECTURES = [
+  "北海道", "青森県", "岩手県", "宮城県", "秋田県", "山形県", "福島県",
+  "茨城県", "栃木県", "群馬県", "埼玉県", "千葉県", "東京都", "神奈川県",
+  "新潟県", "富山県", "石川県", "福井県", "山梨県", "長野県",
+  "岐阜県", "静岡県", "愛知県", "三重県",
+  "滋賀県", "京都府", "大阪府", "兵庫県", "奈良県", "和歌山県",
+  "鳥取県", "島根県", "岡山県", "広島県", "山口県",
+  "徳島県", "香川県", "愛媛県", "高知県",
+  "福岡県", "佐賀県", "長崎県", "熊本県", "大分県", "宮崎県", "鹿児島県", "沖縄県",
+];
+
+// 売上規模は「幅を持った区分」で受け取る。実額の入力は求めない。
+const REVENUE_TIERS = [
+  { key: "r1", label: "1,000万円未満" },
+  { key: "r2", label: "1,000万〜5,000万円" },
+  { key: "r3", label: "5,000万〜1億円" },
+  { key: "r4", label: "1億〜5億円" },
+  { key: "r5", label: "5億〜10億円" },
+  { key: "r6", label: "10億円以上" },
+];
+const tierIndex = (key) => REVENUE_TIERS.findIndex((t) => t.key === key);
+const tierLabel = (key) => {
+  const t = REVENUE_TIERS.find((x) => x.key === key);
+  return t ? t.label : "未選択";
+};
+
+const PURPOSES = [
+  { key: "equipment", label: "設備投資" },
+  { key: "it", label: "IT導入" },
+  { key: "hiring", label: "人材採用" },
+  { key: "sales", label: "販路開拓" },
+  { key: "succession", label: "事業承継" },
+  { key: "energy", label: "省エネ" },
+];
+const purposeLabel = (key) => {
+  const p = PURPOSES.find((x) => x.key === key);
+  return p ? p.label : key;
+};
+const purposeLabels = (keys) => keys.map(purposeLabel).join("・");
+
+const TOHOKU = ["北海道", "青森県", "岩手県", "宮城県", "秋田県", "山形県", "福島県"];
+
+/* ------------------------------------------------------------------
+   2. 配点表（加点式）
+   要件の種類ごとに配点を固定し、制度ごとの要件数の違いは
+   「満点で割って正規化」して吸収する。画面（ロジックタブ）に同じ表を出す。
+------------------------------------------------------------------ */
+const WEIGHTS = {
+  purpose: 35,   // 検討している取り組みと制度の目的が合っているか
+  industry: 15,  // 業種要件
+  employees: 15, // 事業規模（従業員数）要件
+  entity: 10,    // 事業形態（法人／個人事業主）
+  region: 10,    // 所在地要件
+  years: 10,     // 事業年数要件
+  revenue: 5,    // 売上規模要件
+  check: 5,      // 入力情報だけでは判定できない要件（1件あたり）
+};
+
+const KIND_LABEL = {
+  purpose: "取り組み", industry: "業種", employees: "規模", entity: "形態",
+  region: "地域", years: "年数", revenue: "売上", check: "要確認",
+};
+
+const SECONDARY_RATIO = 0.6; // 副次的な対象にのみ合致した場合の獲得率
+
+/* ------------------------------------------------------------------
+   3. 制度データ（すべて架空）
+   本番では、この配列を「収集 → 構造化 → レビュー済み」の制度DBから
+   取得する。1件あたり sourceUrl / fetchedAt / round を必ず持たせる。
+------------------------------------------------------------------ */
+const PROGRAMS = [
+  {
+    id: "p1",
+    name: "設備投資支援補助金（例）",
+    issuer: "（架空）産業基盤整備支援機構",
+    summary: "生産性の向上を目的とした機械装置・システムの導入費用を補助する制度という設定です。",
+    amountLabel: "上限 1,500万円",
+    amountValue: 1500,
+    rate: "1/2（従業員20名以下は 2/3）",
+    schedule: "年2回（春・秋）の公募を想定",
+    rules: [
+      { kind: "purpose", primary: ["equipment"], secondary: ["energy", "it"], req: "設備投資が主たる対象（省エネ・IT導入に係る設備も対象経費に含む）" },
+      { kind: "industry", allow: ["製造業", "建設業", "運輸業", "卸売業"], req: "製造業・建設業・運輸業・卸売業のいずれか" },
+      { kind: "employees", max: 300, req: "従業員数 300名以下" },
+      { kind: "region", allow: null, req: "全国（地域の限定なし）" },
+      { kind: "years", min: 3, req: "事業年数 3年以上" },
+      { kind: "check", req: "導入する設備が補助対象設備リストに掲載されていること" },
+      { kind: "check", req: "申請時点で従業員への賃上げ計画を表明していること" },
+    ],
+  },
+  {
+    id: "p2",
+    name: "業務システム導入支援金（例）",
+    issuer: "（架空）中小企業デジタル化推進基金",
+    summary: "業務ソフト・クラウドサービスの導入費用と、導入に伴う設定・研修費を補助する制度という設定です。",
+    amountLabel: "上限 450万円",
+    amountValue: 450,
+    rate: "2/3",
+    schedule: "通年（年4回の締切）を想定",
+    rules: [
+      { kind: "purpose", primary: ["it"], secondary: ["sales"], req: "IT導入が主たる対象（販路開拓に資するツールも対象）" },
+      { kind: "industry", allow: null, req: "全業種（業種の限定なし）" },
+      { kind: "employees", max: 100, req: "従業員数 100名以下" },
+      { kind: "region", allow: null, req: "全国（地域の限定なし）" },
+      { kind: "years", min: 1, req: "事業年数 1年以上" },
+      { kind: "check", req: "導入するソフトウェアが事前登録ツールであること" },
+      { kind: "check", req: "導入後3年間、効果報告の提出に対応できること" },
+    ],
+  },
+  {
+    id: "p3",
+    name: "小規模事業者 販路開拓支援金（例）",
+    issuer: "（架空）地域商工支援センター",
+    summary: "小規模事業者の広告・展示会出展・ウェブ制作などの販路開拓費用を補助する制度という設定です。",
+    amountLabel: "上限 200万円",
+    amountValue: 200,
+    rate: "2/3",
+    schedule: "年4回の公募を想定",
+    rules: [
+      { kind: "purpose", primary: ["sales"], secondary: ["it"], req: "販路開拓が主たる対象（販路開拓に直結するIT費用も対象）" },
+      { kind: "industry", allow: null, req: "全業種（業種の限定なし）" },
+      { kind: "employees", max: 20, req: "従業員数 20名以下（小規模事業者）" },
+      { kind: "region", allow: null, req: "全国（地域の限定なし）" },
+      { kind: "years", min: 1, req: "事業年数 1年以上" },
+      { kind: "check", req: "商工団体が発行する支援計画書（様式4）を取得できること" },
+      { kind: "check", req: "同一年度内に同種の販路開拓補助を受けていないこと" },
+    ],
+  },
+  {
+    id: "p4",
+    name: "採用・定着サポート助成金（例）",
+    issuer: "（架空）雇用環境整備機構",
+    summary: "正社員の新規雇用と、雇用後の教育訓練にかかる費用を定額で助成する制度という設定です。",
+    amountLabel: "上限 480万円（1名あたり60万円・8名まで）",
+    amountValue: 480,
+    rate: "定額（1名あたり60万円）",
+    schedule: "通年（随時受付）を想定",
+    rules: [
+      { kind: "purpose", primary: ["hiring"], secondary: [], req: "人材採用が対象（他の取り組みは対象外）" },
+      { kind: "industry", allow: null, req: "全業種（業種の限定なし）" },
+      { kind: "employees", min: 5, max: 300, req: "従業員数 5名以上300名以下" },
+      { kind: "region", allow: null, req: "全国（地域の限定なし）" },
+      { kind: "years", min: 2, req: "事業年数 2年以上" },
+      { kind: "check", req: "雇用保険の適用事業所であること" },
+      { kind: "check", req: "直近1年間に事業主都合の離職者がいないこと" },
+    ],
+  },
+  {
+    id: "p5",
+    name: "省エネ設備更新補助金（例）",
+    issuer: "（架空）エネルギー効率化支援機構",
+    summary: "空調・照明・生産設備を高効率機器へ更新する費用を補助する制度という設定です。",
+    amountLabel: "上限 3,000万円",
+    amountValue: 3000,
+    rate: "1/3",
+    schedule: "年1回（初夏）の公募を想定",
+    rules: [
+      { kind: "purpose", primary: ["energy"], secondary: ["equipment"], req: "省エネが主たる対象（設備投資として実施する場合も対象）" },
+      { kind: "industry", allow: ["製造業", "宿泊業", "飲食業", "運輸業", "卸売業"], req: "製造業・宿泊業・飲食業・運輸業・卸売業のいずれか" },
+      { kind: "employees", max: 500, req: "従業員数 500名以下" },
+      { kind: "region", allow: null, req: "全国（地域の限定なし）" },
+      { kind: "years", min: 3, req: "事業年数 3年以上" },
+      { kind: "check", req: "更新前後のエネルギー使用量を計測・報告できること" },
+      { kind: "check", req: "更新による省エネ率が基準（15%以上）を満たす見込みであること" },
+    ],
+  },
+  {
+    id: "p6",
+    name: "事業承継サポート補助金（例）",
+    issuer: "（架空）事業承継支援ネットワーク",
+    summary: "承継・M&Aに伴う専門家費用や、承継後の設備更新費を補助する制度という設定です。",
+    amountLabel: "上限 800万円",
+    amountValue: 800,
+    rate: "2/3",
+    schedule: "年2回の公募を想定",
+    rules: [
+      { kind: "purpose", primary: ["succession"], secondary: ["equipment"], req: "事業承継が主たる対象（承継に伴う設備投資も対象）" },
+      { kind: "industry", allow: null, req: "全業種（業種の限定なし）" },
+      { kind: "employees", max: 300, req: "従業員数 300名以下" },
+      { kind: "region", allow: null, req: "全国（地域の限定なし）" },
+      { kind: "years", min: 5, req: "事業年数 5年以上" },
+      { kind: "check", req: "承継予定者が確定し、承継計画を提出できること" },
+      { kind: "check", req: "承継後5年間の事業継続が見込まれること" },
+    ],
+  },
+  {
+    id: "p7",
+    name: "地域産業活性化補助金（例・北海道／東北限定）",
+    issuer: "（架空）北方地域振興財団",
+    summary: "対象地域内の事業者が行う販路開拓・設備導入を、高い補助率で支援する制度という設定です。",
+    amountLabel: "上限 1,000万円",
+    amountValue: 1000,
+    rate: "3/4",
+    schedule: "年1回の公募を想定",
+    rules: [
+      { kind: "region", allow: TOHOKU, hard: true, req: "所在地が北海道・東北6県（青森・岩手・宮城・秋田・山形・福島）のいずれか" },
+      { kind: "purpose", primary: ["sales", "equipment"], secondary: ["it"], req: "販路開拓・設備投資が主たる対象（IT導入も対象）" },
+      { kind: "industry", allow: null, req: "全業種（業種の限定なし）" },
+      { kind: "employees", max: 100, req: "従業員数 100名以下" },
+      { kind: "years", min: 1, req: "事業年数 1年以上" },
+      { kind: "check", req: "地域内での雇用の維持・創出に関する計画を示せること" },
+      { kind: "check", req: "所在自治体の推薦書を取得できること" },
+    ],
+  },
+  {
+    id: "p8",
+    name: "創業期スタートアップ支援金（例）",
+    issuer: "（架空）創業支援コンソーシアム",
+    summary: "設立から間もない事業者の初期投資・広報・システム構築を支援する制度という設定です。",
+    amountLabel: "上限 300万円",
+    amountValue: 300,
+    rate: "2/3",
+    schedule: "年2回の公募を想定",
+    rules: [
+      { kind: "years", max: 5, hard: true, req: "設立（開業）から5年以内" },
+      { kind: "purpose", primary: ["sales", "it"], secondary: ["equipment", "hiring"], req: "販路開拓・IT導入が主たる対象（設備投資・人材採用も対象）" },
+      { kind: "industry", allow: null, req: "全業種（業種の限定なし）" },
+      { kind: "employees", max: 50, req: "従業員数 50名以下" },
+      { kind: "region", allow: null, req: "全国（地域の限定なし）" },
+      { kind: "check", req: "創業計画について外部審査（面談）を受けること" },
+      { kind: "check", req: "代表者が創業支援セミナーを受講済みであること" },
+    ],
+  },
+  {
+    id: "p9",
+    name: "生産性向上投資促進補助金（例・法人限定）",
+    issuer: "（架空）産業競争力強化基金",
+    summary: "一定規模以上の法人による大型の生産性向上投資を対象とする制度という設定です。",
+    amountLabel: "上限 5,000万円",
+    amountValue: 5000,
+    rate: "1/2",
+    schedule: "年1回の公募を想定",
+    rules: [
+      { kind: "entity", allow: ["法人"], hard: true, req: "法人であること（個人事業主は対象外）" },
+      { kind: "purpose", primary: ["equipment", "it"], secondary: ["energy"], req: "設備投資・IT導入が主たる対象（省エネ投資も対象）" },
+      { kind: "industry", allow: ["製造業", "情報通信業", "卸売業", "運輸業"], req: "製造業・情報通信業・卸売業・運輸業のいずれか" },
+      { kind: "employees", min: 20, req: "従業員数 20名以上" },
+      { kind: "revenue", minTier: "r4", req: "直近売上 1億円以上" },
+      { kind: "region", allow: null, req: "全国（地域の限定なし）" },
+      { kind: "years", min: 3, req: "事業年数 3年以上" },
+      { kind: "check", req: "投資後3年間で労働生産性を年平均3%以上向上させる計画であること" },
+      { kind: "check", req: "取引金融機関の確認書を添付できること" },
+    ],
+  },
+  {
+    id: "p10",
+    name: "小規模創業応援金（例・個人事業主限定）",
+    issuer: "（架空）地域くらし支援基金",
+    summary: "小規模な個人事業を対象に、少額・高補助率で初期費用を支援する制度という設定です。",
+    amountLabel: "上限 100万円",
+    amountValue: 100,
+    rate: "3/4",
+    schedule: "通年（予算上限に達し次第終了）を想定",
+    rules: [
+      { kind: "entity", allow: ["個人事業主"], hard: true, req: "個人事業主であること（法人は対象外）" },
+      { kind: "purpose", primary: ["sales", "it", "equipment"], secondary: ["hiring"], req: "販路開拓・IT導入・設備投資が主たる対象（人材採用も対象）" },
+      { kind: "industry", allow: null, req: "全業種（業種の限定なし）" },
+      { kind: "employees", max: 5, req: "従業員数 5名以下" },
+      { kind: "revenue", maxTier: "r2", req: "直近売上 5,000万円未満" },
+      { kind: "years", max: 10, req: "開業から10年以内" },
+      { kind: "region", allow: null, req: "全国（地域の限定なし）" },
+      { kind: "check", req: "青色申告を行っていること" },
+      { kind: "check", req: "開業届の写しを提出できること" },
+    ],
+  },
+];
+
+/* ------------------------------------------------------------------
+   4. マッチング（加点式）
+   1要件 = 1判定。判定は「合致 / 不一致 / 要確認」の3値。
+   「判定できないもの」を不一致に丸めないことが、この PoC の肝。
+------------------------------------------------------------------ */
+const weightOf = (rule) => (rule.weight != null ? rule.weight : WEIGHTS[rule.kind]);
+
+const result = (rule, status, earned, detail) => ({
+  kind: rule.kind,
+  req: rule.req,
+  hard: Boolean(rule.hard),
+  status,
+  weight: weightOf(rule),
+  earned,
+  detail,
+});
+
+function evaluateRule(rule, p) {
+  const w = weightOf(rule);
+
+  if (rule.kind === "entity") {
+    const ok = rule.allow.indexOf(p.entity) >= 0;
+    return result(rule, ok ? "match" : "miss", ok ? w : 0,
+      `事業形態「${p.entity}」は、要件「${rule.req}」を${ok ? "満たします" : "満たしません"}。`);
+  }
+
+  if (rule.kind === "industry") {
+    if (!rule.allow) {
+      return result(rule, "match", w,
+        `この制度は業種を限定していません。業種「${p.industry}」も対象に含まれます。`);
+    }
+    const ok = rule.allow.indexOf(p.industry) >= 0;
+    return result(rule, ok ? "match" : "miss", ok ? w : 0,
+      ok
+        ? `業種「${p.industry}」は、対象業種（${rule.allow.join("・")}）に含まれます。`
+        : `業種「${p.industry}」は、対象業種（${rule.allow.join("・")}）に含まれません。`);
+  }
+
+  if (rule.kind === "employees") {
+    if (p.employees === "" || isNaN(Number(p.employees))) {
+      return result(rule, "unknown", 0,
+        `従業員数が未入力のため判定できません。要件は「${rule.req}」です。`);
+    }
+    const n = Number(p.employees);
+    const okMin = rule.min == null || n >= rule.min;
+    const okMax = rule.max == null || n <= rule.max;
+    const ok = okMin && okMax;
+    let why;
+    if (ok) {
+      why = `従業員数 ${n}名 は、要件「${rule.req}」に該当します。`;
+    } else if (!okMax) {
+      why = `従業員数 ${n}名 は、要件「${rule.req}」の上限を ${n - rule.max}名 超えています。`;
+    } else {
+      why = `従業員数 ${n}名 は、要件「${rule.req}」の下限に ${rule.min - n}名 足りません。`;
+    }
+    return result(rule, ok ? "match" : "miss", ok ? w : 0, why);
+  }
+
+  if (rule.kind === "region") {
+    if (!rule.allow) {
+      return result(rule, "match", w,
+        `全国が対象のため、所在地「${p.pref}」でも要件を満たします。`);
+    }
+    const ok = rule.allow.indexOf(p.pref) >= 0;
+    return result(rule, ok ? "match" : "miss", ok ? w : 0,
+      ok
+        ? `所在地「${p.pref}」は、対象地域に含まれます。`
+        : `所在地「${p.pref}」は、対象地域（${rule.allow.join("・")}）に含まれません。`);
+  }
+
+  if (rule.kind === "years") {
+    if (p.founded === "" || isNaN(Number(p.founded))) {
+      return result(rule, "unknown", 0,
+        `設立（開業）年が未入力のため判定できません。要件は「${rule.req}」です。`);
+    }
+    const years = NOW_YEAR - Number(p.founded);
+    const okMin = rule.min == null || years >= rule.min;
+    const okMax = rule.max == null || years <= rule.max;
+    const ok = okMin && okMax;
+    const head = `${p.founded}年 設立（事業年数 ${years}年）`;
+    let why;
+    if (ok) {
+      why = `${head} は、要件「${rule.req}」に該当します。`;
+    } else if (!okMax) {
+      why = `${head} は、要件「${rule.req}」を ${years - rule.max}年 超過しています。`;
+    } else {
+      why = `${head} は、要件「${rule.req}」に ${rule.min - years}年 足りません。`;
+    }
+    return result(rule, ok ? "match" : "miss", ok ? w : 0, why);
+  }
+
+  if (rule.kind === "revenue") {
+    const i = tierIndex(p.revenue);
+    if (i < 0) {
+      return result(rule, "unknown", 0,
+        `売上規模が未選択のため判定できません。要件は「${rule.req}」です。`);
+    }
+    const okMin = rule.minTier == null || i >= tierIndex(rule.minTier);
+    const okMax = rule.maxTier == null || i <= tierIndex(rule.maxTier);
+    const ok = okMin && okMax;
+    return result(rule, ok ? "match" : "miss", ok ? w : 0,
+      `直近売上「${tierLabel(p.revenue)}」は、要件「${rule.req}」を${ok ? "満たします" : "満たしません"}。`);
+  }
+
+  if (rule.kind === "purpose") {
+    const sel = p.purposes;
+    if (sel.length === 0) {
+      return result(rule, "unknown", 0,
+        `検討している取り組みが未選択のため判定できません。この制度の対象は「${rule.req}」です。`);
+    }
+    const hitPrimary = rule.primary.filter((k) => sel.indexOf(k) >= 0);
+    const hitSecondary = (rule.secondary || []).filter((k) => sel.indexOf(k) >= 0);
+    if (hitPrimary.length > 0) {
+      return result(rule, "match", w,
+        `検討中の取り組みに「${purposeLabels(hitPrimary)}」が含まれ、この制度が主たる対象とする取り組みと一致します。`);
+    }
+    if (hitSecondary.length > 0) {
+      const earned = Math.round(w * SECONDARY_RATIO);
+      return result(rule, "partial", earned,
+        `主たる対象「${purposeLabels(rule.primary)}」は選択されていません。副次的な対象「${purposeLabels(hitSecondary)}」のみ一致するため、配点 ${w}点 のうち ${earned}点 を加点しています。`);
+    }
+    return result(rule, "miss", 0,
+      `検討中の取り組み「${purposeLabels(sel)}」は、この制度の対象「${purposeLabels(rule.primary.concat(rule.secondary || []))}」と一致しません。`);
+  }
+
+  // check: 入力項目からは機械的に判定できない要件。0点のまま「要確認」に置く。
+  return result(rule, "unknown", 0,
+    `「${rule.req}」— 入力情報からは判定できないため、申請前の確認が必要です。`);
+}
+
+function matchProgram(program, p) {
+  const rows = program.rules.map((r) => evaluateRule(r, p));
+  const total = rows.reduce((s, r) => s + r.weight, 0);
+  const earned = rows.reduce((s, r) => s + r.earned, 0);
+  const unknown = rows.filter((r) => r.status === "unknown").reduce((s, r) => s + r.weight, 0);
+  const blocked = rows.filter((r) => r.hard && r.status === "miss");
+  return {
+    program,
+    rows,
+    total,
+    earned,
+    unknown,
+    score: total === 0 ? 0 : Math.round((earned / total) * 100),
+    potential: total === 0 ? 0 : Math.round(((earned + unknown) / total) * 100),
+    blocked,
+    eligible: blocked.length === 0,
+  };
+}
+
+/* ------------------------------------------------------------------
+   5. 入力プリセット（条件を変えると結果が変わることを示すため）
+------------------------------------------------------------------ */
+const PRESETS = [
+  {
+    label: "都内の製造業（法人・20名）",
+    profile: { entity: "法人", industry: "製造業", employees: "20", pref: "東京都", founded: "2015", revenue: "r4", purposes: ["equipment", "it"] },
+  },
+  {
+    label: "秋田の小売（個人事業主・3名）",
+    profile: { entity: "個人事業主", industry: "小売業", employees: "3", pref: "秋田県", founded: "2009", revenue: "r2", purposes: ["sales", "it"] },
+  },
+  {
+    label: "創業2年のIT企業（法人・8名）",
+    profile: { entity: "法人", industry: "情報通信業", employees: "8", pref: "福岡県", founded: String(NOW_YEAR - 2), revenue: "r2", purposes: ["it", "hiring", "sales"] },
+  },
+  {
+    label: "承継を検討する宿泊業（法人・45名）",
+    profile: { entity: "法人", industry: "宿泊業", employees: "45", pref: "北海道", founded: "1998", revenue: "r3", purposes: ["succession", "energy"] },
+  },
+];
+
+const INITIAL_PROFILE = PRESETS[0].profile;
+
+/* ------------------------------------------------------------------
+   6. 表示部品
+------------------------------------------------------------------ */
+const STATUS_STYLE = {
+  match:   { label: "合致",   chip: "bg-[#e7f0ea] text-[#1f5c45] ring-[#bcd6c8]", dot: "bg-[#2f7d5d]" },
+  partial: { label: "一部合致", chip: "bg-[#e9eef5] text-[#1d3f63] ring-[#c3d2e3]", dot: "bg-[#2f5d8c]" },
+  miss:    { label: "不一致", chip: "bg-[#f7ebe8] text-[#8c3a2c] ring-[#e2c4bc]", dot: "bg-[#a8483a]" },
+  unknown: { label: "要確認", chip: "bg-[#f8f1de] text-[#7a5c1e] ring-[#e0cfa4]", dot: "bg-[#a8862f]" },
+};
+
+function Chip({ status }) {
+  const s = STATUS_STYLE[status];
+  return <span className={`inline-flex shrink-0 rounded-sm px-1.5 py-0.5 text-[11px] font-medium ring-1 ${s.chip}`}>{s.label}</span>;
+}
+
+function ScoreBar({ m }) {
+  const pctEarned = (m.earned / m.total) * 100;
+  const pctUnknown = (m.unknown / m.total) * 100;
+  const pctMiss = Math.max(0, 100 - pctEarned - pctUnknown);
+  return (
+    <div className="flex h-2 w-full overflow-hidden rounded-sm bg-[#e6e2d8]">
+      <div className="bg-[#1d3f63]" style={{ width: pctEarned + "%" }} />
+      <div className="bg-[#d8bd77]" style={{ width: pctUnknown + "%" }} />
+      <div className="bg-[#d6d1c5]" style={{ width: pctMiss + "%" }} />
+    </div>
+  );
+}
+
+function Field({ label, hint, children }) {
+  return (
+    <div>
+      <label className="mb-1 block text-xs font-medium text-[#4a5568]">{label}</label>
+      {children}
+      {hint && <p className="mt-1 text-[11px] leading-relaxed text-[#8a8578]">{hint}</p>}
+    </div>
+  );
+}
+
+const inputClass = "w-full rounded-sm border border-[#cfc9bb] bg-white px-2.5 py-1.5 text-sm text-[#1c2733] outline-none focus:border-[#1d3f63]";
+
+function ProfileForm({ profile, onChange, onPreset }) {
+  const set = (key, value) => onChange({ ...profile, [key]: value });
+  const togglePurpose = (key) => {
+    const has = profile.purposes.indexOf(key) >= 0;
+    set("purposes", has ? profile.purposes.filter((k) => k !== key) : profile.purposes.concat([key]));
+  };
+  const years = profile.founded === "" || isNaN(Number(profile.founded)) ? null : NOW_YEAR - Number(profile.founded);
+
+  return (
+    <div className="rounded-sm border border-[#ddd7c9] bg-white">
+      <div className="border-b border-[#e6e1d5] px-4 py-3">
+        <h2 className="font-serif text-base text-[#12314e]">事業者情報</h2>
+        <p className="mt-0.5 text-[11px] text-[#8a8578]">入力を変えると、マッチング結果がその場で変わります。</p>
+      </div>
+
+      <div className="border-b border-[#e6e1d5] bg-[#faf8f3] px-4 py-3">
+        <p className="mb-2 text-[11px] font-medium text-[#6b6558]">入力例で試す</p>
+        <div className="flex flex-wrap gap-1.5">
+          {PRESETS.map((p) => (
+            <button
+              key={p.label}
+              onClick={() => onPreset(p.profile)}
+              className="rounded-sm border border-[#cfc9bb] bg-white px-2 py-1 text-[11px] text-[#3b4654] hover:border-[#1d3f63] hover:text-[#12314e]"
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-3.5 px-4 py-4">
+        <Field label="事業形態">
+          <div className="flex gap-2">
+            {ENTITY_TYPES.map((t) => (
+              <button
+                key={t}
+                onClick={() => set("entity", t)}
+                className={`flex-1 rounded-sm border px-2 py-1.5 text-sm ${
+                  profile.entity === t
+                    ? "border-[#12314e] bg-[#12314e] text-white"
+                    : "border-[#cfc9bb] bg-white text-[#3b4654] hover:border-[#1d3f63]"
+                }`}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
+        </Field>
+
+        <Field label="業種">
+          <select value={profile.industry} onChange={(e) => set("industry", e.target.value)} className={inputClass}>
+            {INDUSTRIES.map((i) => <option key={i} value={i}>{i}</option>)}
+          </select>
+        </Field>
+
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="従業員数（名）">
+            <input
+              type="number" min="0" value={profile.employees}
+              onChange={(e) => set("employees", e.target.value)}
+              className={inputClass}
+            />
+          </Field>
+          <Field label="設立・開業年" hint={years == null ? "未入力の要件は「要確認」になります" : `事業年数 ${years}年`}>
+            <input
+              type="number" min="1900" max={String(NOW_YEAR)} value={profile.founded}
+              onChange={(e) => set("founded", e.target.value)}
+              className={inputClass}
+            />
+          </Field>
+        </div>
+
+        <Field label="所在地（都道府県）">
+          <select value={profile.pref} onChange={(e) => set("pref", e.target.value)} className={inputClass}>
+            {PREFECTURES.map((p) => <option key={p} value={p}>{p}</option>)}
+          </select>
+        </Field>
+
+        <Field label="直近の売上規模">
+          <select value={profile.revenue} onChange={(e) => set("revenue", e.target.value)} className={inputClass}>
+            <option value="">未選択</option>
+            {REVENUE_TIERS.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
+          </select>
+        </Field>
+
+        <Field label="検討している取り組み（複数選択可）" hint="適合度の配点のうち35点を占めます。">
+          <div className="grid grid-cols-2 gap-1.5">
+            {PURPOSES.map((p) => {
+              const on = profile.purposes.indexOf(p.key) >= 0;
+              return (
+                <button
+                  key={p.key}
+                  onClick={() => togglePurpose(p.key)}
+                  className={`rounded-sm border px-2 py-1.5 text-left text-sm ${
+                    on
+                      ? "border-[#12314e] bg-[#eaeff5] text-[#12314e]"
+                      : "border-[#cfc9bb] bg-white text-[#3b4654] hover:border-[#1d3f63]"
+                  }`}
+                >
+                  <span className={`mr-1.5 inline-block h-2 w-2 rounded-full align-middle ${on ? "bg-[#12314e]" : "bg-[#d6d1c5]"}`} />
+                  {p.label}
+                </button>
+              );
+            })}
+          </div>
+        </Field>
+      </div>
+    </div>
+  );
+}
+
+function BreakdownTable({ m }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[640px] text-left text-xs">
+        <thead className="bg-[#f2efe8] text-[11px] text-[#6b6558]">
+          <tr>
+            <th className="px-3 py-2 font-medium">区分</th>
+            <th className="px-3 py-2 font-medium">要件</th>
+            <th className="px-3 py-2 font-medium">判定</th>
+            <th className="px-3 py-2 text-right font-medium">配点</th>
+            <th className="px-3 py-2 text-right font-medium">獲得</th>
+          </tr>
+        </thead>
+        <tbody>
+          {m.rows.map((r, i) => (
+            <tr key={i} className="border-t border-[#eceadf] align-top">
+              <td className="whitespace-nowrap px-3 py-2 text-[#6b6558]">
+                {KIND_LABEL[r.kind]}
+                {r.hard && <span className="ml-1 rounded-sm bg-[#12314e] px-1 py-0.5 text-[10px] text-white">必須</span>}
+              </td>
+              <td className="px-3 py-2 text-[#2b3742]">
+                {r.req}
+                <p className="mt-0.5 text-[11px] leading-relaxed text-[#7c7669]">
+                  {r.kind === "check" ? "入力情報からは判定できないため、申請前の確認が必要です。" : r.detail}
+                </p>
+              </td>
+              <td className="px-3 py-2"><Chip status={r.status} /></td>
+              <td className="px-3 py-2 text-right font-mono tabular-nums text-[#6b6558]">{r.weight}</td>
+              <td className={`px-3 py-2 text-right font-mono tabular-nums ${r.earned > 0 ? "text-[#12314e]" : "text-[#b3ada0]"}`}>{r.earned}</td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr className="border-t-2 border-[#ddd7c9] bg-[#faf8f3]">
+            <td className="px-3 py-2 font-medium text-[#2b3742]" colSpan="3">合計</td>
+            <td className="px-3 py-2 text-right font-mono tabular-nums text-[#6b6558]">{m.total}</td>
+            <td className="px-3 py-2 text-right font-mono tabular-nums font-semibold text-[#12314e]">{m.earned}</td>
+          </tr>
+        </tfoot>
+      </table>
+      <p className="mt-2 px-3 text-[11px] leading-relaxed text-[#7c7669]">
+        適合度 = 獲得点 {m.earned} ÷ 満点 {m.total} × 100 = <span className="font-semibold text-[#12314e]">{m.score}%</span>
+        {m.unknown > 0 && (
+          <span>　／　要確認 {m.unknown}点 がすべて満たされた場合は最大 {m.potential}%</span>
+        )}
+      </p>
+    </div>
+  );
+}
+
+function ReasonList({ rows, tone }) {
+  const palette = {
+    good: { border: "border-[#c7dbcd]", bg: "bg-[#f2f7f3]", head: "text-[#1f5c45]" },
+    warn: { border: "border-[#e3d4a8]", bg: "bg-[#fbf7ea]", head: "text-[#7a5c1e]" },
+  }[tone];
+  return (
+    <div className={`rounded-sm border ${palette.border} ${palette.bg} px-3 py-2.5`}>
+      <p className={`mb-1.5 text-[11px] font-semibold ${palette.head}`}>
+        {tone === "good" ? "該当理由" : "満たしていない条件・要確認事項"}
+      </p>
+      <ul className="space-y-1.5">
+        {rows.map((r, i) => (
+          <li key={i} className="flex gap-2 text-xs leading-relaxed text-[#2b3742]">
+            <span className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${STATUS_STYLE[r.status].dot}`} />
+            <span>
+              <span className="text-[#6b6558]">［{KIND_LABEL[r.kind]}］</span>
+              {r.detail}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function ProgramCard({ m, rank }) {
+  const [open, setOpen] = useState(false);
+  const good = m.rows.filter((r) => r.status === "match" || r.status === "partial");
+  const bad = m.rows.filter((r) => r.status === "miss" || r.status === "unknown");
+  const scoreTone = m.score >= 75 ? "text-[#12314e]" : m.score >= 50 ? "text-[#3b5d80]" : "text-[#8a8578]";
+
+  return (
+    <article className="rounded-sm border border-[#ddd7c9] bg-white">
+      <div className="flex flex-wrap items-start gap-x-4 gap-y-3 border-b border-[#eceadf] px-4 py-3.5">
+        <div className="min-w-[240px] flex-1">
+          <div className="flex items-center gap-2">
+            <span className="rounded-sm bg-[#12314e] px-1.5 py-0.5 font-mono text-[11px] text-white">{rank}</span>
+            <h3 className="font-serif text-[15px] leading-snug text-[#12314e]">{m.program.name}</h3>
+          </div>
+          <p className="mt-1 text-[11px] text-[#8a8578]">{m.program.issuer}</p>
+          <p className="mt-1.5 text-xs leading-relaxed text-[#4a5568]">{m.program.summary}</p>
+        </div>
+        <div className="w-full sm:w-52">
+          <div className="flex items-baseline justify-between">
+            <span className="text-[11px] text-[#6b6558]">適合度</span>
+            <span className={`font-mono text-2xl font-semibold tabular-nums ${scoreTone}`}>{m.score}<span className="text-sm">%</span></span>
+          </div>
+          <div className="mt-1"><ScoreBar m={m} /></div>
+          <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-[#7c7669]">
+            <span><span className="mr-1 inline-block h-2 w-2 rounded-[1px] bg-[#1d3f63] align-middle" />合致 {m.earned}点</span>
+            <span><span className="mr-1 inline-block h-2 w-2 rounded-[1px] bg-[#d8bd77] align-middle" />要確認 {m.unknown}点</span>
+            <span><span className="mr-1 inline-block h-2 w-2 rounded-[1px] bg-[#d6d1c5] align-middle" />不一致 {m.total - m.earned - m.unknown}点</span>
+          </div>
+          {m.unknown > 0 && (
+            <p className="mt-1 text-[11px] text-[#7a5c1e]">要確認がすべて満たされれば最大 {m.potential}%</p>
+          )}
+        </div>
+      </div>
+
+      <dl className="grid grid-cols-1 divide-y divide-[#eceadf] border-b border-[#eceadf] text-xs sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+        <div className="px-4 py-2.5">
+          <dt className="text-[11px] text-[#8a8578]">補助上限額</dt>
+          <dd className="mt-0.5 font-medium text-[#1c2733]">{m.program.amountLabel}</dd>
+        </div>
+        <div className="px-4 py-2.5">
+          <dt className="text-[11px] text-[#8a8578]">補助率</dt>
+          <dd className="mt-0.5 font-medium text-[#1c2733]">{m.program.rate}</dd>
+        </div>
+        <div className="px-4 py-2.5">
+          <dt className="text-[11px] text-[#8a8578]">公募時期の目安</dt>
+          <dd className="mt-0.5 font-medium text-[#1c2733]">{m.program.schedule}</dd>
+        </div>
+      </dl>
+
+      <div className="space-y-2.5 px-4 py-3.5">
+        {good.length > 0 && <ReasonList rows={good} tone="good" />}
+        {bad.length > 0 && <ReasonList rows={bad} tone="warn" />}
+      </div>
+
+      <div className="border-t border-[#eceadf]">
+        <button
+          onClick={() => setOpen(!open)}
+          className="w-full px-4 py-2.5 text-left text-xs text-[#1d3f63] hover:bg-[#faf8f3]"
+        >
+          {open ? "▾ 配点の内訳を閉じる" : "▸ 配点の内訳（どの要件に何点入ったか）を見る"}
+        </button>
+        {open && <div className="border-t border-[#eceadf] pb-3">{<BreakdownTable m={m} />}</div>}
+      </div>
+    </article>
+  );
+}
+
+function BlockedCard({ m }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <article className="rounded-sm border border-[#e2d9cd] bg-[#faf8f3]">
+      <div className="flex flex-wrap items-start justify-between gap-3 px-4 py-3">
+        <div className="min-w-[240px] flex-1">
+          <h3 className="font-serif text-sm text-[#5d6673]">{m.program.name}</h3>
+          <p className="mt-0.5 text-[11px] text-[#8a8578]">{m.program.issuer}</p>
+          <ul className="mt-2 space-y-1">
+            {m.blocked.map((r, i) => (
+              <li key={i} className="flex gap-2 text-xs leading-relaxed text-[#8c3a2c]">
+                <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[#a8483a]" />
+                <span>必須要件を満たしていません — {r.detail}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div className="text-right">
+          <p className="font-mono text-lg text-[#a09a8c]">{m.score}%</p>
+          <p className="text-[10px] text-[#a09a8c]">参考値</p>
+        </div>
+      </div>
+      <div className="border-t border-[#eceadf]">
+        <button onClick={() => setOpen(!open)} className="w-full px-4 py-2 text-left text-[11px] text-[#6b6558] hover:bg-white">
+          {open ? "▾ 内訳を閉じる" : "▸ 内訳を見る（他の要件がどう判定されたか）"}
+        </button>
+        {open && <div className="border-t border-[#eceadf] bg-white pb-3">{<BreakdownTable m={m} />}</div>}
+      </div>
+    </article>
+  );
+}
+
+/* ------------------------------------------------------------------
+   7. タブ本体
+------------------------------------------------------------------ */
+function MatchTab({ profile, setProfile, matches }) {
+  const [sortKey, setSortKey] = useState("score");
+  const [hideLow, setHideLow] = useState(false);
+
+  const eligible = matches.filter((m) => m.eligible);
+  const blocked = matches.filter((m) => !m.eligible);
+
+  const shown = useMemo(() => {
+    const list = hideLow ? eligible.filter((m) => m.score >= 50) : eligible.slice();
+    list.sort((a, b) => {
+      if (sortKey === "amount") return b.program.amountValue - a.program.amountValue;
+      if (b.score !== a.score) return b.score - a.score;
+      return b.potential - a.potential;
+    });
+    return list;
+  }, [eligible, sortKey, hideLow]);
+
+  return (
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-[320px_1fr]">
+      <div className="lg:sticky lg:top-[159px] lg:self-start">
+        <ProfileForm profile={profile} onChange={setProfile} onPreset={setProfile} />
+      </div>
+
+      <div>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-sm border border-[#ddd7c9] bg-white px-4 py-3">
+          <p className="text-sm text-[#2b3742]">
+            架空データ {PROGRAMS.length}件 のうち
+            <span className="mx-1 font-semibold text-[#12314e]">{eligible.length}件</span>が対象候補、
+            <span className="mx-1 font-semibold text-[#8c3a2c]">{blocked.length}件</span>が必須要件により対象外
+          </p>
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-1.5 text-xs text-[#6b6558]">
+              <input type="checkbox" checked={hideLow} onChange={(e) => setHideLow(e.target.checked)} className="accent-[#12314e]" />
+              適合度50%未満を隠す
+            </label>
+            <label className="flex items-center gap-1.5 text-xs text-[#6b6558]">
+              並び順
+              <select value={sortKey} onChange={(e) => setSortKey(e.target.value)} className="rounded-sm border border-[#cfc9bb] bg-white px-2 py-1 text-xs">
+                <option value="score">適合度が高い順</option>
+                <option value="amount">補助上限額が大きい順</option>
+              </select>
+            </label>
+          </div>
+        </div>
+
+        {shown.length === 0 ? (
+          <div className="rounded-sm border border-dashed border-[#cfc9bb] bg-white px-6 py-16 text-center">
+            <p className="text-sm text-[#4a5568]">条件に合う制度がありません。</p>
+            <p className="mt-1 text-xs text-[#8a8578]">検討している取り組みを選び直すか、絞り込みを外してください。</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {shown.map((m, i) => <ProgramCard key={m.program.id} m={m} rank={i + 1} />)}
+          </div>
+        )}
+
+        {blocked.length > 0 && (
+          <div className="mt-6">
+            <h2 className="mb-1 font-serif text-sm text-[#5d6673]">必須要件を満たさないため対象外（{blocked.length}件）</h2>
+            <p className="mb-2.5 text-[11px] leading-relaxed text-[#8a8578]">
+              対象外の制度も、理由をつけて表示します。「なぜ出てこないのか」が分からない状態を作らないためです。
+            </p>
+            <div className="space-y-2.5">
+              {blocked.map((m) => <BlockedCard key={m.program.id} m={m} />)}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function LogicTab({ matches }) {
+  const kinds = ["purpose", "industry", "employees", "entity", "region", "years", "revenue"];
+  return (
+    <div className="space-y-5">
+      <section className="rounded-sm border border-[#ddd7c9] bg-white px-5 py-4">
+        <h2 className="font-serif text-lg text-[#12314e]">適合度の計算方法</h2>
+        <p className="mt-2 text-sm leading-relaxed text-[#3b4654]">
+          適合度は加点式です。制度ごとに定義された要件を1件ずつ判定し、合致した要件の配点を足し上げ、
+          その制度の満点で割って百分率にしています。類似度スコアのような「理由を後から説明できない数値」は使っていません。
+        </p>
+        <div className="mt-3 rounded-sm bg-[#f5f3ee] px-4 py-3 font-mono text-sm text-[#12314e]">
+          適合度(%) = 獲得点の合計 ÷ その制度の満点 × 100
+        </div>
+      </section>
+
+      <section className="rounded-sm border border-[#ddd7c9] bg-white">
+        <div className="border-b border-[#e6e1d5] px-5 py-3">
+          <h2 className="font-serif text-base text-[#12314e]">配点表</h2>
+          <p className="mt-0.5 text-xs text-[#8a8578]">制度によって持つ要件が違うため合計点は一定ではありません。だから百分率に正規化しています。</p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[520px] text-left text-sm">
+            <thead className="bg-[#f2efe8] text-xs text-[#6b6558]">
+              <tr>
+                <th className="px-4 py-2 font-medium">要件区分</th>
+                <th className="px-4 py-2 text-right font-medium">配点</th>
+                <th className="px-4 py-2 font-medium">考え方</th>
+              </tr>
+            </thead>
+            <tbody className="text-[#2b3742]">
+              {[
+                ["purpose", "何をしたいかが制度の目的と合っているかを最重視。主目的に合致で満点、副次的な対象のみなら60%（" + Math.round(WEIGHTS.purpose * SECONDARY_RATIO) + "点）"],
+                ["industry", "対象業種の指定。指定なしの制度は自動的に満点"],
+                ["employees", "従業員数の上限・下限。「小規模事業者」などの規模区分もここで判定"],
+                ["entity", "法人／個人事業主の別。制度によっては必須要件（ゲート）"],
+                ["region", "対象地域。全国対象の制度では常に満点になるため、制度間の順位には影響しません"],
+                ["years", "設立・開業からの年数。創業支援系は上限、投資系は下限で効きます"],
+                ["revenue", "売上規模。区分での入力のため配点は小さく置いています"],
+                ["check", "入力情報では判定できない要件。1件あたり" + WEIGHTS.check + "点で、満点には含めるが獲得点は0のまま「要確認」に置きます"],
+              ].map(([k, note]) => (
+                <tr key={k} className="border-t border-[#eceadf]">
+                  <td className="whitespace-nowrap px-4 py-2.5 font-medium">{KIND_LABEL[k]}</td>
+                  <td className="px-4 py-2.5 text-right font-mono tabular-nums">{WEIGHTS[k]}</td>
+                  <td className="px-4 py-2.5 text-xs leading-relaxed text-[#4a5568]">{note}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div className="rounded-sm border border-[#ddd7c9] bg-white px-5 py-4">
+          <h3 className="font-serif text-base text-[#12314e]">判定は「合致／不一致／要確認」の3値</h3>
+          <ul className="mt-2.5 space-y-2 text-sm leading-relaxed text-[#3b4654]">
+            <li className="flex gap-2"><Chip status="match" /><span>入力情報で要件を満たすと確認できた</span></li>
+            <li className="flex gap-2"><Chip status="miss" /><span>入力情報で要件を満たさないと確認できた</span></li>
+            <li className="flex gap-2"><Chip status="unknown" /><span>入力情報だけでは判定できない（未入力・書類要件など）</span></li>
+            <li className="flex gap-2"><Chip status="partial" /><span>取り組み要件のみの例外。制度の副次的な対象にのみ合致した場合に部分点を入れます</span></li>
+          </ul>
+          <p className="mt-3 text-xs leading-relaxed text-[#6b6558]">
+            要確認を不一致に丸めると、本来使える制度を落とします。逆に合致とみなすと、使えない制度を勧めてしまいます。
+            どちらもやらずに「0点のまま、要確認として画面に出す」のがこのPoCの方針です。
+          </p>
+        </div>
+        <div className="rounded-sm border border-[#ddd7c9] bg-white px-5 py-4">
+          <h3 className="font-serif text-base text-[#12314e]">必須要件（ゲート）の扱い</h3>
+          <p className="mt-2.5 text-sm leading-relaxed text-[#3b4654]">
+            「法人限定」「対象地域限定」のように、外れた時点で申請できない要件は<span className="rounded-sm bg-[#12314e] px-1 py-0.5 text-[11px] text-white">必須</span>として区別し、
+            満たさない場合は点数に関係なく対象外に振り分けます。
+          </p>
+          <p className="mt-2.5 text-sm leading-relaxed text-[#3b4654]">
+            ただし対象外も画面から消しません。理由を添えて別枠に表示します。
+            候補に出ない理由が分からない状態は、提案そのものへの不信につながるためです。
+          </p>
+        </div>
+      </section>
+
+      <section className="rounded-sm border border-[#ddd7c9] bg-white">
+        <div className="border-b border-[#e6e1d5] px-5 py-3">
+          <h2 className="font-serif text-base text-[#12314e]">いまの入力での全制度の計算結果</h2>
+          <p className="mt-0.5 text-xs text-[#8a8578]">「入力タブの内容で、どの要件に何点入ったか」の一覧です。数値は 獲得点／配点。</p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[760px] text-left text-xs">
+            <thead className="bg-[#f2efe8] text-[11px] text-[#6b6558]">
+              <tr>
+                <th className="px-3 py-2 font-medium">制度（すべて架空）</th>
+                {kinds.map((k) => <th key={k} className="px-2 py-2 text-center font-medium">{KIND_LABEL[k]}</th>)}
+                <th className="px-2 py-2 text-center font-medium">要確認</th>
+                <th className="px-3 py-2 text-right font-medium">合計</th>
+                <th className="px-3 py-2 text-right font-medium">適合度</th>
+              </tr>
+            </thead>
+            <tbody>
+              {matches.map((m) => {
+                const byKind = {};
+                m.rows.forEach((r) => {
+                  if (r.kind === "check") {
+                    byKind.check = byKind.check || { earned: 0, weight: 0, n: 0 };
+                    byKind.check.weight += r.weight;
+                    byKind.check.n += 1;
+                  } else {
+                    byKind[r.kind] = { earned: r.earned, weight: r.weight, status: r.status };
+                  }
+                });
+                return (
+                  <tr key={m.program.id} className={`border-t border-[#eceadf] ${m.eligible ? "" : "bg-[#faf8f3] text-[#9a9488]"}`}>
+                    <td className="px-3 py-2">
+                      {m.program.name}
+                      {!m.eligible && <span className="ml-1.5 rounded-sm bg-[#f7ebe8] px-1 py-0.5 text-[10px] text-[#8c3a2c] ring-1 ring-[#e2c4bc]">対象外</span>}
+                    </td>
+                    {kinds.map((k) => {
+                      const c = byKind[k];
+                      if (!c) return <td key={k} className="px-2 py-2 text-center text-[#c8c2b5]">—</td>;
+                      const tone = c.status === "match" ? "text-[#1f5c45]" : c.status === "partial" ? "text-[#1d3f63]" : c.status === "unknown" ? "text-[#7a5c1e]" : "text-[#8c3a2c]";
+                      return (
+                        <td key={k} className={`px-2 py-2 text-center font-mono tabular-nums ${tone}`}>
+                          {c.earned}/{c.weight}
+                        </td>
+                      );
+                    })}
+                    <td className="px-2 py-2 text-center font-mono tabular-nums text-[#7a5c1e]">
+                      {byKind.check ? "0/" + byKind.check.weight : "—"}
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono tabular-nums">{m.earned}/{m.total}</td>
+                    <td className={`px-3 py-2 text-right font-mono tabular-nums font-semibold ${m.eligible ? "text-[#12314e]" : "text-[#9a9488]"}`}>{m.score}%</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <p className="border-t border-[#eceadf] px-5 py-3 text-[11px] leading-relaxed text-[#7c7669]">
+          配点そのものは仮置きです。本番では、専門家が判定した「事業者×制度」の正解データを用意し、
+          取りこぼし（本来該当するのに候補から漏れる）を重く見る形で重みを調整します。
+        </p>
+      </section>
+    </div>
+  );
+}
+
+function Note({ title, children }) {
+  return (
+    <div className="rounded-sm border border-[#ddd7c9] bg-white px-5 py-4">
+      <h3 className="font-serif text-base text-[#12314e]">{title}</h3>
+      <div className="mt-2 space-y-2 text-sm leading-relaxed text-[#3b4654]">{children}</div>
+    </div>
+  );
+}
+
+function Bullets({ items }) {
+  return (
+    <ul className="space-y-1.5">
+      {items.map((t, i) => (
+        <li key={i} className="flex gap-2 text-sm leading-relaxed text-[#3b4654]">
+          <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-[#a8862f]" />
+          <span>{t}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function FeasibilityTab() {
+  return (
+    <div className="space-y-5">
+      <section className="rounded-sm border border-[#ddd7c9] bg-white px-5 py-4">
+        <h2 className="font-serif text-lg text-[#12314e]">本番実装に向けた整理</h2>
+        <p className="mt-2 text-sm leading-relaxed text-[#3b4654]">
+          このPoCで確かめられるのは「マッチングの考え方」と「根拠の見せ方」までです。
+          本番で難しくなるのは、判定ロジックそのものより<span className="font-semibold text-[#12314e]">制度データを正しく・新しく保つこと</span>だと考えています。
+          以下、実装方針と、いま割り切っている点を分けて書きます。
+        </p>
+      </section>
+
+      <section>
+        <h2 className="mb-2 font-serif text-base text-[#12314e]">1. 情報収集をどうするか</h2>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <Note title="どこから集めるか">
+            <Bullets items={[
+              "一次情報のみを対象にします。府省庁・自治体・公的支援機関が公開する公募ページと公募要領PDF、および電子申請システムの公開情報。",
+              "まとめサイトは参照しません。要件の改変や公募回次の取り違えが起きやすく、誤りの出所を追えなくなるためです。",
+              "対象範囲は段階的に広げます。まず全国規模の制度、次に都道府県、そのあと市区町村。自治体独自の制度は数が多く、様式もばらつくため後回しにするのが現実的です。",
+            ]} />
+          </Note>
+          <Note title="どう取り込むか">
+            <Bullets items={[
+              "収集バッチ（Python）で公募一覧を日次巡回し、前回取得分とのハッシュ差分で「新規・改訂・締切」を検知します。",
+              "公募要領PDFはテキスト抽出したうえで、LLMに要件を構造化させます（対象者・規模・地域・対象経費・補助率・上限額・締切）。",
+              "LLMの出力はそのまま公開しません。「原文の該当箇所」を必ず引用として持たせ、人がレビューして承認したものだけを公開状態にします。抽出の誤りは必ず出るという前提で、誤りが利用者に届く前に止める工程を必ず1つ挟みます。",
+            ]} />
+          </Note>
+          <Note title="情報が古くなる問題への対処">
+            <Bullets items={[
+              "制度データ1件ごとに、出典URL・取得日時・公募回次・締切日・レビュー担当を必須項目として保持します。",
+              "画面には「◯年◯月◯日時点の情報」と出典リンクを必ず併記し、最終判断は公募要領で行う旨を明示します。",
+              "締切を過ぎたものは候補から自動で外し、「次回公募待ち」として別枠に置きます。消さずに残すのは、来期の準備に使えるためです。",
+              "取得から一定日数（例：30日）を超えて再確認できていない制度には「要再確認」を表示します。古い情報を新しいふりで出さないことを優先します。",
+              "公募要領の改訂を検知したら、その制度は自動的に「レビュー待ち」に戻します。改訂前の構造化データが残り続けるのが一番危険です。",
+            ]} />
+          </Note>
+          <Note title="想定する構成">
+            <Bullets items={[
+              "収集バッチ（Python / スケジューラ実行） → 制度DB（PostgreSQL） → 構造化・レビュー用の管理画面 → マッチングAPI（ルールエンジン） → 利用者画面（React）。",
+              "マッチングの判定はアプリ側のルールエンジンで行い、LLMは「要件の抽出」と「文章の要約」に限定します。判定にLLMを使うと、同じ入力で結果が揺れ、根拠も再現できなくなるためです。",
+              "制度データはバージョン管理し、いつ・誰が・どの項目を変えたかを残します。「なぜこの制度が該当したのか」を後から検証できる状態を保つためです。",
+            ]} />
+          </Note>
+        </div>
+      </section>
+
+      <section>
+        <h2 className="mb-2 font-serif text-base text-[#12314e]">2. マッチング精度をどう上げるか</h2>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <Note title="条件の構造化">
+            <Bullets items={[
+              "自由文の要件を「対象者の属性 / 実施する事業の内容 / 定量的な閾値 / 手続き上の要件」の4種に分解し、機械判定できる述語に落とします。",
+              "語彙を正規化します。業種は日本標準産業分類、地域は全国地方公共団体コードに寄せ、制度側の表記ゆれ（「中小企業者」「小規模事業者」など）は定義（資本金・従業員数の組）を展開して保持します。",
+              "複合条件を素直に表現できるデータ構造にします。実際の要件には「資本金3億円以下 または 従業員300名以下」「ただし、みなし大企業を除く」のような AND / OR / 除外が普通に出てきます。今回のPoCは単純な閾値の並びで済ませていますが、本番では条件木にします。",
+            ]} />
+          </Note>
+          <Note title="要件の階層化">
+            <Bullets items={[
+              "要件を3層に分けます。① 必須要件（外れたら対象外にするゲート）、② 加点要件（順位付けに使う）、③ 要確認要件（判定できないので0点のまま提示）。",
+              "この分離があると、精度の議論を「ゲートの誤りか、順位付けの誤りか」に切り分けられます。実務上まずいのはゲートの誤りで、これは本来使える制度を見えなくします。",
+              "判定できないものを不一致に丸めないことが、取りこぼしを減らす一番効く対策です。",
+            ]} />
+          </Note>
+          <Note title="入力の精度を上げる">
+            <Bullets items={[
+              "初回入力は今回の項目程度に抑え、要確認が多く残った制度についてのみ追加質問を出す形（動的ヒアリング）にします。最初から30項目を聞くと、そもそも入力が完了しません。",
+              "法人番号から商号・所在地・設立年を補完し、入力項目自体を減らします。",
+              "「資本金」「対象経費の見込み額」「直近の賃上げ実績」など、判定に効く割に入力負荷が低い項目を、正解データを見ながら順次追加します。",
+            ]} />
+          </Note>
+          <Note title="精度をどう測るか">
+            <Bullets items={[
+              "専門家が判定した「事業者プロフィール × 制度」の正解セットを100〜200件用意します。ここを作らないと、精度の話が主観のままになります。",
+              "評価指標は、ゲート判定の適合率と再現率。特に再現率（取りこぼしの少なさ）を重視します。誤って勧めるのは面談で気づけますが、出てこないものには誰も気づけません。",
+              "順位付けは「専門家が上位3件に挙げた制度が、システムの上位5件に入っているか」で見ます。",
+              "配点の重みは、この正解セットに対して調整します。今回の配点は、その調整を始めるための出発点という位置づけです。",
+            ]} />
+          </Note>
+        </div>
+      </section>
+
+      <section>
+        <h2 className="mb-2 font-serif text-base text-[#12314e]">3. このPoCで割り切っている点</h2>
+        <div className="rounded-sm border border-[#e3d4a8] bg-[#fbf7ea] px-5 py-4">
+          <p className="text-sm leading-relaxed text-[#3b4654]">
+            以下は「できていない」ことの一覧です。本番で必要になる作業量の見積もりに使えるよう、隠さず書いています。
+          </p>
+          <div className="mt-3 grid grid-cols-1 gap-x-6 gap-y-1.5 md:grid-cols-2">
+            <Bullets items={[
+              "制度データは架空10件の手書きJSONです。収集も更新もしていません。",
+              "要件は単純な閾値の並びです。AND / OR / 除外規定（みなし大企業など）を表現できません。",
+              "業種は大分類のみです。実際の制度は中分類・細分類で対象を指定することがあります。",
+              "補助対象経費（何にいくら使えるか）を判定していません。上限額と補助率の表示までです。",
+            ]} />
+            <Bullets items={[
+              "締切・公募回次の時制判定がありません。公募時期は目安の文字列として持っているだけです。",
+              "制度の併用可否・重複制限（同一経費への二重申請など）を見ていません。",
+              "自治体独自の制度、業界団体の助成は含めていません。",
+              "保存機能はありません（localStorage不使用のため、リロードで初期状態に戻ります）。認証・履歴・帳票出力も未実装です。",
+            ]} />
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-sm border border-[#ddd7c9] bg-white px-5 py-4">
+        <h2 className="font-serif text-base text-[#12314e]">段階的な進め方の案</h2>
+        <div className="mt-3 grid grid-cols-1 gap-4 md:grid-cols-3">
+          {[
+            { n: "第1段階", t: "判定ロジックの合意", d: "全国規模の制度20〜30件を手作業で構造化し、正解セットで精度を測る。ここで要件の分解方法と配点の考え方を固めます。この画面がその入口です。" },
+            { n: "第2段階", t: "収集・更新の自動化", d: "公募ページの巡回、PDFの構造化、レビュー用の管理画面を作る。更新が止まらない状態を作るところまで。" },
+            { n: "第3段階", t: "利用者向け機能", d: "動的ヒアリング、締切管理と通知、申請準備チェックリスト、相談履歴。対象範囲を自治体制度へ拡大。" },
+          ].map((s) => (
+            <div key={s.n} className="rounded-sm border border-[#e6e1d5] bg-[#faf8f3] px-4 py-3">
+              <p className="text-[11px] font-medium text-[#a8862f]">{s.n}</p>
+              <p className="mt-0.5 font-serif text-sm text-[#12314e]">{s.t}</p>
+              <p className="mt-1.5 text-xs leading-relaxed text-[#4a5568]">{s.d}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------
+   8. ルート
+------------------------------------------------------------------ */
+const TABS = [
+  { key: "match", label: "① 事業者情報とマッチング" },
+  { key: "logic", label: "② 適合度の計算ロジック" },
+  { key: "feas", label: "③ 本番実装に向けて" },
+];
+
+function App() {
+  const [tab, setTab] = useState("match");
+  const [profile, setProfile] = useState(INITIAL_PROFILE);
+
+  const matches = useMemo(() => {
+    const list = PROGRAMS.map((p) => matchProgram(p, profile));
+    list.sort((a, b) => {
+      if (a.eligible !== b.eligible) return a.eligible ? -1 : 1;
+      return b.score - a.score;
+    });
+    return list;
+  }, [profile]);
+
+  return (
+    <div className="min-h-screen text-[#1c2733]">
+      <header className="relative z-20 md:sticky md:top-0">
+        <div className="bg-[#12314e] text-white">
+          <div className="mx-auto flex max-w-7xl flex-wrap items-baseline gap-x-3 gap-y-1 px-4 py-3">
+            <h1 className="font-serif text-lg tracking-tight">補助金・助成金マッチング</h1>
+            <span className="rounded-sm bg-white/15 px-1.5 py-0.5 text-[11px]">PoC / 試作版</span>
+            <p className="ml-auto text-[11px] text-white/70">適合度の根拠と、満たしていない条件を画面に出すことを目的にした試作です。</p>
+          </div>
+        </div>
+
+        <div className="border-y border-[#e0cfa4] bg-[#fbf3dd]">
+          <div className="mx-auto max-w-7xl px-4 py-2">
+            <p className="text-xs leading-relaxed text-[#6b5117]">
+              <span className="mr-1.5 rounded-sm bg-[#a8862f] px-1.5 py-0.5 text-[11px] font-medium text-white">重要</span>
+              デモ用の架空データです。本番では公募中の制度データを取り込みます。
+              <span className="ml-1">
+                掲載している制度名・要件・金額・補助率・公募時期は、すべてこのデモのために作った架空のものです。実在する制度の内容を示すものではありません。
+              </span>
+            </p>
+          </div>
+        </div>
+
+        <div className="border-b border-[#ddd7c9] bg-white">
+          <div className="mx-auto flex max-w-7xl gap-1 px-4">
+            {TABS.map((t) => (
+              <button
+                key={t.key}
+                onClick={() => setTab(t.key)}
+                className={`-mb-px border-b-2 px-3 py-2.5 text-sm ${
+                  tab === t.key
+                    ? "border-[#12314e] font-medium text-[#12314e]"
+                    : "border-transparent text-[#7c7669] hover:text-[#12314e]"
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </header>
+
+      <main className="mx-auto max-w-7xl px-4 py-5">
+        {tab === "match" && <MatchTab profile={profile} setProfile={setProfile} matches={matches} />}
+        {tab === "logic" && <LogicTab matches={matches} />}
+        {tab === "feas" && <FeasibilityTab />}
+      </main>
+
+      <footer className="mt-6 border-t border-[#ddd7c9] bg-white">
+        <div className="mx-auto max-w-7xl px-4 py-5">
+          <p className="text-xs leading-relaxed text-[#7c7669]">
+            制度データはすべて架空です。本番では、公募中の制度を出典URL・取得日時つきで取り込み、この画面と同じ構造（必須要件・加点要件・要確認要件）に流し込みます。
+            判定はルールエンジンで行い、LLMは要件の抽出に限定する想定です。最終的な適用可否は、必ず各制度の公募要領でご確認いただく前提の設計にしています。
+          </p>
+          <p className="mt-2 text-[11px] text-[#a09a8c]">
+            React + Tailwind の1ファイル構成／保存機能なし（リロードで初期状態に戻ります）
+          </p>
+        </div>
+      </footer>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>

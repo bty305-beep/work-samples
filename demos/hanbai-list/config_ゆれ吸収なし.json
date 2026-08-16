@@ -1,0 +1,56 @@
+{
+  "job_name": "販売リスト生成（商品コードの表記ゆれを吸収しない場合）",
+
+  "_comment": "config.json との違いは code_rules だけです。表記ゆれを吸収しないと、除外したい商品が販売リストに残ることを確認するための設定です。",
+
+  "master": {
+    "path": "samples/商品マスタ.xlsx",
+    "sheet": 0,
+    "columns": {
+      "商品コード": "商品コード",
+      "商品名": "商品名",
+      "仕入れ値": "仕入れ値"
+    }
+  },
+
+  "exclude": {
+    "path": "samples/除外リスト.xlsx",
+    "sheet": 0,
+    "columns": {
+      "商品コード": "除外コード"
+    }
+  },
+
+  "code_rules": {
+    "nfkc": false,
+    "strip": false,
+    "strip_spaces": false,
+    "upper": false
+  },
+
+  "duplicate_codes": "first",
+
+  "pricing": {
+    "clean_cost": true,
+    "tiers": [
+      { "upto": 1000, "markup": 1.8 },
+      { "upto": 5000, "markup": 1.6 },
+      { "upto": null, "markup": 1.4 }
+    ],
+    "add": 0,
+    "round": { "unit": 10, "mode": "ceil" },
+    "min_price": 500
+  },
+
+  "output": {
+    "path": "out/販売リスト_ゆれ吸収なし_{日時}.xlsx",
+    "sheet": "販売リスト",
+    "columns": ["商品コード", "商品名", "仕入れ値", "販売価格", "粗利", "粗利率"],
+    "sort_by": "商品コード",
+    "include_excluded_sheet": false,
+    "timestamp_format": "%Y%m%d_%H%M",
+    "engine": "auto"
+  },
+
+  "summary": "out/生成サマリー_ゆれ吸収なし.md"
+}

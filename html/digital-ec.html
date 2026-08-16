@@ -1,0 +1,527 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>デジタル商品EC デモ | 決済と自動配信、注文管理</title>
+<meta name="description" content="ダウンロード商品と個別対応商品を1つの注文管理で扱うデジタル商品ECのデモ。有効期限つきリンクを自動発行。">
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" data-presets="react">
+const { useState, useMemo } = React;
+
+/* ------------------------------------------------------------------
+   商品定義。実案件では管理画面から登録し、DBに持たせます。
+   delivery: "auto"   … 決済完了と同時にダウンロードリンクを自動発行
+             "manual" … 購入時に管理画面へ通知し、店主が個別に手配
+------------------------------------------------------------------ */
+const SHOP = {
+  name: "Studio Kanade",
+  tagline: "制作に使える素材とテンプレートを配布しています",
+  supportEmail: "support@example.com",
+  downloadHours: 48,
+  downloadLimit: 3,
+};
+
+const PRODUCTS = [
+  {
+    id: "p1",
+    name: "写真素材パック 2026 夏",
+    price: 2400,
+    delivery: "auto",
+    file: "summer2026.zip",
+    size: "412 MB",
+    summary: "商用利用できる写真120点。web用とプリント用の2サイズを同梱しています。",
+  },
+  {
+    id: "p2",
+    name: "請求書テンプレート（Excel）",
+    price: 1200,
+    delivery: "auto",
+    file: "invoice-template.xlsx",
+    size: "86 KB",
+    summary: "取引先ごとに設定を分けられる請求書。消費税と源泉徴収の計算式を入れてあります。",
+  },
+  {
+    id: "p3",
+    name: "ロゴ制作（1点・オンライン相談つき）",
+    price: 38000,
+    delivery: "manual",
+    summary: "ヒアリングのうえ制作します。ご購入後、担当より2営業日以内にご連絡します。",
+  },
+];
+
+const SEED_ORDERS = [
+  {
+    id: "ORD-1041",
+    productId: "p1",
+    email: "kaori.m@example.com",
+    amount: 2400,
+    paidAt: "2026-08-14 21:03",
+    token: "d7f2a91c",
+    downloads: 1,
+    expiresAt: "2026-08-16 21:03",
+    handled: null,
+  },
+  {
+    id: "ORD-1042",
+    productId: "p3",
+    email: "t.okabe@example.com",
+    amount: 38000,
+    paidAt: "2026-08-15 09:47",
+    token: null,
+    downloads: 0,
+    expiresAt: null,
+    handled: false,
+  },
+  {
+    id: "ORD-1043",
+    productId: "p2",
+    email: "shinji_w@example.com",
+    amount: 1200,
+    paidAt: "2026-08-15 11:20",
+    token: "b3c88e05",
+    downloads: 0,
+    expiresAt: "2026-08-17 11:20",
+    handled: null,
+  },
+];
+
+const yen = (n) => `${n.toLocaleString()}円`;
+const now = () => new Date();
+const stamp = (d) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ` +
+  `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+
+function App() {
+  const [view, setView] = useState("store");
+  const [orders, setOrders] = useState(SEED_ORDERS);
+  const [checkout, setCheckout] = useState(null);
+  const [receipt, setReceipt] = useState(null);
+
+  const placeOrder = (product, email) => {
+    const paid = now();
+    const expires = new Date(paid.getTime() + SHOP.downloadHours * 3600 * 1000);
+    const order = {
+      id: `ORD-${1044 + orders.length - SEED_ORDERS.length + SEED_ORDERS.length}`,
+      productId: product.id,
+      email,
+      amount: product.price,
+      paidAt: stamp(paid),
+      token: product.delivery === "auto" ? Math.random().toString(16).slice(2, 10) : null,
+      downloads: 0,
+      expiresAt: product.delivery === "auto" ? stamp(expires) : null,
+      handled: product.delivery === "manual" ? false : null,
+    };
+    setOrders((prev) => [...prev, order]);
+    setCheckout(null);
+    setReceipt(order);
+  };
+
+  const countDownload = (id) =>
+    setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, downloads: o.downloads + 1 } : o)));
+
+  const markHandled = (id) =>
+    setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, handled: true } : o)));
+
+  return (
+    <div className="min-h-screen bg-white text-zinc-900">
+      <header className="border-b border-zinc-200">
+        <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-4 px-4 py-4">
+          <div>
+            <p className="text-base font-semibold tracking-tight">{SHOP.name}</p>
+            <p className="text-xs text-zinc-500">{SHOP.tagline}</p>
+          </div>
+          <div className="ml-auto flex rounded border border-zinc-300 text-xs">
+            <button
+              onClick={() => { setView("store"); setReceipt(null); }}
+              className={`px-3 py-1.5 ${view === "store" ? "bg-indigo-950 text-white" : "text-zinc-600"}`}
+            >
+              ストア
+            </button>
+            <button
+              onClick={() => setView("admin")}
+              className={`px-3 py-1.5 ${view === "admin" ? "bg-indigo-950 text-white" : "text-zinc-600"}`}
+            >
+              管理画面
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {view === "store" ? (
+        receipt ? (
+          <Receipt
+            order={receipt}
+            product={PRODUCTS.find((p) => p.id === receipt.productId)}
+            onDownload={countDownload}
+            onBack={() => setReceipt(null)}
+          />
+        ) : (
+          <Store onBuy={setCheckout} />
+        )
+      ) : (
+        <Admin orders={orders} onHandled={markHandled} />
+      )}
+
+      {checkout && (
+        <Checkout product={checkout} onCancel={() => setCheckout(null)} onPay={placeOrder} />
+      )}
+
+      <p className="mx-auto max-w-5xl px-4 pb-10 text-xs leading-relaxed text-zinc-400">
+        このデモでは決済処理をブラウザ内で再現しています。実案件ではStripeのCheckoutを使い、
+        決済完了の通知をサーバーで受け取ってから配信用リンクを発行します。
+        リンクの有効期限と回数制限もサーバー側で判定するため、URLを共有されても期限切れ後は開けません。
+      </p>
+    </div>
+  );
+}
+
+/* -------------------------------- ストア -------------------------------- */
+
+function Store({ onBuy }) {
+  return (
+    <main className="mx-auto max-w-5xl px-4 py-10">
+      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        {PRODUCTS.map((p) => (
+          <article key={p.id} className="flex flex-col rounded border border-zinc-200 p-5">
+            <span
+              className={`inline-flex w-fit rounded px-2 py-0.5 text-xs ring-1 ${
+                p.delivery === "auto"
+                  ? "bg-indigo-50 text-indigo-800 ring-indigo-200"
+                  : "bg-amber-50 text-amber-800 ring-amber-200"
+              }`}
+            >
+              {p.delivery === "auto" ? "購入後すぐダウンロード" : "購入後に個別ご連絡"}
+            </span>
+            <h2 className="mt-3 text-base font-semibold leading-snug">{p.name}</h2>
+            <p className="mt-2 flex-1 text-sm leading-relaxed text-zinc-600">{p.summary}</p>
+            {p.file && (
+              <p className="mt-3 font-mono text-xs text-zinc-400">
+                {p.file}／{p.size}
+              </p>
+            )}
+            <div className="mt-4 flex items-center justify-between">
+              <span className="text-lg font-semibold tabular-nums">{yen(p.price)}</span>
+              <button
+                onClick={() => onBuy(p)}
+                className="rounded bg-indigo-950 px-4 py-2 text-sm text-white hover:bg-indigo-800"
+              >
+                購入する
+              </button>
+            </div>
+          </article>
+        ))}
+      </div>
+    </main>
+  );
+}
+
+/* ------------------------------- 決済画面 ------------------------------- */
+
+function Checkout({ product, onCancel, onPay }) {
+  const [email, setEmail] = useState("");
+  const [card, setCard] = useState("");
+  const [touched, setTouched] = useState(false);
+  const [paying, setPaying] = useState(false);
+
+  const badEmail = !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+  const badCard = card.replace(/\s/g, "").length < 14;
+
+  const pay = () => {
+    setTouched(true);
+    if (badEmail || badCard) return;
+    setPaying(true);
+    setTimeout(() => onPay(product, email.trim()), 700);
+  };
+
+  return (
+    <div className="fixed inset-0 z-30 flex items-end justify-center bg-zinc-900/50 sm:items-center">
+      <div className="w-full max-w-md rounded-t-lg bg-white sm:rounded-lg">
+        <div className="flex items-center justify-between border-b border-zinc-200 px-5 py-4">
+          <h2 className="text-sm font-semibold">お支払い</h2>
+          <button onClick={onCancel} className="text-sm text-zinc-500 hover:text-zinc-900">閉じる</button>
+        </div>
+
+        <div className="space-y-4 px-5 py-5">
+          <div className="rounded bg-zinc-50 px-4 py-3">
+            <p className="text-sm font-medium">{product.name}</p>
+            <p className="mt-1 text-lg font-semibold tabular-nums">{yen(product.price)}</p>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs text-zinc-500">
+              メールアドレス<span className="ml-1 text-rose-500">必須</span>
+            </label>
+            <input
+              value={email}
+              inputMode="email"
+              placeholder="you@example.com"
+              onChange={(e) => setEmail(e.target.value)}
+              className={`w-full rounded border px-3 py-2 text-sm ${touched && badEmail ? "border-rose-400" : "border-zinc-300"}`}
+            />
+            <p className="mt-1 text-xs text-zinc-500">このアドレス宛にダウンロード用のリンクをお送りします。</p>
+            {touched && badEmail && <p className="mt-1 text-xs text-rose-600">メールアドレスの形式を確認してください。</p>}
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs text-zinc-500">
+              カード番号<span className="ml-1 text-rose-500">必須</span>
+            </label>
+            <input
+              value={card}
+              inputMode="numeric"
+              placeholder="4242 4242 4242 4242"
+              onChange={(e) => setCard(e.target.value)}
+              className={`w-full rounded border px-3 py-2 font-mono text-sm ${touched && badCard ? "border-rose-400" : "border-zinc-300"}`}
+            />
+            {touched && badCard && <p className="mt-1 text-xs text-rose-600">カード番号を確認してください。</p>}
+            <p className="mt-1 text-xs text-zinc-400">デモのため実際の決済は行われません。任意の数字で進みます。</p>
+          </div>
+        </div>
+
+        <div className="flex gap-2 border-t border-zinc-200 px-5 py-4">
+          <button
+            onClick={pay}
+            disabled={paying}
+            className="rounded bg-indigo-950 px-5 py-2 text-sm text-white hover:bg-indigo-800 disabled:bg-zinc-400"
+          >
+            {paying ? "処理しています…" : `${yen(product.price)}を支払う`}
+          </button>
+          <button onClick={onCancel} className="rounded border border-zinc-300 px-4 py-2 text-sm hover:bg-zinc-100">
+            やめる
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------ 購入完了画面 ------------------------------ */
+
+function Receipt({ order, product, onDownload, onBack }) {
+  const [copied, setCopied] = useState(false);
+  const remaining = SHOP.downloadLimit - order.downloads;
+  const usedUp = remaining <= 0;
+  const link = `https://studio-kanade.example.com/d/${order.token}`;
+
+  return (
+    <main className="mx-auto max-w-3xl px-4 py-12">
+      <p className="text-sm text-indigo-800">お支払いが完了しました</p>
+      <h1 className="mt-2 text-2xl font-semibold tracking-tight">{product.name}</h1>
+      <p className="mt-1 text-sm text-zinc-500">
+        注文番号 {order.id}／{order.paidAt}／{yen(order.amount)}
+      </p>
+
+      {product.delivery === "auto" ? (
+        <section className="mt-8 rounded border-2 border-indigo-950 p-6">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="text-sm font-semibold">ダウンロード</h2>
+            <span className="font-mono text-xs text-zinc-500">
+              {product.file}／{product.size}
+            </span>
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <button
+              onClick={() => !usedUp && onDownload(order.id)}
+              disabled={usedUp}
+              className="rounded bg-indigo-950 px-5 py-2.5 text-sm text-white hover:bg-indigo-800 disabled:bg-zinc-300"
+            >
+              {usedUp ? "回数の上限に達しました" : "ファイルをダウンロード"}
+            </button>
+            <button
+              onClick={() => { setCopied(true); setTimeout(() => setCopied(false), 1600); }}
+              className="rounded border border-zinc-300 px-4 py-2.5 text-sm hover:bg-zinc-100"
+            >
+              {copied ? "リンクをコピーしました" : "リンクをコピー"}
+            </button>
+          </div>
+
+          <dl className="mt-5 grid gap-3 border-t border-zinc-200 pt-4 text-sm sm:grid-cols-3">
+            <div>
+              <dt className="text-xs text-zinc-500">残りダウンロード回数</dt>
+              <dd className="mt-0.5 font-semibold tabular-nums">
+                {Math.max(remaining, 0)} / {SHOP.downloadLimit} 回
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-zinc-500">期限</dt>
+              <dd className="mt-0.5 font-mono">{order.expiresAt}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-zinc-500">配信用リンク</dt>
+              <dd className="mt-0.5 truncate font-mono text-xs text-zinc-500">{link}</dd>
+            </div>
+          </dl>
+
+          <p className="mt-4 text-xs leading-relaxed text-zinc-500">
+            同じ内容のメールを {order.email} 宛にお送りしました。
+            期限を過ぎた場合や回数を使い切った場合は、{SHOP.supportEmail} までご連絡ください。再発行します。
+          </p>
+        </section>
+      ) : (
+        <section className="mt-8 rounded border-2 border-amber-500 p-6">
+          <h2 className="text-sm font-semibold">担当者よりご連絡します</h2>
+          <p className="mt-3 text-sm leading-relaxed text-zinc-700">
+            この商品はご購入後に個別で進める内容です。
+            {order.email} 宛に、2営業日以内に担当者からご連絡します。
+          </p>
+          <p className="mt-3 text-xs text-zinc-500">
+            ご購入は管理画面に通知済みです。お急ぎの場合は {SHOP.supportEmail} までご連絡ください。
+          </p>
+        </section>
+      )}
+
+      <button onClick={onBack} className="mt-8 rounded border border-zinc-300 px-4 py-2 text-sm hover:bg-zinc-100">
+        ストアに戻る
+      </button>
+    </main>
+  );
+}
+
+/* ------------------------------- 管理画面 ------------------------------- */
+
+function Admin({ orders, onHandled }) {
+  const [range, setRange] = useState("all");
+
+  const filtered = useMemo(() => {
+    if (range === "manual") return orders.filter((o) => o.handled === false);
+    return orders;
+  }, [orders, range]);
+
+  const total = orders.reduce((s, o) => s + o.amount, 0);
+  const pending = orders.filter((o) => o.handled === false).length;
+
+  const exportCsv = () => {
+    const header = ["注文番号", "決済日時", "商品", "金額", "メール", "配信方式", "DL回数", "期限", "対応状況"];
+    const body = orders.map((o) => {
+      const p = PRODUCTS.find((x) => x.id === o.productId);
+      return [
+        o.id, o.paidAt, p.name, o.amount, o.email,
+        p.delivery === "auto" ? "自動配信" : "個別対応",
+        p.delivery === "auto" ? o.downloads : "",
+        o.expiresAt ?? "",
+        o.handled === null ? "" : o.handled ? "対応済み" : "未対応",
+      ];
+    });
+    const csv = [header, ...body].map((l) => l.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\r\n");
+    const url = URL.createObjectURL(new Blob(["\uFEFF" + csv], { type: "text/csv" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `orders_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <main className="mx-auto max-w-5xl px-4 py-8">
+      <div className="grid gap-4 sm:grid-cols-3">
+        <Stat label="注文件数" value={`${orders.length} 件`} />
+        <Stat label="売上合計" value={yen(total)} />
+        <Stat label="個別対応が必要" value={`${pending} 件`} alert={pending > 0} />
+      </div>
+
+      <div className="mt-8 flex flex-wrap items-end justify-between gap-3">
+        <div className="flex rounded border border-zinc-300 text-xs">
+          <button
+            onClick={() => setRange("all")}
+            className={`px-3 py-1.5 ${range === "all" ? "bg-zinc-900 text-white" : "text-zinc-600"}`}
+          >
+            すべての注文
+          </button>
+          <button
+            onClick={() => setRange("manual")}
+            className={`px-3 py-1.5 ${range === "manual" ? "bg-zinc-900 text-white" : "text-zinc-600"}`}
+          >
+            未対応のみ
+          </button>
+        </div>
+        <button onClick={exportCsv} className="rounded border border-zinc-300 px-3 py-2 text-sm hover:bg-zinc-100">
+          CSVで書き出す
+        </button>
+      </div>
+
+      {filtered.length === 0 ? (
+        <p className="mt-6 rounded border border-dashed border-zinc-300 px-6 py-12 text-center text-sm text-zinc-500">
+          未対応の注文はありません。
+        </p>
+      ) : (
+        <div className="mt-4 overflow-x-auto rounded border border-zinc-200">
+          <table className="w-full min-w-[720px] text-left text-sm">
+            <thead className="bg-zinc-50 text-xs text-zinc-500">
+              <tr>
+                <th className="px-4 py-3 font-medium">注文番号</th>
+                <th className="px-4 py-3 font-medium">決済日時</th>
+                <th className="px-4 py-3 font-medium">商品</th>
+                <th className="px-4 py-3 font-medium">金額</th>
+                <th className="px-4 py-3 font-medium">購入者</th>
+                <th className="px-4 py-3 font-medium">配信</th>
+                <th className="px-4 py-3" />
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((o) => {
+                const p = PRODUCTS.find((x) => x.id === o.productId);
+                return (
+                  <tr key={o.id} className="border-t border-zinc-100">
+                    <td className="px-4 py-3 font-mono text-xs">{o.id}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-zinc-600">{o.paidAt}</td>
+                    <td className="px-4 py-3">{p.name}</td>
+                    <td className="px-4 py-3 tabular-nums">{yen(o.amount)}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-zinc-600">{o.email}</td>
+                    <td className="px-4 py-3">
+                      {p.delivery === "auto" ? (
+                        <span className="text-xs text-zinc-600">
+                          自動配信済み
+                          <span className="ml-1 font-mono">{o.downloads}/{SHOP.downloadLimit}回</span>
+                        </span>
+                      ) : o.handled ? (
+                        <span className="inline-flex rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-600 ring-1 ring-zinc-200">
+                          対応済み
+                        </span>
+                      ) : (
+                        <span className="inline-flex rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-800 ring-1 ring-amber-200">
+                          未対応
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      {o.handled === false && (
+                        <button
+                          onClick={() => onHandled(o.id)}
+                          className="rounded border border-zinc-300 px-3 py-1 text-xs hover:bg-zinc-100"
+                        >
+                          対応済みにする
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </main>
+  );
+}
+
+function Stat({ label, value, alert }) {
+  return (
+    <div className={`rounded border p-4 ${alert ? "border-amber-300 bg-amber-50" : "border-zinc-200"}`}>
+      <p className="text-xs text-zinc-500">{label}</p>
+      <p className="mt-1 text-xl font-semibold tabular-nums">{value}</p>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>

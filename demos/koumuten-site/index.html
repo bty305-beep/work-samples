@@ -1,0 +1,1466 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>工務店コーポレートサイト デモ | 問い合わせ獲得を目的にした6ページ構成</title>
+<meta name="description" content="リフォーム・新築の問い合わせ獲得を目的にした工務店サイトのデモ。施工事例詳細に費用と工期を明示し、電話とフォームを常時表示。設定オブジェクトの差し替えで他社にも転用できます。">
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body>
+<div id="root"></div>
+<script>Babel.registerPreset("react-classic", { presets: [[Babel.availablePresets["react"], { runtime: "classic" }]] });</script>
+<script type="text/babel" data-presets="react-classic">
+const { useState, useMemo, useRef } = React;
+
+/* ==================================================================
+   サイト定義。ここを差し替えるだけで別の工務店のサイトになります。
+   会社名・色・対応エリア・施工事例・リフォームメニュー・沿革まで
+   すべてこのオブジェクトに集約しています。
+   実案件では WordPress のカスタム投稿タイプ + ACF に対応させ、
+   ここに書いてある構造をそのままフィールド定義にします。
+================================================================== */
+const SITE = {
+  company: {
+    name: "宮下工務店",
+    nameEn: "MIYASHITA KOUMUTEN",
+    catch: "この土地で 42 年。建てたあとも、ずっと近くに。",
+    lead: "新築もリフォームも、地元の職人が自社施工。図面の一本目からお引き渡しのあとまで、同じ担当者が受け持ちます。",
+    tel: "0120-48-7200",
+    telLabel: "受付 8:30〜18:00 / 日曜・祝日を除く",
+    address: "◯◯県△△市本町 3-12-5",
+    established: "1984年（昭和59年）4月",
+    capital: "3,000万円",
+    staff: "24名（うち一級建築士 3名）",
+    license: "国土交通大臣許可（般-3）第00000号",
+  },
+
+  /* 配色。CSS変数に流し込んで Tailwind の arbitrary value から参照します。 */
+  theme: {
+    primary: "#1F4B3F",   // 深緑：落ち着き・信頼
+    primaryDark: "#153429",
+    accent: "#C0703A",    // 木の色：CTAとアクセント
+    tint: "#F5F2EC",      // 生成り：面の下地
+    ink: "#2B2A27",
+    line: "#E3DDD1",
+  },
+
+  /* 対応エリア。フォームの選択肢とエリア外判定にも同じ配列を使います。 */
+  areas: {
+    primary: ["△△市", "◯◯市", "□□町", "××市"],
+    secondary: ["＊＊市", "◇◇郡"],
+    note: "上記以外の地域も、片道1時間以内であればご相談を承ります。",
+  },
+
+  reasons: [
+    { title: "自社施工。下請けに丸投げしません", body: "大工・基礎・板金は自社と専属の職人で対応します。中間マージンが乗らないぶん、同じ予算で使える材料が変わります。", stat: "自社施工率 92%" },
+    { title: "見積書は一式表記にしません", body: "「内装工事 一式」ではなく、材料・数量・単価まで分けて出します。他社と比べていただくためです。", stat: "平均 A4 6枚の内訳書" },
+    { title: "引き渡し後の定期点検", body: "6ヶ月・1年・2年・5年・10年に訪問します。点検にうかがった際の小さな補修は無償です。", stat: "10年間 計5回の無償点検" },
+  ],
+
+  /* 施工事例。type は絞り込みタブと連動します。 */
+  works: [
+    { id: "w1", type: "リフォーム", title: "築28年・水まわり3点をまとめて刷新", area: "△△市", age: "築28年", family: "ご夫婦＋お子さま2人", price: "268万円", term: "24日間", tone: "#8FA98C", tags: ["キッチン", "浴室", "洗面"], summary: "冬の寒さと掃除の手間が理由でのご相談。断熱浴槽と床暖房付き浴室乾燥機を入れ、動線も見直しました。", featured: true },
+    { id: "w2", type: "新築", title: "平屋 28坪・夫婦ふたりの終の住処", area: "◯◯市", age: "新築", family: "ご夫婦", price: "2,180万円", term: "5ヶ月", tone: "#7C93AB", tags: ["平屋", "耐震等級3", "断熱等級6"], summary: "段差をなくし、将来の車椅子利用を想定した幅で廊下と開口部を設計しました。" },
+    { id: "w3", type: "リフォーム", title: "外壁・屋根の塗り替えと雨樋交換", area: "□□町", age: "築22年", family: "ご夫婦＋お母さま", price: "184万円", term: "18日間", tone: "#B08968", tags: ["外壁", "屋根", "雨樋"], summary: "北面のひび割れが進行していたため、塗装前に下地補修を実施。足場を使う工事はまとめるのが結果的に安くなります。" },
+    { id: "w4", type: "新築", title: "2階建て 34坪・共働き家族の家事動線", area: "△△市", age: "新築", family: "ご夫婦＋お子さま1人", price: "2,640万円", term: "6ヶ月", tone: "#6F8F7D", tags: ["2階建て", "回遊動線", "太陽光"], summary: "洗う・干す・しまうを2階に集約。帰宅後の動線と分けることで、朝の混雑をなくしました。" },
+    { id: "w5", type: "リフォーム", title: "空き家を賃貸向けに再生（1棟）", area: "××市", age: "築35年", family: "オーナー様", price: "412万円", term: "38日間", tone: "#A38F71", tags: ["内装", "設備", "収益物件"], summary: "回収期間から逆算して工事範囲を決めました。やらない工事を決めるところからのご提案です。" },
+    { id: "w6", type: "リフォーム", title: "母屋と離れをつなぐ増築（12帖）", area: "◯◯市", age: "築31年", family: "3世帯", price: "596万円", term: "52日間", tone: "#94A7B5", tags: ["増築", "断熱", "バリアフリー"], summary: "既存の基礎を調査したうえで接続方法を決定。確認申請が必要な規模のため、申請から一括で対応しました。" },
+  ],
+
+  /* 事例詳細（1件ぶん）。実案件ではこの構造を投稿タイプのフィールドにします。 */
+  workDetail: {
+    workId: "w1",
+    heroBefore: "#9A9086",
+    heroAfter: "#8FA98C",
+    intro: "「冬になると浴室が寒くて、母を入れるのが不安」。最初のお電話はこの一言からでした。現地を見せていただくと、浴室だけでなく洗面とキッチンも同じ時期の設備で、単体で直すと足場や配管の工事が三度発生する状態でした。まとめてのご提案をした理由はここにあります。",
+    beforeAfter: [
+      { label: "浴室", before: "在来工法・タイル張り。冬季の室温 8℃", after: "断熱浴槽＋浴室暖房乾燥機。冬季の室温 18℃", toneB: "#9A9086", toneA: "#8FA98C" },
+      { label: "キッチン", before: "壁付けI型。作業幅 180cm、収納不足", after: "対面I型 255cm。食品庫と家電収納を新設", toneB: "#A79C90", toneA: "#96AE93" },
+      { label: "洗面", before: "洗面台と洗濯機が別室。動線が分断", after: "同室化。脱衣と分離し来客時も使用可", toneB: "#B3A79A", toneA: "#A2B79E" },
+    ],
+    costs: [
+      { item: "浴室（ユニットバス 1616・断熱仕様）", amount: 1180000 },
+      { item: "キッチン（対面 I型 2550・食洗機付）", amount: 890000 },
+      { item: "洗面化粧台・内装", amount: 240000 },
+      { item: "解体・処分費", amount: 180000 },
+      { item: "給排水・電気工事", amount: 150000 },
+      { item: "諸経費・現場管理費", amount: 40000 },
+    ],
+    costNote: "表示は税込です。既存の状態により、解体後に下地補修が必要になる場合があります。その際は着工前に想定額をお伝えし、ご確認をいただいてから進めます。",
+    subsidy: "この事例では、子育てエコホーム支援事業の断熱改修枠で 12万円の補助を受けています。申請は当社で代行しました。",
+    schedule: [
+      { day: "1〜2日目", body: "養生・既存設備の解体" },
+      { day: "3〜7日目", body: "給排水配管・電気配線の切り回し" },
+      { day: "8〜14日目", body: "浴室ユニット組み立て・防水確認" },
+      { day: "15〜20日目", body: "キッチン設置・内装仕上げ" },
+      { day: "21〜24日目", body: "洗面設置・クリーニング・お引き渡し" },
+    ],
+    scheduleNote: "工事中も台所とお風呂が同時に使えない期間は4日間だけになるよう順番を組みました。近所の入浴施設の回数券をお渡ししています。",
+    voice: {
+      who: "△△市 T様（ご夫婦＋お子さま2人）",
+      title: "「先に金額の幅を教えてくれたので、相談しやすかった」",
+      body: "他社さんは現地を見るまで金額を言ってくれませんでしたが、こちらはホームページに載っていた事例が近く、だいたいの予算が先に分かりました。工事中も毎日その日の作業内容をメモで残してくれて、留守がちでも安心でした。",
+      rating: 5,
+    },
+  },
+
+  /* リフォームのご案内。部位別。 */
+  reformMenus: [
+    { key: "kitchen", name: "キッチン", tone: "#8FA98C", price: "70万円 〜 180万円", term: "4〜10日", body: "対面化は間取りと給排水の位置で費用が大きく変わります。まず現状の配管位置を確認してからのご提案になります。", points: ["同位置での交換なら最短4日", "対面化は床下の状況調査が必要", "食洗機の後付けは分電盤の空き次第"] },
+    { key: "bath", name: "浴室・ユニットバス", tone: "#7C93AB", price: "80万円 〜 190万円", term: "5〜12日", body: "在来工法からユニットバスへの変更は、解体後に土台の傷みが見つかることがあります。想定される追加額を先にお伝えします。", points: ["断熱浴槽で追い焚き回数が減ります", "浴室暖房乾燥機はヒートショック対策", "サイズは解体前に実測が必要"] },
+    { key: "exterior", name: "外壁・屋根", tone: "#B08968", price: "90万円 〜 220万円", term: "14〜25日", body: "足場代が全体の2割前後を占めます。外壁と屋根、雨樋は同時に行うと足場を一度で済ませられます。", points: ["塗装前の下地補修の有無で耐久年数が変わります", "外壁・屋根の同時施工で足場代を一度に", "雨樋の交換も同じ足場で対応できます"] },
+    { key: "toilet", name: "トイレ・洗面", tone: "#A38F71", price: "20万円 〜 60万円", term: "1〜4日", body: "1日で終わる工事が中心です。和式から洋式への変更は床の造作が入るため、3〜4日をいただきます。", points: ["同位置の便器交換は1日で完了", "手洗い器の新設は給排水の延長が必要", "内装（壁・床）も同時が結果的に安価"] },
+    { key: "interior", name: "内装・間取り変更", tone: "#94A7B5", price: "30万円 〜 300万円", term: "5〜40日", body: "壁を抜けるかどうかは構造によります。図面がなくても、床下と小屋裏の調査で判断できます。", points: ["耐力壁の判定は現地調査で", "無垢材・塗り壁もご相談ください", "収納の造作は大工の手作業で対応"] },
+    { key: "insulation", name: "断熱・耐震", tone: "#6F8F7D", price: "60万円 〜 250万円", term: "7〜30日", body: "補助金の対象になりやすい工事です。申請期限があるため、着工時期から逆算してご案内します。", points: ["内窓は1部屋あたり半日で施工", "耐震診断は自治体の補助対象", "補助金の申請は当社で代行します"] },
+  ],
+
+  greeting: {
+    name: "宮下 健一",
+    role: "代表取締役 / 一級建築士・二級建築施工管理技士",
+    body: [
+      "父が大工として独立したのが1984年、私が7歳のときでした。現場について行っては木くずで遊んでいた記憶があります。",
+      "工務店を継いでから、ずっと決めていることがひとつあります。金額の話を先にすることです。夢のような図面を見せてから金額をお伝えするのは、お客さまに対して誠実ではないと考えています。ご相談の一番はじめに、ご予算でできることとできないことを申し上げます。",
+      "建てて終わりではありません。この地域で建てた家は、これから何十年もこの町にあります。点検にうかがい続けられる範囲でしかお仕事をお受けしないのは、そのためです。",
+    ],
+  },
+
+  history: [
+    { year: "1984", body: "宮下大工として創業。木造住宅の新築・改修を請け負う" },
+    { year: "1996", body: "有限会社宮下工務店を設立。設計部門を新設" },
+    { year: "2005", body: "本社を現在地（△△市本町）へ移転。ショールームを併設" },
+    { year: "2013", body: "長期優良住宅・耐震等級3への対応を標準化" },
+    { year: "2019", body: "リフォーム事業部を分離。年間施工 120件を超える" },
+    { year: "2024", body: "創業40周年。累計施工実績 2,400件を達成" },
+  ],
+
+  qualifications: [
+    { name: "一級建築士", count: 3 },
+    { name: "二級建築士", count: 4 },
+    { name: "一級建築施工管理技士", count: 2 },
+    { name: "二級建築施工管理技士", count: 5 },
+    { name: "増改築相談員", count: 6 },
+    { name: "住宅省エネルギー技術者", count: 4 },
+    { name: "既存住宅状況調査技術者", count: 2 },
+    { name: "福祉住環境コーディネーター2級", count: 3 },
+  ],
+
+  stats: [
+    { value: "2,400", unit: "件", label: "累計施工実績" },
+    { value: "42", unit: "年", label: "地域での営業年数" },
+    { value: "92", unit: "%", label: "自社施工率" },
+    { value: "68", unit: "%", label: "ご紹介・リピート率" },
+  ],
+
+  contact: {
+    types: ["リフォームの相談", "新築の相談", "点検・アフターの依頼", "その他のお問い合わせ"],
+    budgets: ["未定 / 相談したい", "〜100万円", "100〜300万円", "300〜1,000万円", "1,000万円以上"],
+    timings: ["すぐにでも", "3ヶ月以内", "半年以内", "1年以内", "時期は未定"],
+    routes: ["電話", "メール", "どちらでも"],
+  },
+};
+
+/* ------------------------------------------------------------------
+   設計意図。制作会社さま向けの説明パネルに表示します。
+   anchor は画面内の該当箇所に出るバッジと対応しています。
+------------------------------------------------------------------ */
+const INTENTS = [
+  {
+    anchor: "detail",
+    title: "問い合わせが発生するのは「施工事例の詳細ページ」",
+    body: "工務店サイトでは、トップページを見ただけで問い合わせる人はほとんどいません。実際に動くのは、自分の家に近い事例（築年数・家族構成・エリア）を1件見つけて、詳細まで読んだ人です。トップは事例詳細への入口として設計し、事例一覧・関連事例・リフォーム案内のすべてから詳細ページへ流し込んでいます。",
+    todo: "事例詳細を最重要ページとして扱い、他ページはそこへの導線として構成する。",
+  },
+  {
+    anchor: "cost",
+    title: "事例詳細には費用の目安と工期を必ず載せる",
+    body: "金額を書かないサイトは「聞かないと分からない」＝「営業をかけられる」と受け取られ、そこで離脱します。逆に、内訳と工期まで書いてあると、来る問い合わせの質が上がります。予算感が合った人だけが問い合わせるためです。総額だけでなく内訳・追加費用が出る条件・補助金まで書いているのは、あとで金額が動く不安を先に潰すためです。",
+    todo: "総額 / 内訳 / 工期 / 追加費用の条件 / 補助金 を事例詳細の必須項目にする。",
+  },
+  {
+    anchor: "tel",
+    title: "電話とフォームを常時表示する",
+    body: "工務店の客層は電話が多く、特に50代以上のリフォーム層はフォーム入力を嫌います。一方で、日中に電話できない共働き層はフォームを使います。どちらかに寄せると片方を丸ごと落とすため、両方を並べて常に画面内に置いています。スマホでは画面下に固定し、電話は tel: リンクでワンタップ発信、受付時間も併記して「今かけていいのか」を判断できるようにしています。",
+    todo: "PCはヘッダー固定、スマホは画面下固定。電話・フォームを同じ重みで常時表示。",
+  },
+  {
+    anchor: "area",
+    title: "対応エリアを早い段階で明示する",
+    body: "エリア外からの問い合わせは、対応もお断りの連絡も工務店側の負担になります。ファーストビュー直下・フッター・フォームの3箇所にエリアを出し、フォームでは市区町村を選択式にしてエリア外を選ぶとその場で注意を表示します。送信自体は止めません。エリア外でも紹介できる場合があるためで、ここでの目的は問い合わせを減らすことではなく、施工できない問い合わせを減らすことです。",
+    todo: "ファーストビュー直下・フッター・フォームの3箇所に明示。フォームは選択式で判定。",
+  },
+  {
+    anchor: "config",
+    title: "（補足）データはファイル冒頭の設定オブジェクトに集約",
+    body: "会社名・配色・対応エリア・施工事例・リフォームメニュー・沿革を、すべてファイル冒頭の SITE オブジェクトにまとめています。他の工務店案件では、この構造をそのまま WordPress のカスタム投稿タイプ + カスタムフィールドに対応させる想定です。2件目以降は構成の検討からではなく、データの差し替えから始められます。",
+    todo: "案件をまたいで使える構造にする。継続でお受けするほど着手が早くなります。",
+  },
+];
+
+const AREA_OPTIONS = SITE.areas.primary.concat(SITE.areas.secondary).concat(["上記以外の地域"]);
+const yen = (n) => "¥" + n.toLocaleString("ja-JP");
+const costTotal = SITE.workDetail.costs.reduce((s, c) => s + c.amount, 0);
+
+/* ================================================================== */
+
+function ThemeVars() {
+  const t = SITE.theme;
+  return (
+    <style>{`
+      :root{
+        --c-primary:${t.primary};
+        --c-primary-dark:${t.primaryDark};
+        --c-accent:${t.accent};
+        --c-tint:${t.tint};
+        --c-ink:${t.ink};
+        --c-line:${t.line};
+      }
+      html{scroll-behavior:smooth}
+      body{background:#fff;color:var(--c-ink)}
+    `}</style>
+  );
+}
+
+/* 写真の代わりに色付きの枠を出します。実案件では <img> に差し替えます。 */
+function Photo({ tone, label, sub, ratio = "aspect-[4/3]", className = "" }) {
+  return (
+    <div
+      className={`${ratio} ${className} relative overflow-hidden rounded-lg`}
+      style={{ background: `linear-gradient(135deg, ${tone} 0%, ${tone}cc 55%, ${tone}99 100%)` }}
+    >
+      <div className="absolute inset-0 opacity-25"
+        style={{ backgroundImage: "repeating-linear-gradient(45deg, rgba(255,255,255,.35) 0 1px, transparent 1px 12px)" }} />
+      <div className="absolute inset-0 flex flex-col items-center justify-center text-center text-white">
+        <span className="text-[11px] tracking-[0.2em] opacity-80">PHOTO</span>
+        <span className="mt-1 px-3 text-sm font-medium drop-shadow">{label}</span>
+        {sub && <span className="mt-0.5 px-3 text-[11px] opacity-90">{sub}</span>}
+      </div>
+    </div>
+  );
+}
+
+/* 設計意図バッジ。パネルが開いているときだけ該当箇所に出ます。 */
+function WhyBadge({ anchor, show, onOpen, text }) {
+  if (!show) return null;
+  const intent = INTENTS.find((i) => i.anchor === anchor);
+  return (
+    <button
+      onClick={() => onOpen(anchor)}
+      className="my-2 flex w-full items-start gap-2 rounded-md border border-dashed border-[var(--c-accent)] bg-[var(--c-accent)]/5 px-3 py-2 text-left"
+    >
+      <span className="mt-0.5 shrink-0 rounded bg-[var(--c-accent)] px-1.5 py-0.5 text-[10px] font-bold text-white">設計意図</span>
+      <span className="text-[12px] leading-relaxed text-[var(--c-primary-dark)]">{text || (intent && intent.title)}</span>
+    </button>
+  );
+}
+
+function Section({ children, className = "", tint = false, id }) {
+  return (
+    <section id={id} className={`${tint ? "bg-[var(--c-tint)]" : ""} ${className}`}>
+      <div className="mx-auto w-full max-w-6xl px-4 py-14 sm:px-6 sm:py-20">{children}</div>
+    </section>
+  );
+}
+
+function Heading({ en, ja, lead, center = false }) {
+  return (
+    <div className={`mb-8 ${center ? "text-center" : ""}`}>
+      <p className="text-[11px] font-semibold tracking-[0.25em] text-[var(--c-accent)]">{en}</p>
+      <h2 className="mt-1.5 text-2xl font-bold tracking-tight text-[var(--c-primary-dark)] sm:text-3xl">{ja}</h2>
+      {lead && <p className="mt-3 max-w-3xl text-sm leading-relaxed text-neutral-600">{lead}</p>}
+    </div>
+  );
+}
+
+function Btn({ children, onClick, href, kind = "primary", className = "", ...rest }) {
+  const base = "inline-flex items-center justify-center gap-2 rounded-md px-5 py-3 text-sm font-bold transition";
+  const kinds = {
+    primary: "bg-[var(--c-accent)] text-white hover:opacity-90 shadow-sm",
+    dark: "bg-[var(--c-primary)] text-white hover:bg-[var(--c-primary-dark)]",
+    ghost: "border border-[var(--c-line)] bg-white text-[var(--c-primary-dark)] hover:bg-[var(--c-tint)]",
+  };
+  const cls = `${base} ${kinds[kind]} ${className}`;
+  if (href) return <a href={href} className={cls} {...rest}>{children}</a>;
+  return <button onClick={onClick} className={cls} {...rest}>{children}</button>;
+}
+
+/* ---------- 電話 + フォームの常時表示セット ---------- */
+function TelBlock({ compact = false }) {
+  const c = SITE.company;
+  return (
+    <div className={compact ? "" : "rounded-lg border border-[var(--c-line)] bg-white p-5"}>
+      <p className="text-[11px] font-semibold tracking-wider text-neutral-500">お電話でのご相談</p>
+      <a href={`tel:${c.tel.replace(/-/g, "")}`} className="mt-1 block text-2xl font-bold leading-none tracking-tight text-[var(--c-primary-dark)] sm:text-3xl">
+        ☎ {c.tel}
+      </a>
+      <p className="mt-1.5 text-[11px] text-neutral-500">{c.telLabel}</p>
+    </div>
+  );
+}
+
+function Header({ page, goTo, showIntent, setShowIntent, openIntent }) {
+  const NAV = [
+    { key: "home", label: "ホーム" },
+    { key: "works", label: "施工事例" },
+    { key: "reform", label: "リフォーム" },
+    { key: "company", label: "会社案内" },
+    { key: "contact", label: "お問い合わせ" },
+  ];
+  return (
+    <header className="sticky top-0 z-40 border-b border-[var(--c-line)] bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/90">
+      <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3 sm:px-6">
+        <button onClick={() => goTo("home")} className="flex shrink-0 items-center gap-2 text-left">
+          <span className="grid h-9 w-9 place-items-center rounded bg-[var(--c-primary)] text-sm font-bold text-white">宮</span>
+          <span className="leading-tight">
+            <span className="block text-[15px] font-bold text-[var(--c-primary-dark)]">{SITE.company.name}</span>
+            <span className="block text-[9px] tracking-[0.18em] text-neutral-500">{SITE.company.nameEn}</span>
+          </span>
+        </button>
+
+        <nav className="ml-auto hidden items-center gap-1 lg:flex">
+          {NAV.map((n) => (
+            <button
+              key={n.key}
+              onClick={() => goTo(n.key)}
+              className={`rounded px-3 py-2 text-[13px] font-semibold transition ${
+                page === n.key || (n.key === "works" && page === "work-detail")
+                  ? "text-[var(--c-accent)]"
+                  : "text-[var(--c-primary-dark)] hover:text-[var(--c-accent)]"
+              }`}
+            >
+              {n.label}
+            </button>
+          ))}
+        </nav>
+
+        {/* 電話とフォームは常時ヘッダーに出します（設計意図: tel） */}
+        <div className="ml-auto flex items-center gap-2 lg:ml-4">
+          <a href={`tel:${SITE.company.tel.replace(/-/g, "")}`} className="hidden text-right leading-tight md:block">
+            <span className="block text-[10px] text-neutral-500">{SITE.company.telLabel}</span>
+            <span className="block text-lg font-bold tracking-tight text-[var(--c-primary-dark)]">☎ {SITE.company.tel}</span>
+          </a>
+          <Btn onClick={() => goTo("contact")} className="!px-4 !py-2.5 text-[13px]">無料相談・見積り</Btn>
+        </div>
+      </div>
+
+      {/* 6ページ切り替え（デモ用の全ページナビ） */}
+      <div className="border-t border-[var(--c-line)] bg-[var(--c-tint)]">
+        <div className="mx-auto flex max-w-6xl items-center gap-1 overflow-x-auto px-4 py-1.5 sm:px-6">
+          <span className="mr-1 shrink-0 text-[10px] font-bold tracking-wider text-neutral-500">全6ページ</span>
+          {[
+            { key: "home", label: "1. トップ" },
+            { key: "works", label: "2. 施工事例一覧" },
+            { key: "work-detail", label: "3. 事例詳細" },
+            { key: "reform", label: "4. リフォーム案内" },
+            { key: "company", label: "5. 会社案内" },
+            { key: "contact", label: "6. お問い合わせ" },
+          ].map((n) => (
+            <button
+              key={n.key}
+              onClick={() => goTo(n.key)}
+              className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-semibold transition ${
+                page === n.key ? "bg-[var(--c-primary)] text-white" : "text-neutral-600 hover:bg-white"
+              }`}
+            >
+              {n.label}
+            </button>
+          ))}
+          <button
+            onClick={() => (showIntent ? setShowIntent(false) : openIntent("detail"))}
+            className={`ml-auto shrink-0 rounded-full border px-3 py-1 text-[11px] font-bold transition ${
+              showIntent
+                ? "border-[var(--c-accent)] bg-[var(--c-accent)] text-white"
+                : "border-[var(--c-accent)] text-[var(--c-accent)] hover:bg-white"
+            }`}
+          >
+            {showIntent ? "設計意図を閉じる" : "設計意図をひらく"}
+          </button>
+        </div>
+      </div>
+    </header>
+  );
+}
+
+/* ---------- 設計意図パネル ---------- */
+function IntentPanel({ open, onClose, focus, setFocus }) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end">
+      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
+      <aside className="relative flex h-full w-full max-w-lg flex-col overflow-y-auto bg-white shadow-2xl">
+        <div className="sticky top-0 z-10 border-b border-[var(--c-line)] bg-[var(--c-primary)] px-5 py-4 text-white">
+          <div className="flex items-start gap-3">
+            <div>
+              <p className="text-[11px] tracking-[0.2em] opacity-80">DESIGN INTENT</p>
+              <h2 className="mt-0.5 text-lg font-bold">問い合わせを取るための設計</h2>
+            </div>
+            <button onClick={onClose} className="ml-auto rounded px-2 py-1 text-sm hover:bg-white/15">閉じる ✕</button>
+          </div>
+          <p className="mt-2 text-[12px] leading-relaxed opacity-90">
+            このデモは「きれいに作る」ためではなく「問い合わせを取る」ために組んでいます。
+            パネルを開いている間、画面内の該当箇所にも
+            <span className="mx-1 rounded bg-[var(--c-accent)] px-1 py-0.5 text-[10px] font-bold">設計意図</span>
+            バッジが表示されます。
+          </p>
+        </div>
+
+        <div className="space-y-3 p-5">
+          {INTENTS.map((it, i) => {
+            const active = focus === it.anchor;
+            return (
+              <div
+                key={it.anchor}
+                className={`rounded-lg border p-4 transition ${active ? "border-[var(--c-accent)] bg-[var(--c-accent)]/5" : "border-[var(--c-line)] bg-white"}`}
+              >
+                <button className="flex w-full items-start gap-3 text-left" onClick={() => setFocus(active ? null : it.anchor)}>
+                  <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[var(--c-primary)] text-[11px] font-bold text-white">{i + 1}</span>
+                  <span className="text-[14px] font-bold leading-snug text-[var(--c-primary-dark)]">{it.title}</span>
+                  <span className="ml-auto text-xs text-neutral-400">{active ? "－" : "＋"}</span>
+                </button>
+                {active && (
+                  <div className="mt-3 pl-9">
+                    <p className="text-[13px] leading-relaxed text-neutral-700">{it.body}</p>
+                    <p className="mt-3 rounded border-l-2 border-[var(--c-accent)] bg-[var(--c-tint)] px-3 py-2 text-[12px] font-semibold text-[var(--c-primary-dark)]">
+                      → {it.todo}
+                    </p>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="mt-auto border-t border-[var(--c-line)] bg-[var(--c-tint)] p-5 text-[12px] leading-relaxed text-neutral-600">
+          <p className="font-bold text-[var(--c-primary-dark)]">計測について</p>
+          <p className="mt-1.5">
+            公開後は「事例詳細ページの閲覧数」と「そこからの問い合わせ数」を対にして見ます。
+            どの事例が問い合わせを生んでいるかが分かれば、次に撮る写真と次に載せる事例が決まります。
+            ページを増やすより、当たっている事例と同じ属性の事例を足すほうが効きます。
+          </p>
+        </div>
+      </aside>
+    </div>
+  );
+}
+
+/* ---------- 対応エリア ---------- */
+function AreaBlock({ compact = false }) {
+  return (
+    <div className={compact ? "" : "rounded-lg border border-[var(--c-line)] bg-white p-5"}>
+      <p className="text-[11px] font-semibold tracking-wider text-neutral-500">対応エリア</p>
+      <p className="mt-1.5 text-[15px] font-bold text-[var(--c-primary-dark)]">
+        {SITE.areas.primary.join("・")}
+      </p>
+      <p className="mt-1 text-[13px] text-neutral-600">
+        （近隣）{SITE.areas.secondary.join("・")}
+      </p>
+      <p className="mt-1.5 text-[11px] leading-relaxed text-neutral-500">{SITE.areas.note}</p>
+    </div>
+  );
+}
+
+/* ================= 1. トップ ================= */
+function HomePage({ goTo, showIntent, openIntent }) {
+  const featured = SITE.works.slice(0, 3);
+  return (
+    <div>
+      {/* ファーストビュー */}
+      <div className="relative overflow-hidden bg-[var(--c-primary)]">
+        <div className="absolute inset-0 opacity-30"
+          style={{ backgroundImage: "radial-gradient(circle at 78% 22%, rgba(255,255,255,.35), transparent 45%), repeating-linear-gradient(115deg, rgba(255,255,255,.08) 0 2px, transparent 2px 22px)" }} />
+        <div className="relative mx-auto grid max-w-6xl gap-8 px-4 py-14 sm:px-6 sm:py-20 lg:grid-cols-[1.05fr_.95fr] lg:items-center">
+          <div className="text-white">
+            <p className="inline-block rounded-full bg-white/15 px-3 py-1 text-[11px] font-semibold tracking-wider">
+              {SITE.areas.primary.slice(0, 3).join("・")}の新築・リフォーム
+            </p>
+            <h1 className="mt-4 text-3xl font-bold leading-[1.35] tracking-tight sm:text-[42px] sm:leading-[1.3]">
+              {SITE.company.catch}
+            </h1>
+            <p className="mt-4 max-w-xl text-[14px] leading-relaxed text-white/85 sm:text-[15px]">{SITE.company.lead}</p>
+
+            <div className="mt-7 flex flex-col gap-3 sm:flex-row">
+              <Btn onClick={() => goTo("contact")} className="!px-6 !py-4 text-[15px]">
+                無料で相談・見積りを依頼する
+              </Btn>
+              <Btn href={`tel:${SITE.company.tel.replace(/-/g, "")}`} kind="ghost" className="!px-6 !py-4 text-[15px]">
+                ☎ {SITE.company.tel} に電話する
+              </Btn>
+            </div>
+            <p className="mt-2.5 text-[11px] text-white/70">{SITE.company.telLabel} ／ 相談・現地調査・お見積りまで無料です</p>
+
+            <div className="mt-8 grid max-w-lg grid-cols-4 gap-2 border-t border-white/20 pt-5">
+              {SITE.stats.map((s) => (
+                <div key={s.label}>
+                  <p className="text-xl font-bold sm:text-2xl">{s.value}<span className="ml-0.5 text-xs font-medium">{s.unit}</span></p>
+                  <p className="mt-0.5 text-[10px] leading-tight text-white/70">{s.label}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Photo tone="#8FA98C" label="施工写真" sub="水まわりリフォーム" ratio="aspect-[3/4]" className="col-span-1" />
+            <div className="grid gap-3">
+              <Photo tone="#7C93AB" label="施工写真" sub="平屋新築" ratio="aspect-[4/3]" />
+              <Photo tone="#B08968" label="施工写真" sub="外壁塗装" ratio="aspect-[4/3]" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 対応エリアはファーストビュー直下（設計意図: area） */}
+      <div className="border-b border-[var(--c-line)] bg-[var(--c-tint)]">
+        <div className="mx-auto max-w-6xl px-4 py-4 sm:px-6">
+          <WhyBadge anchor="area" show={showIntent} onOpen={openIntent}
+            text="対応エリアはファーストビューの直下に置いています。エリア外の方に、スクロールする前に判断してもらうためです。" />
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px]">
+            <span className="rounded bg-[var(--c-primary)] px-2 py-1 text-[11px] font-bold text-white">対応エリア</span>
+            <span className="font-bold text-[var(--c-primary-dark)]">{SITE.areas.primary.join("・")}</span>
+            <span className="text-neutral-600">／ 近隣：{SITE.areas.secondary.join("・")}</span>
+            <span className="text-[11px] text-neutral-500">{SITE.areas.note}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* 選ばれる理由 */}
+      <Section>
+        <Heading en="REASON" ja="宮下工務店が選ばれる理由" lead="価格の安さではなく、金額の見え方と工事後の関わり方で選んでいただいています。" />
+        <div className="grid gap-5 md:grid-cols-3">
+          {SITE.reasons.map((r, i) => (
+            <div key={r.title} className="rounded-lg border border-[var(--c-line)] bg-white p-6">
+              <div className="flex items-center gap-2">
+                <span className="grid h-8 w-8 place-items-center rounded-full bg-[var(--c-primary)] text-sm font-bold text-white">{i + 1}</span>
+                <span className="rounded bg-[var(--c-tint)] px-2 py-1 text-[11px] font-bold text-[var(--c-primary-dark)]">{r.stat}</span>
+              </div>
+              <h3 className="mt-4 text-[16px] font-bold leading-snug text-[var(--c-primary-dark)]">{r.title}</h3>
+              <p className="mt-2.5 text-[13px] leading-relaxed text-neutral-600">{r.body}</p>
+            </div>
+          ))}
+        </div>
+      </Section>
+
+      {/* 施工事例の抜粋 */}
+      <Section tint>
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <Heading en="WORKS" ja="施工事例" lead="費用の目安と工期まで、すべての事例に載せています。" />
+          <button onClick={() => goTo("works")} className="mb-8 text-[13px] font-bold text-[var(--c-accent)] underline underline-offset-4">
+            施工事例をすべて見る →
+          </button>
+        </div>
+        <WhyBadge anchor="detail" show={showIntent} onOpen={openIntent}
+          text="トップの事例は「読み物」ではなく詳細ページへの入口です。金額と工期をカードの時点で出し、条件の近い人だけを詳細へ送ります。" />
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {featured.map((w) => <WorkCard key={w.id} work={w} goTo={goTo} />)}
+        </div>
+      </Section>
+
+      {/* リフォーム案内への導線 */}
+      <Section>
+        <Heading en="REFORM" ja="部位から探す" lead="どこを直すか決まっている方は、こちらから費用と工期の目安をご確認ください。" />
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          {SITE.reformMenus.map((m) => (
+            <button key={m.key} onClick={() => goTo("reform")} className="group rounded-lg border border-[var(--c-line)] bg-white p-3 text-left transition hover:border-[var(--c-accent)]">
+              <Photo tone={m.tone} label={m.name} ratio="aspect-[4/3]" />
+              <p className="mt-2 text-[13px] font-bold text-[var(--c-primary-dark)]">{m.name}</p>
+              <p className="mt-0.5 text-[11px] text-neutral-500">{m.price}</p>
+            </button>
+          ))}
+        </div>
+      </Section>
+
+      <ContactCta goTo={goTo} showIntent={showIntent} openIntent={openIntent} />
+    </div>
+  );
+}
+
+function WorkCard({ work, goTo }) {
+  return (
+    <button onClick={() => goTo("work-detail", work.id)} className="group overflow-hidden rounded-lg border border-[var(--c-line)] bg-white text-left transition hover:-translate-y-0.5 hover:shadow-md">
+      <Photo tone={work.tone} label={work.type} sub={work.area} />
+      <div className="p-4">
+        <div className="flex items-center gap-2">
+          <span className={`rounded px-2 py-0.5 text-[10px] font-bold text-white ${work.type === "新築" ? "bg-[var(--c-primary)]" : "bg-[var(--c-accent)]"}`}>{work.type}</span>
+          <span className="text-[11px] text-neutral-500">{work.area}／{work.family}</span>
+        </div>
+        <h3 className="mt-2 text-[15px] font-bold leading-snug text-[var(--c-primary-dark)]">{work.title}</h3>
+        <p className="mt-2 line-clamp-2 text-[12px] leading-relaxed text-neutral-600">{work.summary}</p>
+        <div className="mt-3 flex items-center gap-4 border-t border-[var(--c-line)] pt-3">
+          <span className="text-[11px] text-neutral-500">費用の目安<b className="ml-1.5 text-[15px] text-[var(--c-primary-dark)]">{work.price}</b></span>
+          <span className="text-[11px] text-neutral-500">工期<b className="ml-1.5 text-[15px] text-[var(--c-primary-dark)]">{work.term}</b></span>
+          <span className="ml-auto text-[12px] font-bold text-[var(--c-accent)] group-hover:underline">詳しく見る →</span>
+        </div>
+      </div>
+    </button>
+  );
+}
+
+/* ================= 2. 施工事例一覧 ================= */
+function WorksPage({ goTo, showIntent, openIntent }) {
+  const [filter, setFilter] = useState("すべて");
+  const [area, setArea] = useState("すべて");
+
+  const list = useMemo(() => SITE.works.filter((w) =>
+    (filter === "すべて" || w.type === filter) && (area === "すべて" || w.area === area)
+  ), [filter, area]);
+
+  const areaList = ["すべて"].concat(Array.from(new Set(SITE.works.map((w) => w.area))));
+
+  return (
+    <div>
+      <PageHead en="WORKS" ja="施工事例" lead="実際にお引き渡しした事例です。費用の目安と工期を、すべての事例に記載しています。" />
+      <Section>
+        <WhyBadge anchor="detail" show={showIntent} onOpen={openIntent}
+          text="一覧は絞り込みのためのページです。滞在させるのではなく、条件の合う1件を早く見つけて詳細へ進んでもらいます。" />
+
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-[var(--c-line)] bg-[var(--c-tint)] p-3">
+          <div className="flex items-center gap-1.5">
+            <span className="mr-1 text-[11px] font-bold text-neutral-500">工事の種類</span>
+            {["すべて", "新築", "リフォーム"].map((t) => (
+              <button key={t} onClick={() => setFilter(t)}
+                className={`rounded-full px-3.5 py-1.5 text-[12px] font-bold transition ${filter === t ? "bg-[var(--c-primary)] text-white" : "bg-white text-neutral-600 hover:text-[var(--c-primary)]"}`}>
+                {t}
+                <span className="ml-1 text-[10px] opacity-70">
+                  {t === "すべて" ? SITE.works.length : SITE.works.filter((w) => w.type === t).length}
+                </span>
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="mr-1 text-[11px] font-bold text-neutral-500">エリア</span>
+            <select value={area} onChange={(e) => setArea(e.target.value)}
+              className="rounded border border-[var(--c-line)] bg-white px-3 py-1.5 text-[12px] font-semibold text-[var(--c-primary-dark)]">
+              {areaList.map((a) => <option key={a} value={a}>{a}</option>)}
+            </select>
+          </div>
+          <span className="ml-auto text-[12px] text-neutral-500">{list.length} 件を表示中</span>
+        </div>
+
+        <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {list.map((w) => <WorkCard key={w.id} work={w} goTo={goTo} />)}
+        </div>
+        {list.length === 0 && (
+          <p className="mt-10 text-center text-sm text-neutral-500">
+            条件に合う事例がありません。近い条件の施工も承っていますので、お気軽にご相談ください。
+          </p>
+        )}
+      </Section>
+      <ContactCta goTo={goTo} showIntent={showIntent} openIntent={openIntent} />
+    </div>
+  );
+}
+
+function PageHead({ en, ja, lead }) {
+  return (
+    <div className="border-b border-[var(--c-line)] bg-[var(--c-primary)]">
+      <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 sm:py-14">
+        <p className="text-[11px] font-semibold tracking-[0.25em] text-white/60">{en}</p>
+        <h1 className="mt-1.5 text-2xl font-bold tracking-tight text-white sm:text-3xl">{ja}</h1>
+        {lead && <p className="mt-3 max-w-3xl text-[13px] leading-relaxed text-white/80">{lead}</p>}
+      </div>
+    </div>
+  );
+}
+
+/* ================= 3. 施工事例の詳細 ================= */
+function WorkDetailPage({ workId, goTo, showIntent, openIntent }) {
+  const d = SITE.workDetail;
+  const work = SITE.works.find((w) => w.id === workId) || SITE.works.find((w) => w.id === d.workId);
+  const [ba, setBa] = useState("after");
+  const related = SITE.works.filter((w) => w.id !== work.id && w.type === work.type).slice(0, 3);
+
+  return (
+    <div>
+      <div className="border-b border-[var(--c-line)] bg-[var(--c-tint)]">
+        <div className="mx-auto max-w-6xl px-4 py-3 text-[12px] text-neutral-500 sm:px-6">
+          <button onClick={() => goTo("home")} className="hover:underline">ホーム</button>
+          <span className="mx-1.5">›</span>
+          <button onClick={() => goTo("works")} className="hover:underline">施工事例</button>
+          <span className="mx-1.5">›</span>
+          <span className="text-[var(--c-primary-dark)]">{work.title}</span>
+        </div>
+      </div>
+
+      <Section>
+        <div className="grid gap-8 lg:grid-cols-[1.6fr_1fr]">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={`rounded px-2 py-1 text-[11px] font-bold text-white ${work.type === "新築" ? "bg-[var(--c-primary)]" : "bg-[var(--c-accent)]"}`}>{work.type}</span>
+              {work.tags.map((t) => (
+                <span key={t} className="rounded bg-[var(--c-tint)] px-2 py-1 text-[11px] font-semibold text-[var(--c-primary-dark)]">{t}</span>
+              ))}
+            </div>
+            <h1 className="mt-3 text-2xl font-bold leading-snug tracking-tight text-[var(--c-primary-dark)] sm:text-3xl">{work.title}</h1>
+            <p className="mt-2 text-[13px] text-neutral-500">{work.area}／{work.family}</p>
+
+            {/* 費用と工期は本文より前（設計意図: cost） */}
+            <WhyBadge anchor="cost" show={showIntent} onOpen={openIntent}
+              text="費用の目安と工期を、本文より前・ページ最上部に置いています。ここを探させると離脱します。" />
+
+            <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {[
+                { k: "費用の目安（税込）", v: work.price },
+                { k: "工期", v: work.term },
+                { k: "築年数", v: work.age },
+                { k: "ご家族", v: work.family },
+              ].map((x) => (
+                <div key={x.k} className="rounded-lg border border-[var(--c-line)] bg-white p-3">
+                  <p className="text-[10px] text-neutral-500">{x.k}</p>
+                  <p className="mt-1 text-[17px] font-bold leading-tight text-[var(--c-primary-dark)]">{x.v}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Before / After */}
+            <div className="mt-8">
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-bold text-[var(--c-primary-dark)]">Before / After</h2>
+                <div className="ml-auto inline-flex overflow-hidden rounded-full border border-[var(--c-line)]">
+                  {[{ k: "before", l: "Before" }, { k: "after", l: "After" }].map((t) => (
+                    <button key={t.k} onClick={() => setBa(t.k)}
+                      className={`px-4 py-1.5 text-[12px] font-bold transition ${ba === t.k ? "bg-[var(--c-primary)] text-white" : "bg-white text-neutral-500"}`}>
+                      {t.l}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="mt-3 grid gap-4 sm:grid-cols-3">
+                {d.beforeAfter.map((b) => (
+                  <div key={b.label} className="rounded-lg border border-[var(--c-line)] bg-white p-3">
+                    <Photo tone={ba === "before" ? b.toneB : b.toneA} label={`${b.label}（${ba === "before" ? "Before" : "After"}）`} />
+                    <p className="mt-2.5 text-[12px] font-bold text-[var(--c-primary-dark)]">{b.label}</p>
+                    <p className="mt-1 text-[12px] leading-relaxed text-neutral-600">{ba === "before" ? b.before : b.after}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-8 rounded-lg border-l-4 border-[var(--c-primary)] bg-[var(--c-tint)] p-5">
+              <h2 className="text-[15px] font-bold text-[var(--c-primary-dark)]">ご相談のきっかけ</h2>
+              <p className="mt-2 text-[13px] leading-relaxed text-neutral-700">{d.intro}</p>
+            </div>
+
+            {/* 費用の内訳 */}
+            <div className="mt-8">
+              <h2 className="text-lg font-bold text-[var(--c-primary-dark)]">費用の内訳</h2>
+              <div className="mt-3 overflow-hidden rounded-lg border border-[var(--c-line)]">
+                <table className="w-full text-[13px]">
+                  <tbody>
+                    {d.costs.map((c, i) => (
+                      <tr key={c.item} className={i % 2 ? "bg-[var(--c-tint)]/60" : "bg-white"}>
+                        <td className="px-4 py-2.5 text-neutral-700">{c.item}</td>
+                        <td className="px-4 py-2.5 text-right font-semibold tabular-nums text-[var(--c-primary-dark)]">{yen(c.amount)}</td>
+                      </tr>
+                    ))}
+                    <tr className="bg-[var(--c-primary)] text-white">
+                      <td className="px-4 py-3 font-bold">合計（税込）</td>
+                      <td className="px-4 py-3 text-right text-[17px] font-bold tabular-nums">{yen(costTotal)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <p className="mt-2 text-[12px] leading-relaxed text-neutral-500">{d.costNote}</p>
+              <p className="mt-2 rounded bg-[var(--c-accent)]/10 px-3 py-2 text-[12px] font-semibold text-[var(--c-primary-dark)]">
+                補助金：{d.subsidy}
+              </p>
+            </div>
+
+            {/* 工期 */}
+            <div className="mt-8">
+              <h2 className="text-lg font-bold text-[var(--c-primary-dark)]">工事の流れと工期（全{work.term}）</h2>
+              <ol className="mt-3 space-y-0">
+                {d.schedule.map((s, i) => (
+                  <li key={s.day} className="relative flex gap-4 pb-5 last:pb-0">
+                    {i < d.schedule.length - 1 && <span className="absolute left-[11px] top-6 h-full w-px bg-[var(--c-line)]" />}
+                    <span className="relative z-10 mt-1 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[var(--c-primary)] text-[10px] font-bold text-white">{i + 1}</span>
+                    <div>
+                      <p className="text-[13px] font-bold text-[var(--c-primary-dark)]">{s.day}</p>
+                      <p className="mt-0.5 text-[13px] text-neutral-600">{s.body}</p>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+              <p className="mt-2 text-[12px] leading-relaxed text-neutral-500">{d.scheduleNote}</p>
+            </div>
+
+            {/* お客様の声 */}
+            <div className="mt-8 rounded-lg border border-[var(--c-line)] bg-white p-5">
+              <h2 className="text-lg font-bold text-[var(--c-primary-dark)]">お客様の声</h2>
+              <div className="mt-3 flex items-start gap-4">
+                <Photo tone="#C9BFAE" label="お客様" ratio="aspect-square" className="w-20 shrink-0" />
+                <div>
+                  <p className="text-[13px] text-[var(--c-accent)]">{"★".repeat(d.voice.rating)}</p>
+                  <p className="mt-1 text-[15px] font-bold text-[var(--c-primary-dark)]">{d.voice.title}</p>
+                  <p className="mt-2 text-[13px] leading-relaxed text-neutral-700">{d.voice.body}</p>
+                  <p className="mt-2 text-[12px] text-neutral-500">— {d.voice.who}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* サイド：この事例についての問い合わせ（電話＋フォーム） */}
+          <aside className="lg:sticky lg:top-32 lg:h-fit">
+            <WhyBadge anchor="tel" show={showIntent} onOpen={openIntent}
+              text="事例詳細には、その事例を見た状態のまま送れる問い合わせ枠を置きます。電話とフォームを並べるのはここでも同じです。" />
+            <div className="rounded-lg border-2 border-[var(--c-primary)] bg-white p-5">
+              <p className="text-[13px] font-bold text-[var(--c-primary-dark)]">この事例と同じような工事をご希望ですか？</p>
+              <p className="mt-2 text-[12px] leading-relaxed text-neutral-600">
+                この事例のページからそのままご相談いただけます。「{work.title}」を見た、とお伝えください。
+                同じ内容でのおおよその金額を、その場でお答えできます。
+              </p>
+              <div className="mt-4 rounded-lg bg-[var(--c-tint)] p-4">
+                <TelBlock compact />
+              </div>
+              <Btn onClick={() => goTo("contact", null, work)} className="mt-3 w-full">
+                この事例について相談する
+              </Btn>
+              <p className="mt-2 text-center text-[11px] text-neutral-500">相談・現地調査・お見積りは無料です</p>
+              <div className="mt-4 border-t border-[var(--c-line)] pt-4">
+                <AreaBlock compact />
+              </div>
+            </div>
+          </aside>
+        </div>
+
+        {related.length > 0 && (
+          <div className="mt-14">
+            <Heading en="RELATED" ja="条件の近い施工事例" />
+            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+              {related.map((w) => <WorkCard key={w.id} work={w} goTo={goTo} />)}
+            </div>
+          </div>
+        )}
+      </Section>
+      <ContactCta goTo={goTo} showIntent={showIntent} openIntent={openIntent} />
+    </div>
+  );
+}
+
+/* ================= 4. リフォームのご案内 ================= */
+function ReformPage({ goTo, showIntent, openIntent }) {
+  const [open, setOpen] = useState(SITE.reformMenus[0].key);
+  return (
+    <div>
+      <PageHead en="REFORM" ja="リフォームのご案内" lead="部位ごとの費用の目安と工期です。金額は同規模の実績からの範囲で、現地調査のうえで確定いたします。" />
+      <Section>
+        <WhyBadge anchor="cost" show={showIntent} onOpen={openIntent}
+          text="部位ページにも価格帯と工期を出します。ここで予算が合わない方に離れていただくことが、結果として問い合わせの質を上げます。" />
+        <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+          {SITE.reformMenus.map((m) => (
+            <div key={m.key} className="flex flex-col overflow-hidden rounded-lg border border-[var(--c-line)] bg-white">
+              <Photo tone={m.tone} label={m.name} sub="施工写真" />
+              <div className="flex flex-1 flex-col p-5">
+                <h3 className="text-[17px] font-bold text-[var(--c-primary-dark)]">{m.name}</h3>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <div className="rounded bg-[var(--c-tint)] p-2.5">
+                    <p className="text-[10px] text-neutral-500">費用の目安</p>
+                    <p className="mt-0.5 text-[14px] font-bold text-[var(--c-primary-dark)]">{m.price}</p>
+                  </div>
+                  <div className="rounded bg-[var(--c-tint)] p-2.5">
+                    <p className="text-[10px] text-neutral-500">工期の目安</p>
+                    <p className="mt-0.5 text-[14px] font-bold text-[var(--c-primary-dark)]">{m.term}</p>
+                  </div>
+                </div>
+                <p className="mt-3 text-[13px] leading-relaxed text-neutral-600">{m.body}</p>
+                <button onClick={() => setOpen(open === m.key ? null : m.key)}
+                  className="mt-3 text-left text-[12px] font-bold text-[var(--c-accent)]">
+                  {open === m.key ? "－ 費用が変わるポイントを閉じる" : "＋ 費用が変わるポイントを見る"}
+                </button>
+                {open === m.key && (
+                  <ul className="mt-2 space-y-1.5 rounded bg-[var(--c-tint)] p-3">
+                    {m.points.map((p) => (
+                      <li key={p} className="flex gap-2 text-[12px] leading-relaxed text-neutral-700">
+                        <span className="text-[var(--c-accent)]">●</span>{p}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <Btn kind="ghost" onClick={() => goTo("works")} className="mt-auto pt-3 !justify-start !border-0 !px-0 !py-0 !text-[12px] !text-[var(--c-primary)] hover:!bg-transparent">
+                  {m.name}の施工事例を見る →
+                </Btn>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-12 rounded-lg border border-[var(--c-line)] bg-[var(--c-tint)] p-6">
+          <h3 className="text-[16px] font-bold text-[var(--c-primary-dark)]">ご相談から工事完了までの流れ</h3>
+          <div className="mt-4 grid gap-4 sm:grid-cols-5">
+            {[
+              { t: "1. ご相談", b: "電話・フォームで。現地の写真があるとより具体的にお答えできます" },
+              { t: "2. 現地調査", b: "無料。1〜2時間ほど。床下や小屋裏も確認します" },
+              { t: "3. お見積り", b: "3〜7日で提出。材料・数量・単価まで記載します" },
+              { t: "4. ご契約・着工", b: "近隣へのご挨拶は当社で行います" },
+              { t: "5. お引き渡し", b: "6ヶ月・1年・2年・5年・10年に点検にうかがいます" },
+            ].map((s) => (
+              <div key={s.t} className="rounded-lg bg-white p-4">
+                <p className="text-[13px] font-bold text-[var(--c-primary-dark)]">{s.t}</p>
+                <p className="mt-1.5 text-[12px] leading-relaxed text-neutral-600">{s.b}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </Section>
+      <ContactCta goTo={goTo} showIntent={showIntent} openIntent={openIntent} />
+    </div>
+  );
+}
+
+/* ================= 5. 会社案内 ================= */
+function CompanyPage({ goTo, showIntent, openIntent }) {
+  const c = SITE.company;
+  return (
+    <div>
+      <PageHead en="COMPANY" ja="会社案内" lead="1984年の創業から、この地域で家をつくり、直しています。" />
+
+      <Section>
+        <div className="grid gap-8 lg:grid-cols-[1fr_1.6fr]">
+          <div>
+            <Photo tone="#7E8C79" label="代表写真" sub={SITE.greeting.name} ratio="aspect-[3/4]" />
+          </div>
+          <div>
+            <Heading en="MESSAGE" ja="代表挨拶" />
+            {SITE.greeting.body.map((p, i) => (
+              <p key={i} className="mt-4 text-[14px] leading-[1.9] text-neutral-700 first:mt-0">{p}</p>
+            ))}
+            <div className="mt-6 border-t border-[var(--c-line)] pt-4">
+              <p className="text-[12px] text-neutral-500">{SITE.greeting.role}</p>
+              <p className="mt-0.5 text-[18px] font-bold text-[var(--c-primary-dark)]">{SITE.greeting.name}</p>
+            </div>
+          </div>
+        </div>
+      </Section>
+
+      <Section tint>
+        <Heading en="LICENSE" ja="有資格者" lead="工事の内容によって、担当する有資格者が変わります。設計・施工管理・調査のいずれも社内で対応できる体制です。" />
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {SITE.qualifications.map((q) => (
+            <div key={q.name} className="rounded-lg border border-[var(--c-line)] bg-white p-4">
+              <p className="text-[12px] leading-snug text-neutral-600">{q.name}</p>
+              <p className="mt-2 text-2xl font-bold text-[var(--c-primary-dark)]">{q.count}<span className="ml-1 text-xs font-medium text-neutral-500">名</span></p>
+            </div>
+          ))}
+        </div>
+      </Section>
+
+      <Section>
+        <div className="grid gap-10 lg:grid-cols-2">
+          <div>
+            <Heading en="HISTORY" ja="沿革" />
+            <ol>
+              {SITE.history.map((h, i) => (
+                <li key={h.year} className="relative flex gap-5 pb-6 last:pb-0">
+                  {i < SITE.history.length - 1 && <span className="absolute left-[27px] top-7 h-full w-px bg-[var(--c-line)]" />}
+                  <span className="relative z-10 shrink-0 text-[15px] font-bold text-[var(--c-accent)]">{h.year}</span>
+                  <span className="relative z-10 mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full bg-[var(--c-primary)] ring-4 ring-white" />
+                  <p className="text-[13px] leading-relaxed text-neutral-700">{h.body}</p>
+                </li>
+              ))}
+            </ol>
+          </div>
+
+          <div>
+            <Heading en="OUTLINE" ja="会社概要" />
+            <dl className="overflow-hidden rounded-lg border border-[var(--c-line)]">
+              {[
+                ["会社名", c.name],
+                ["所在地", c.address],
+                ["代表者", SITE.greeting.name],
+                ["設立", c.established],
+                ["資本金", c.capital],
+                ["従業員数", c.staff],
+                ["建設業許可", c.license],
+                ["事業内容", "木造住宅の新築・リフォーム・増改築・耐震補強・不動産仲介"],
+              ].map(([k, v], i) => (
+                <div key={k} className={`flex gap-4 px-4 py-3 text-[13px] ${i % 2 ? "bg-[var(--c-tint)]/60" : "bg-white"}`}>
+                  <dt className="w-24 shrink-0 font-bold text-[var(--c-primary-dark)]">{k}</dt>
+                  <dd className="text-neutral-700">{v}</dd>
+                </div>
+              ))}
+            </dl>
+
+            <div className="mt-6">
+              <WhyBadge anchor="area" show={showIntent} onOpen={openIntent}
+                text="会社案内にも対応エリアを再掲します。会社案内は「本当に地元の会社か」を確かめに来られるページです。" />
+              <AreaBlock />
+            </div>
+          </div>
+        </div>
+      </Section>
+
+      <ContactCta goTo={goTo} showIntent={showIntent} openIntent={openIntent} />
+    </div>
+  );
+}
+
+/* ================= 6. お問い合わせ ================= */
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[A-Za-z]{2,}$/;
+const TEL_RE = /^0\d{9,10}$/;              // ハイフンを除いた10〜11桁
+const ZIP_RE = /^\d{7}$/;                  // ハイフンを除いた7桁
+const KANA_RE = /^[ぁ-んー\s　]+$/;
+
+const FIELDS = [
+  { key: "type", label: "ご相談の種類", type: "radio", options: SITE.contact.types, required: true },
+  { key: "name", label: "お名前", type: "text", required: true, ph: "宮下 太郎", col: 1 },
+  { key: "kana", label: "ふりがな", type: "text", required: true, ph: "みやした たろう", col: 1, note: "ひらがなでご入力ください" },
+  { key: "area", label: "工事場所（市区町村）", type: "select", options: AREA_OPTIONS, required: true, col: 1 },
+  { key: "zip", label: "郵便番号", type: "text", required: false, ph: "000-0000", col: 1, note: "任意。ハイフンあり・なしどちらでも" },
+  { key: "tel", label: "電話番号", type: "tel", required: true, ph: "090-0000-0000", col: 1 },
+  { key: "email", label: "メールアドレス", type: "email", required: true, ph: "you@example.com", col: 1 },
+  { key: "route", label: "ご希望の連絡方法", type: "radio", options: SITE.contact.routes, required: true },
+  { key: "budget", label: "ご予算", type: "select", options: SITE.contact.budgets, required: false, col: 1, note: "任意。未定のままで構いません" },
+  { key: "timing", label: "ご希望の時期", type: "select", options: SITE.contact.timings, required: false, col: 1, note: "任意" },
+  { key: "body", label: "ご相談の内容", type: "textarea", required: true, ph: "築28年の戸建てです。冬に浴室が寒いのが気になっており、可能であればキッチンもあわせて相談したいです。", note: "10文字以上。現在の状況やお困りごとをそのままお書きください" },
+  { key: "agree", label: "個人情報の取り扱いに同意する", type: "checkbox", required: true },
+];
+
+function validate(v) {
+  const e = {};
+  FIELDS.forEach((f) => {
+    const raw = v[f.key];
+    const val = typeof raw === "string" ? raw.trim() : raw;
+    if (f.required && !val) {
+      e[f.key] =
+        f.type === "checkbox" ? "確認のうえチェックしてください"
+        : f.type === "radio" || f.type === "select" ? "ご選択ください"
+        : "ご入力ください";
+      return;
+    }
+    if (!val) return;
+    if (f.key === "kana" && !KANA_RE.test(val)) e.kana = "ひらがなでご入力ください（例：みやした たろう）";
+    if (f.key === "tel" && !TEL_RE.test(String(val).replace(/[-\s－ー]/g, ""))) e.tel = "電話番号の形式が正しくありません（例：090-0000-0000）";
+    if (f.key === "email" && !EMAIL_RE.test(val)) e.email = "メールアドレスの形式が正しくありません（例：you@example.com）";
+    if (f.key === "zip" && !ZIP_RE.test(String(val).replace(/[-\s－ー]/g, ""))) e.zip = "郵便番号は7桁でご入力ください（例：000-0000）";
+    if (f.key === "body" && String(val).length < 10) e.body = "10文字以上でご入力ください（現状のご不便だけでも構いません）";
+  });
+  return e;
+}
+
+function ContactPage({ goTo, showIntent, openIntent, prefill }) {
+  const [v, setV] = useState({
+    type: "", name: "", kana: "", area: "", zip: "", tel: "", email: "",
+    route: "", budget: "", timing: "", body: prefill ? `施工事例「${prefill.title}」を見て相談したいです。` : "", agree: false,
+  });
+  const [errors, setErrors] = useState({});
+  const [touched, setTouched] = useState({});
+  const [sent, setSent] = useState(false);
+  const topRef = useRef(null);
+
+  const set = (k, val) => {
+    setV((p) => {
+      const next = Object.assign({}, p, { [k]: val });
+      if (touched[k] || errors[k]) setErrors(validate(next));
+      return next;
+    });
+  };
+  const blur = (k) => {
+    setTouched((p) => Object.assign({}, p, { [k]: true }));
+    setErrors(validate(v));
+  };
+
+  const outOfArea = v.area === "上記以外の地域";
+  const errorList = Object.keys(errors);
+
+  const submit = (ev) => {
+    ev.preventDefault();
+    const e = validate(v);
+    setErrors(e);
+    const all = {};
+    FIELDS.forEach((f) => (all[f.key] = true));
+    setTouched(all);
+    if (Object.keys(e).length > 0) {
+      const first = document.querySelector(`[data-field="${Object.keys(e)[0]}"]`);
+      if (first) first.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+    setSent(true);
+    if (topRef.current) topRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  if (sent) {
+    return (
+      <div ref={topRef}>
+        <PageHead en="CONTACT" ja="送信が完了しました" />
+        <Section>
+          <div className="mx-auto max-w-2xl rounded-lg border border-[var(--c-line)] bg-white p-8 text-center">
+            <div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-[var(--c-primary)] text-2xl text-white">✓</div>
+            <h2 className="mt-4 text-xl font-bold text-[var(--c-primary-dark)]">お問い合わせありがとうございます</h2>
+            <p className="mt-3 text-[13px] leading-relaxed text-neutral-600">
+              {v.name} 様<br />
+              内容を確認のうえ、<b>1営業日以内</b>に{v.route === "電話" ? "お電話" : v.route === "メール" ? "メール" : "ご希望の方法"}でご連絡いたします。<br />
+              お急ぎの場合は、お電話でも承っております。
+            </p>
+            <div className="mx-auto mt-5 max-w-sm rounded-lg bg-[var(--c-tint)] p-4">
+              <TelBlock compact />
+            </div>
+            <p className="mt-4 text-[11px] text-neutral-500">
+              ※ これはデモです。送信内容はどこにも保存・送信されません（実案件では管理画面への保存と自動返信メールを実装します）。
+            </p>
+            <div className="mt-6 flex justify-center gap-3">
+              <Btn kind="ghost" onClick={() => goTo("home")}>ホームに戻る</Btn>
+              <Btn kind="dark" onClick={() => { setSent(false); setV(Object.assign({}, v, { agree: false })); }}>入力画面に戻る</Btn>
+            </div>
+          </div>
+        </Section>
+      </div>
+    );
+  }
+
+  return (
+    <div ref={topRef}>
+      <PageHead en="CONTACT" ja="お問い合わせ" lead="ご相談・現地調査・お見積りは無料です。しつこい営業はいたしません。" />
+
+      <Section>
+        <div className="grid gap-8 lg:grid-cols-[1.5fr_1fr]">
+          <div>
+            <WhyBadge anchor="tel" show={showIntent} onOpen={openIntent}
+              text="フォームページでも、電話番号を同じ大きさで先に置きます。フォームを開いてから電話に切り替える人がいるためです。" />
+
+            <div className="mb-6 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-lg border border-[var(--c-line)] bg-[var(--c-tint)] p-4">
+                <TelBlock compact />
+              </div>
+              <div className="rounded-lg border border-[var(--c-line)] bg-[var(--c-tint)] p-4">
+                <p className="text-[11px] font-semibold tracking-wider text-neutral-500">フォームでのご相談</p>
+                <p className="mt-1 text-[15px] font-bold text-[var(--c-primary-dark)]">24時間受付・1営業日以内に返信</p>
+                <p className="mt-1.5 text-[11px] text-neutral-500">お名前・連絡先・ご相談内容だけでも構いません</p>
+              </div>
+            </div>
+
+            {errorList.length > 0 && Object.keys(touched).length > 0 && (
+              <div className="mb-5 rounded-lg border border-rose-300 bg-rose-50 p-4">
+                <p className="text-[13px] font-bold text-rose-700">未入力・形式に誤りのある項目が {errorList.length} 件あります</p>
+                <ul className="mt-2 space-y-1">
+                  {errorList.map((k) => {
+                    const f = FIELDS.find((x) => x.key === k);
+                    return (
+                      <li key={k}>
+                        <button
+                          onClick={() => {
+                            const el = document.querySelector(`[data-field="${k}"]`);
+                            if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+                          }}
+                          className="text-[12px] text-rose-700 underline underline-offset-2"
+                        >
+                          {f ? f.label : k}：{errors[k]}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
+
+            <form onSubmit={submit} noValidate className="space-y-5 rounded-lg border border-[var(--c-line)] bg-white p-5 sm:p-6">
+              <Field f={FIELDS[0]} v={v} set={set} blur={blur} errors={errors} touched={touched} />
+
+              <div className="grid gap-5 sm:grid-cols-2">
+                {["name", "kana"].map((k) => (
+                  <Field key={k} f={FIELDS.find((f) => f.key === k)} v={v} set={set} blur={blur} errors={errors} touched={touched} />
+                ))}
+              </div>
+
+              <div>
+                <WhyBadge anchor="area" show={showIntent} onOpen={openIntent}
+                  text="工事場所は自由入力ではなく選択式にしています。エリア外を選ぶとその場で表示が出ます（送信は止めません）。" />
+                <div className="grid gap-5 sm:grid-cols-2">
+                  <Field f={FIELDS.find((f) => f.key === "area")} v={v} set={set} blur={blur} errors={errors} touched={touched} />
+                  <Field f={FIELDS.find((f) => f.key === "zip")} v={v} set={set} blur={blur} errors={errors} touched={touched} />
+                </div>
+                {outOfArea && (
+                  <div className="mt-3 rounded-lg border border-[var(--c-accent)] bg-[var(--c-accent)]/10 p-3.5">
+                    <p className="text-[13px] font-bold text-[var(--c-primary-dark)]">対応エリア外の可能性があります</p>
+                    <p className="mt-1.5 text-[12px] leading-relaxed text-neutral-700">
+                      通常の対応エリアは <b>{SITE.areas.primary.join("・")}</b>（近隣：{SITE.areas.secondary.join("・")}）です。
+                      {SITE.areas.note} このままご送信いただいて構いません。対応が難しい場合は、近隣の信頼できる工務店をご紹介いたします。
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <div className="grid gap-5 sm:grid-cols-2">
+                {["tel", "email"].map((k) => (
+                  <Field key={k} f={FIELDS.find((f) => f.key === k)} v={v} set={set} blur={blur} errors={errors} touched={touched} />
+                ))}
+              </div>
+
+              <Field f={FIELDS.find((f) => f.key === "route")} v={v} set={set} blur={blur} errors={errors} touched={touched} />
+
+              <div className="grid gap-5 sm:grid-cols-2">
+                {["budget", "timing"].map((k) => (
+                  <Field key={k} f={FIELDS.find((f) => f.key === k)} v={v} set={set} blur={blur} errors={errors} touched={touched} />
+                ))}
+              </div>
+
+              <Field f={FIELDS.find((f) => f.key === "body")} v={v} set={set} blur={blur} errors={errors} touched={touched} />
+
+              <div className="rounded-lg bg-[var(--c-tint)] p-4">
+                <p className="text-[11px] leading-relaxed text-neutral-600">
+                  ご記入いただいた情報は、ご相談への回答とお見積りの作成にのみ使用します。
+                  ご本人の同意なく第三者へ提供することはありません。
+                </p>
+                <div className="mt-3">
+                  <Field f={FIELDS.find((f) => f.key === "agree")} v={v} set={set} blur={blur} errors={errors} touched={touched} />
+                </div>
+              </div>
+
+              <Btn onClick={undefined} className="w-full !py-4 text-[15px]" type="submit">
+                この内容で送信する
+              </Btn>
+              <p className="text-center text-[11px] text-neutral-500">
+                デモのため送信内容は保存されません／入力チェックのみ動作します
+              </p>
+            </form>
+          </div>
+
+          <aside className="space-y-4 lg:sticky lg:top-32 lg:h-fit">
+            <AreaBlock />
+            <div className="rounded-lg border border-[var(--c-line)] bg-white p-5">
+              <p className="text-[13px] font-bold text-[var(--c-primary-dark)]">お問い合わせの前によくいただく質問</p>
+              <div className="mt-3 space-y-3">
+                {[
+                  { q: "見積りだけでも大丈夫ですか", a: "はい。他社さまとの比較のためのお見積りも承っております。無料です。" },
+                  { q: "現地調査は何をしますか", a: "1〜2時間ほど、床下・小屋裏を含めて確認します。図面がなくても対応できます。" },
+                  { q: "しつこい営業はありますか", a: "こちらからの連絡は、お見積り提出後に一度だけです。" },
+                ].map((f) => (
+                  <div key={f.q}>
+                    <p className="text-[12px] font-bold text-[var(--c-primary-dark)]">Q. {f.q}</p>
+                    <p className="mt-0.5 text-[12px] leading-relaxed text-neutral-600">A. {f.a}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="rounded-lg bg-[var(--c-primary)] p-5 text-white">
+              <p className="text-[13px] font-bold">お急ぎの方はお電話が確実です</p>
+              <a href={`tel:${SITE.company.tel.replace(/-/g, "")}`} className="mt-2 block text-2xl font-bold tracking-tight">☎ {SITE.company.tel}</a>
+              <p className="mt-1 text-[11px] opacity-80">{SITE.company.telLabel}</p>
+            </div>
+          </aside>
+        </div>
+      </Section>
+    </div>
+  );
+}
+
+function Field({ f, v, set, blur, errors, touched }) {
+  const err = touched[f.key] && errors[f.key];
+  const base = `w-full rounded-md border bg-white px-3.5 py-2.5 text-[14px] outline-none transition focus:ring-2 focus:ring-[var(--c-primary)]/25 ${
+    err ? "border-rose-400 bg-rose-50/40" : "border-[var(--c-line)] focus:border-[var(--c-primary)]"
+  }`;
+
+  return (
+    <div data-field={f.key}>
+      {f.type !== "checkbox" && (
+        <label className="mb-1.5 flex items-center gap-2 text-[13px] font-bold text-[var(--c-primary-dark)]">
+          {f.label}
+          <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${f.required ? "bg-[var(--c-accent)] text-white" : "bg-neutral-100 text-neutral-500"}`}>
+            {f.required ? "必須" : "任意"}
+          </span>
+        </label>
+      )}
+
+      {f.type === "text" || f.type === "tel" || f.type === "email" ? (
+        <input
+          type={f.type === "text" ? "text" : f.type}
+          inputMode={f.type === "tel" ? "tel" : f.type === "email" ? "email" : undefined}
+          value={v[f.key]}
+          placeholder={f.ph}
+          onChange={(e) => set(f.key, e.target.value)}
+          onBlur={() => blur(f.key)}
+          className={base}
+        />
+      ) : null}
+
+      {f.type === "textarea" && (
+        <textarea
+          rows={5}
+          value={v[f.key]}
+          placeholder={f.ph}
+          onChange={(e) => set(f.key, e.target.value)}
+          onBlur={() => blur(f.key)}
+          className={base}
+        />
+      )}
+
+      {f.type === "select" && (
+        <select value={v[f.key]} onChange={(e) => set(f.key, e.target.value)} onBlur={() => blur(f.key)} className={base}>
+          <option value="">選択してください</option>
+          {f.options.map((o) => <option key={o} value={o}>{o}</option>)}
+        </select>
+      )}
+
+      {f.type === "radio" && (
+        <div className="flex flex-wrap gap-2">
+          {f.options.map((o) => (
+            <button
+              key={o}
+              type="button"
+              onClick={() => { set(f.key, o); blur(f.key); }}
+              className={`rounded-md border px-4 py-2.5 text-[13px] font-semibold transition ${
+                v[f.key] === o
+                  ? "border-[var(--c-primary)] bg-[var(--c-primary)] text-white"
+                  : err
+                  ? "border-rose-400 bg-rose-50/40 text-neutral-700"
+                  : "border-[var(--c-line)] bg-white text-neutral-700 hover:border-[var(--c-primary)]"
+              }`}
+            >
+              {o}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {f.type === "checkbox" && (
+        <label className="flex cursor-pointer items-start gap-2.5">
+          <input
+            type="checkbox"
+            checked={!!v[f.key]}
+            onChange={(e) => { set(f.key, e.target.checked); blur(f.key); }}
+            className="mt-0.5 h-5 w-5 shrink-0 accent-[var(--c-primary)]"
+          />
+          <span className="text-[13px] font-bold text-[var(--c-primary-dark)]">
+            {f.label}
+            <span className="ml-2 rounded bg-[var(--c-accent)] px-1.5 py-0.5 text-[10px] text-white">必須</span>
+          </span>
+        </label>
+      )}
+
+      {f.note && !err && <p className="mt-1 text-[11px] text-neutral-500">{f.note}</p>}
+      {err && <p className="mt-1 flex items-center gap-1 text-[12px] font-semibold text-rose-600">⚠ {errors[f.key]}</p>}
+    </div>
+  );
+}
+
+/* ---------- 全ページ共通のCTA ---------- */
+function ContactCta({ goTo, showIntent, openIntent }) {
+  return (
+    <div className="bg-[var(--c-primary-dark)]">
+      <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 sm:py-16">
+        <div className="text-center text-white">
+          <h2 className="text-xl font-bold sm:text-2xl">まずは「これ、いくらくらい？」からで構いません</h2>
+          <p className="mx-auto mt-3 max-w-2xl text-[13px] leading-relaxed text-white/80">
+            ご相談・現地調査・お見積りはすべて無料です。金額の目安だけ知りたい、という段階でも遠慮なくご連絡ください。
+            お電話であれば、その場でおおよその範囲をお答えできます。
+          </p>
+        </div>
+        <div className="mx-auto mt-7 grid max-w-3xl gap-4 sm:grid-cols-2">
+          <a href={`tel:${SITE.company.tel.replace(/-/g, "")}`} className="rounded-lg bg-white p-5 text-center transition hover:opacity-95">
+            <p className="text-[11px] font-semibold text-neutral-500">お電話でのご相談</p>
+            <p className="mt-1 text-2xl font-bold tracking-tight text-[var(--c-primary-dark)] sm:text-3xl">☎ {SITE.company.tel}</p>
+            <p className="mt-1 text-[11px] text-neutral-500">{SITE.company.telLabel}</p>
+          </a>
+          <button onClick={() => goTo("contact")} className="rounded-lg bg-[var(--c-accent)] p-5 text-center text-white transition hover:opacity-95">
+            <p className="text-[11px] font-semibold text-white/80">フォームでのご相談</p>
+            <p className="mt-1 text-xl font-bold sm:text-2xl">無料相談・見積りを依頼</p>
+            <p className="mt-1 text-[11px] text-white/80">24時間受付／1営業日以内に返信</p>
+          </button>
+        </div>
+        <div className="mx-auto mt-4 max-w-3xl">
+          <WhyBadge anchor="tel" show={showIntent} onOpen={openIntent}
+            text="全ページの末尾に、電話とフォームを同じ大きさで並べています。どちらに寄せても片方の層を落とすためです。" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Footer({ goTo }) {
+  return (
+    <footer className="border-t border-[var(--c-line)] bg-[var(--c-tint)]">
+      <div className="mx-auto grid max-w-6xl gap-8 px-4 py-12 sm:px-6 lg:grid-cols-3">
+        <div>
+          <p className="text-[17px] font-bold text-[var(--c-primary-dark)]">{SITE.company.name}</p>
+          <p className="mt-1 text-[10px] tracking-[0.2em] text-neutral-500">{SITE.company.nameEn}</p>
+          <p className="mt-3 text-[12px] leading-relaxed text-neutral-600">
+            {SITE.company.address}<br />
+            {SITE.company.license}
+          </p>
+          <a href={`tel:${SITE.company.tel.replace(/-/g, "")}`} className="mt-3 block text-xl font-bold text-[var(--c-primary-dark)]">☎ {SITE.company.tel}</a>
+          <p className="text-[11px] text-neutral-500">{SITE.company.telLabel}</p>
+        </div>
+        <div>
+          <p className="text-[12px] font-bold text-[var(--c-primary-dark)]">対応エリア</p>
+          <p className="mt-2 text-[13px] leading-relaxed text-neutral-700">{SITE.areas.primary.join("・")}</p>
+          <p className="mt-1 text-[12px] text-neutral-600">近隣：{SITE.areas.secondary.join("・")}</p>
+          <p className="mt-1.5 text-[11px] leading-relaxed text-neutral-500">{SITE.areas.note}</p>
+        </div>
+        <div>
+          <p className="text-[12px] font-bold text-[var(--c-primary-dark)]">サイトマップ</p>
+          <div className="mt-2 grid grid-cols-2 gap-y-1.5">
+            {[
+              ["home", "トップ"], ["works", "施工事例一覧"], ["work-detail", "施工事例の詳細"],
+              ["reform", "リフォームのご案内"], ["company", "会社案内"], ["contact", "お問い合わせ"],
+            ].map(([k, l]) => (
+              <button key={k} onClick={() => goTo(k)} className="text-left text-[12px] text-neutral-600 hover:text-[var(--c-accent)]">{l}</button>
+            ))}
+          </div>
+        </div>
+      </div>
+      <div className="border-t border-[var(--c-line)] py-4 text-center text-[11px] text-neutral-500">
+        © {SITE.company.name} — このページは提案用のデモです。社名・実績・写真はすべて架空のものです。
+      </div>
+    </footer>
+  );
+}
+
+/* スマホ用の固定CTA（電話 / フォームを常時表示） */
+function MobileBar({ goTo }) {
+  return (
+    <div className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-2 gap-px border-t border-[var(--c-line)] bg-[var(--c-line)] lg:hidden">
+      <a href={`tel:${SITE.company.tel.replace(/-/g, "")}`} className="flex flex-col items-center justify-center bg-white py-2.5">
+        <span className="text-[15px] font-bold text-[var(--c-primary-dark)]">☎ 電話で相談</span>
+        <span className="text-[10px] text-neutral-500">{SITE.company.telLabel}</span>
+      </a>
+      <button onClick={() => goTo("contact")} className="flex flex-col items-center justify-center bg-[var(--c-accent)] py-2.5 text-white">
+        <span className="text-[15px] font-bold">無料見積り</span>
+        <span className="text-[10px] opacity-85">24時間受付</span>
+      </button>
+    </div>
+  );
+}
+
+/* ================================================================== */
+function App() {
+  const [page, setPage] = useState("home");
+  const [workId, setWorkId] = useState(SITE.workDetail.workId);
+  const [prefill, setPrefill] = useState(null);
+  const [showIntent, setShowIntent] = useState(false);
+  const [focus, setFocus] = useState(null);
+
+  const goTo = (p, id, pf) => {
+    if (p === "work-detail") setWorkId(id || SITE.workDetail.workId);
+    setPrefill(p === "contact" ? pf || null : null);
+    setPage(p);
+    window.scrollTo({ top: 0, behavior: "auto" });
+  };
+
+  const openIntent = (anchor) => {
+    setFocus(anchor);
+    setShowIntent(true);
+  };
+
+  return (
+    <div className="min-h-screen pb-16 lg:pb-0">
+      <ThemeVars />
+      <Header page={page} goTo={goTo} showIntent={showIntent} setShowIntent={setShowIntent} openIntent={openIntent} />
+
+      {page === "home" && <HomePage goTo={goTo} showIntent={showIntent} openIntent={openIntent} />}
+      {page === "works" && <WorksPage goTo={goTo} showIntent={showIntent} openIntent={openIntent} />}
+      {page === "work-detail" && <WorkDetailPage workId={workId} goTo={goTo} showIntent={showIntent} openIntent={openIntent} />}
+      {page === "reform" && <ReformPage goTo={goTo} showIntent={showIntent} openIntent={openIntent} />}
+      {page === "company" && <CompanyPage goTo={goTo} showIntent={showIntent} openIntent={openIntent} />}
+      {page === "contact" && <ContactPage goTo={goTo} showIntent={showIntent} openIntent={openIntent} prefill={prefill} />}
+
+      <Footer goTo={goTo} />
+      <MobileBar goTo={goTo} />
+      <IntentPanel open={showIntent} onClose={() => setShowIntent(false)} focus={focus} setFocus={setFocus} />
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>

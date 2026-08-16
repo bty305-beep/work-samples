@@ -1,0 +1,1335 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>士業サイト リニューアル デモ | トップ・下層ベース・見出しパターン集</title>
+<meta name="description" content="税理士事務所サイトのリニューアル用デモ。トップページ、下層ページのベース、H2〜H5の見出しとリスト等のパーツパターン集。色・文字サイズ・余白は設定オブジェクトで一括管理。">
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body>
+<div id="root"></div>
+<script>Babel.registerPreset("react-classic", { presets: [[Babel.availablePresets["react"], { runtime: "classic" }]] });</script>
+<script type="text/babel" data-presets="react-classic">
+const { useState, useMemo } = React;
+
+/* ==================================================================
+   デザイン設定。事務所のカラーや文字の大きさは、ここだけ変えれば
+   3画面すべてに反映されます。
+   WordPress化する際は、この値をテーマの theme.json / CSS変数に
+   そのまま移します。
+================================================================== */
+const THEME = {
+  color: {
+    primary:     "#16324f",  // 基調色（濃紺）。ヘッダー・見出し・ボタン
+    primaryDark: "#0e2438",  // 基調色の濃い方。ホバー時
+    primarySoft: "#eef2f7",  // 基調色の薄い方。背景の帯・表の見出し行
+    accent:      "#a3813c",  // 差し色（金茶）。見出しの罫・強調
+    accentSoft:  "#f7f2e7",  // 差し色の薄い方。注意書きの背景
+    ink:         "#1f2a33",  // 本文の文字色
+    inkMuted:    "#5c6b7a",  // 補助テキスト
+    line:        "#dde3ea",  // 罫線
+    bg:          "#f6f8fa",  // ページ背景
+    surface:     "#ffffff",  // カード・記事の背景
+    warnBorder:  "#c2603f",  // 注意喚起の色
+    warnSoft:    "#fbf1ed",
+  },
+  font: {
+    heading: '"Yu Mincho", "YuMincho", "Hiragino Mincho ProN", "Noto Serif JP", serif',
+    body:    '"Hiragino Kaku Gothic ProN", "Yu Gothic", "Noto Sans JP", Meiryo, sans-serif',
+    // 見出しの大きさ。clamp(最小, 可変, 最大) で画面幅に追従します。
+    h1: "clamp(1.75rem, 1.2rem + 2.2vw, 2.75rem)",
+    h2: "clamp(1.3rem,  1.1rem + 0.9vw, 1.65rem)",
+    h3: "1.2rem",
+    h4: "1.05rem",
+    h5: "0.95rem",
+    base: "1rem",
+    small: "0.875rem",
+    lineHeight: "1.9",       // 本文の行間。士業サイトは広めが読みやすい
+    lineHeightHeading: "1.5",
+  },
+  space: {
+    section: "clamp(3rem, 2rem + 4vw, 5.5rem)", // セクション間の余白
+    block: "1.75rem",                            // 見出し・段落の間
+    container: "1080px",                         // 本文の最大幅
+    containerNarrow: "760px",                    // 記事本文の最大幅
+    radius: "6px",                               // 角丸。0にすると硬い印象になります
+  },
+};
+
+/* 事務所情報。ここも一箇所にまとめてあります。 */
+const OFFICE = {
+  name: "山城税理士事務所",
+  nameEn: "YAMASHIRO TAX OFFICE",
+  catch: "相続と事業承継の相談を、この地域で50年。",
+  lead: "初回のご相談は無料です。申告の期限が迫っている方、何から手をつければよいか分からない方も、まずはお電話ください。",
+  tel: "000-000-0000",
+  telNote: "平日 9:00〜18:00（土日祝を除く）",
+  address: "〇〇県〇〇市〇〇町1-2-3 〇〇ビル4F",
+  established: "1975年",
+  staff: "18名（税理士5名・社会保険労務士1名）",
+  clients: "420社",
+};
+
+/* ==================================================================
+   設定オブジェクトからCSSを組み立てます。
+   以降のコードは THEME を直接参照せず、CSS変数だけを見ます。
+================================================================== */
+function buildCss(t) {
+  return `
+:root{
+  --c-primary:${t.color.primary}; --c-primary-dark:${t.color.primaryDark};
+  --c-primary-soft:${t.color.primarySoft}; --c-accent:${t.color.accent};
+  --c-accent-soft:${t.color.accentSoft}; --c-ink:${t.color.ink};
+  --c-muted:${t.color.inkMuted}; --c-line:${t.color.line};
+  --c-bg:${t.color.bg}; --c-surface:${t.color.surface};
+  --c-warn:${t.color.warnBorder}; --c-warn-soft:${t.color.warnSoft};
+  --f-heading:${t.font.heading}; --f-body:${t.font.body};
+  --fs-h1:${t.font.h1}; --fs-h2:${t.font.h2}; --fs-h3:${t.font.h3};
+  --fs-h4:${t.font.h4}; --fs-h5:${t.font.h5};
+  --fs-base:${t.font.base}; --fs-small:${t.font.small};
+  --lh:${t.font.lineHeight}; --lh-head:${t.font.lineHeightHeading};
+  --sp-section:${t.space.section}; --sp-block:${t.space.block};
+  --w-container:${t.space.container}; --w-narrow:${t.space.containerNarrow};
+  --radius:${t.space.radius};
+}
+body{ font-family:var(--f-body); color:var(--c-ink); background:var(--c-bg);
+      font-size:var(--fs-base); line-height:var(--lh); -webkit-font-smoothing:antialiased; }
+.ss-container{ max-width:var(--w-container); margin-inline:auto; padding-inline:20px; }
+.ss-narrow{ max-width:var(--w-narrow); }
+.ss-section{ padding-block:var(--sp-section); }
+
+/* --- セクション見出し（トップページ用） --- */
+.ss-sec-head{ text-align:center; margin-bottom:2.5rem; }
+.ss-sec-head .en{ display:block; font-family:var(--f-heading); letter-spacing:.22em;
+  font-size:var(--fs-small); color:var(--c-accent); margin-bottom:.5rem; }
+.ss-sec-head .ja{ font-family:var(--f-heading); font-size:var(--fs-h2);
+  line-height:var(--lh-head); font-weight:600; color:var(--c-primary); }
+.ss-sec-head .ja::after{ content:""; display:block; width:44px; height:2px;
+  background:var(--c-accent); margin:.9rem auto 0; }
+
+/* --- ボタン --- */
+.ss-btn{ display:inline-flex; align-items:center; justify-content:center; gap:.5rem;
+  background:var(--c-primary); color:#fff; padding:.9rem 1.9rem; border-radius:var(--radius);
+  font-weight:600; letter-spacing:.04em; transition:background .15s; border:1px solid var(--c-primary); }
+.ss-btn:hover{ background:var(--c-primary-dark); }
+.ss-btn-accent{ background:var(--c-accent); border-color:var(--c-accent); }
+.ss-btn-accent:hover{ background:#8d6f31; }
+.ss-btn-outline{ display:inline-flex; align-items:center; justify-content:center; gap:.5rem;
+  background:transparent; color:var(--c-primary); border:1px solid var(--c-primary);
+  padding:.9rem 1.9rem; border-radius:var(--radius); font-weight:600; transition:background .15s; }
+.ss-btn-outline:hover{ background:var(--c-primary-soft); }
+
+/* --- カード --- */
+.ss-card{ background:var(--c-surface); border:1px solid var(--c-line);
+  border-radius:var(--radius); }
+
+/* ==================================================================
+   記事本文のスタイル（.entry）
+   WordPressでは「投稿本文」を包む要素にこのクラスを付けます。
+   投稿画面で見出しやリストを選ぶだけで、以下の見た目になります。
+================================================================== */
+.entry{ font-size:var(--fs-base); line-height:var(--lh); }
+.entry > * + *{ margin-top:var(--sp-block); }
+
+.entry h2{ font-family:var(--f-heading); font-size:var(--fs-h2); font-weight:600;
+  line-height:var(--lh-head); color:var(--c-primary); background:var(--c-primary-soft);
+  border-left:5px solid var(--c-primary); border-radius:0 var(--radius) var(--radius) 0;
+  padding:.85rem 1.1rem; margin-top:3.25rem; }
+.entry > section:first-child > h2:first-child{ margin-top:1.5rem; }
+.entry h3{ font-family:var(--f-heading); font-size:var(--fs-h3); font-weight:600;
+  line-height:var(--lh-head); color:var(--c-primary); border-bottom:1px solid var(--c-line);
+  padding-bottom:.6rem; margin-top:2.5rem; position:relative; }
+.entry h3::after{ content:""; position:absolute; left:0; bottom:-1px; width:70px; height:2px;
+  background:var(--c-accent); }
+.entry h4{ font-size:var(--fs-h4); font-weight:700; line-height:var(--lh-head);
+  color:var(--c-ink); padding-left:.85rem; border-left:3px solid var(--c-accent);
+  margin-top:2rem; }
+.entry h5{ font-size:var(--fs-h5); font-weight:700; line-height:var(--lh-head);
+  color:var(--c-muted); margin-top:1.5rem; letter-spacing:.04em; }
+.entry h5::before{ content:"■"; color:var(--c-accent); margin-right:.4rem; font-size:.8em; }
+
+.entry p{ margin-top:var(--sp-block); }
+.entry a{ color:var(--c-primary); text-decoration:underline; text-underline-offset:3px; }
+.entry a:hover{ color:var(--c-accent); }
+.entry strong{ font-weight:700; background:linear-gradient(transparent 62%, var(--c-accent-soft) 62%); }
+
+/* 順序なしリスト */
+.entry ul{ list-style:none; padding-left:0; }
+.entry ul li{ position:relative; padding-left:1.5rem; margin-top:.7rem; }
+.entry ul li::before{ content:""; position:absolute; left:.35rem; top:.72em;
+  width:7px; height:7px; background:var(--c-accent); border-radius:50%; }
+/* 順序つきリスト */
+.entry ol{ list-style:none; padding-left:0; counter-reset:ss-ol; }
+.entry ol li{ position:relative; padding-left:2.2rem; margin-top:.9rem; counter-increment:ss-ol; }
+.entry ol li::before{ content:counter(ss-ol); position:absolute; left:0; top:.15em;
+  width:1.6rem; height:1.6rem; border-radius:50%; background:var(--c-primary); color:#fff;
+  font-size:.8rem; font-weight:700; display:flex; align-items:center; justify-content:center;
+  font-family:var(--f-body); }
+.entry li > ul, .entry li > ol{ margin-top:.5rem; }
+
+/* 表 */
+.ss-table-wrap{ overflow-x:auto; }
+.entry table, table.ss-table{ width:100%; border-collapse:collapse; font-size:var(--fs-small);
+  background:var(--c-surface); border:1px solid var(--c-line); }
+.entry th, table.ss-table th{ background:var(--c-primary-soft); color:var(--c-primary);
+  font-weight:700; text-align:left; padding:.8rem 1rem; border:1px solid var(--c-line);
+  white-space:nowrap; }
+.entry td, table.ss-table td{ padding:.8rem 1rem; border:1px solid var(--c-line);
+  vertical-align:top; }
+.entry tbody tr:nth-child(even) td, table.ss-table tbody tr:nth-child(even) td{ background:#fafbfc; }
+.ss-table-note{ font-size:var(--fs-small); color:var(--c-muted); margin-top:.6rem; }
+
+/* 引用 */
+.entry blockquote, blockquote.ss-quote{ border-left:3px solid var(--c-accent);
+  background:var(--c-surface); padding:1.2rem 1.4rem; color:var(--c-muted);
+  font-size:var(--fs-small); line-height:1.85; }
+.entry blockquote cite, blockquote.ss-quote cite{ display:block; margin-top:.7rem;
+  font-style:normal; font-size:.8rem; color:var(--c-muted); }
+.entry blockquote cite::before, blockquote.ss-quote cite::before{ content:"— "; }
+
+/* 注意書きボックス */
+.ss-note{ border:1px solid var(--c-line); border-left:4px solid var(--c-primary);
+  background:var(--c-primary-soft); border-radius:0 var(--radius) var(--radius) 0;
+  padding:1.1rem 1.3rem; font-size:var(--fs-small); line-height:1.85; }
+.ss-note .ss-note-title{ font-weight:700; color:var(--c-primary); display:flex;
+  align-items:center; gap:.45rem; margin-bottom:.4rem; }
+.ss-note.is-warn{ border-left-color:var(--c-warn); background:var(--c-warn-soft); }
+.ss-note.is-warn .ss-note-title{ color:var(--c-warn); }
+.ss-note.is-point{ border-left-color:var(--c-accent); background:var(--c-accent-soft); }
+.ss-note.is-point .ss-note-title{ color:#8d6f31; }
+.ss-note > * + *{ margin-top:.6rem; }
+.ss-note ul li::before{ top:.65em; }
+
+/* よくある質問 */
+.ss-faq{ border:1px solid var(--c-line); border-radius:var(--radius);
+  background:var(--c-surface); overflow:hidden; }
+.ss-faq + .ss-faq{ margin-top:.75rem; }
+.ss-faq-q{ width:100%; display:flex; gap:.85rem; align-items:flex-start; text-align:left;
+  padding:1.1rem 1.2rem; font-weight:700; color:var(--c-primary); background:transparent;
+  transition:background .15s; }
+.ss-faq-q:hover{ background:var(--c-primary-soft); }
+.ss-faq-mark{ flex:none; width:1.6rem; height:1.6rem; border-radius:50%;
+  display:flex; align-items:center; justify-content:center; font-size:.8rem;
+  font-family:var(--f-heading); font-weight:700; }
+.ss-faq-mark.q{ background:var(--c-primary); color:#fff; }
+.ss-faq-mark.a{ background:var(--c-accent-soft); color:var(--c-accent); border:1px solid var(--c-accent); }
+.ss-faq-a{ display:flex; gap:.85rem; align-items:flex-start; padding:0 1.2rem 1.2rem;
+  font-size:var(--fs-small); line-height:1.9; color:var(--c-ink); }
+.ss-faq-icon{ margin-left:auto; flex:none; color:var(--c-muted); transition:transform .2s; }
+.ss-faq.is-open .ss-faq-icon{ transform:rotate(180deg); }
+
+/* パンくず */
+.ss-crumbs{ font-size:.8rem; color:var(--c-muted); }
+.ss-crumbs a:hover{ color:var(--c-primary); text-decoration:underline; }
+.ss-crumbs span[aria-current]{ color:var(--c-ink); }
+
+/* 目次 */
+.ss-toc{ background:var(--c-surface); border:1px solid var(--c-line);
+  border-radius:var(--radius); padding:1.2rem 1.3rem; }
+.ss-toc-title{ font-family:var(--f-heading); font-weight:700; color:var(--c-primary);
+  font-size:var(--fs-h4); padding-bottom:.7rem; border-bottom:1px solid var(--c-line);
+  margin-bottom:.8rem; }
+.ss-toc ol{ list-style:none; counter-reset:toc; }
+.ss-toc li{ counter-increment:toc; margin-top:.55rem; font-size:var(--fs-small);
+  line-height:1.6; }
+.ss-toc a{ display:flex; gap:.6rem; color:var(--c-ink); }
+.ss-toc a::before{ content:counter(toc,decimal-leading-zero); color:var(--c-accent);
+  font-weight:700; font-size:.78rem; flex:none; }
+.ss-toc a:hover{ color:var(--c-primary); text-decoration:underline; }
+
+/* 見出しの上の小ラベル */
+.ss-eyebrow{ display:inline-block; font-size:.75rem; letter-spacing:.16em; font-weight:700;
+  color:var(--c-accent); }
+
+/* パターン集の解説チップ */
+.ss-spec{ font-size:.78rem; color:var(--c-muted); background:#fbfcfd;
+  border-top:1px dashed var(--c-line); padding:.7rem .95rem; line-height:1.7; }
+.ss-chip{ display:inline-block; font-size:.7rem; font-weight:700; letter-spacing:.06em;
+  background:var(--c-primary); color:#fff; border-radius:3px; padding:.15rem .5rem;
+  margin-right:.5rem; font-family:var(--f-body); }
+
+/* デモ用スイッチャー */
+.ss-switch{ background:#111a24; }
+.ss-switch button{ font-size:.82rem; padding:.5rem 1.1rem; border-radius:var(--radius);
+  color:#c8d2dd; transition:.15s; }
+.ss-switch button:hover{ color:#fff; background:#1e2b38; }
+.ss-switch button[data-on="1"]{ background:var(--c-accent); color:#fff; font-weight:700; }
+
+html{ scroll-behavior:smooth; }
+[id]{ scroll-margin-top:96px; }
+`;
+}
+
+/* ==================================================================
+   下層ページの中身。他の業務ページを作るときは、このオブジェクトを
+   コピーして文章を差し替えます。目次・パンくず・関連ページは
+   この定義から自動で組み上がります。
+================================================================== */
+const SUBPAGE = {
+  category: "取扱業務",
+  title: "相続税申告",
+  lead: "相続税の申告は、亡くなった日の翌日から10か月以内が期限です。当事務所では、財産の洗い出しから遺産分割のご相談、申告書の提出、その後の税務調査対応まで一貫してお引き受けします。",
+  updated: "2026年8月1日",
+  sections: [
+    {
+      id: "about",
+      title: "相続税申告とは",
+      body: (
+        <>
+          <p>
+            相続税は、亡くなった方（被相続人）の財産を引き継いだときにかかる税金です。ただし、
+            すべての方に申告が必要なわけではありません。<strong>基礎控除額を超える財産がある場合</strong>に、
+            申告と納税の義務が生じます。
+          </p>
+          <h3>基礎控除額の計算</h3>
+          <p>基礎控除額は次の式で求めます。相続人の人数によって金額が変わります。</p>
+          <div className="ss-note is-point">
+            <div className="ss-note-title">計算式</div>
+            <p>3,000万円 ＋ 600万円 × 法定相続人の数</p>
+            <p>例：配偶者と子2人（法定相続人3名）の場合 → 3,000万円 ＋ 1,800万円 ＝ <strong>4,800万円</strong></p>
+          </div>
+          <p>
+            財産の合計がこの金額以下であれば、原則として申告は不要です。ただし、
+            配偶者の税額軽減や小規模宅地等の特例を使って税額がゼロになる場合は、
+            <strong>特例を使うために申告が必要</strong>です。ここを取り違えたまま期限を過ぎてしまう例が少なくありません。
+          </p>
+          <h4>判断に迷いやすいケース</h4>
+          <ul>
+            <li>自宅の土地の評価額がはっきりせず、基礎控除を超えるか分からない</li>
+            <li>生命保険金や死亡退職金を受け取った（非課税枠を超える部分は課税対象です）</li>
+            <li>亡くなる前3年以内に贈与を受けている</li>
+            <li>相続人の中に、連絡が取れない方・海外にお住まいの方がいる</li>
+          </ul>
+        </>
+      ),
+    },
+    {
+      id: "flow",
+      title: "申告までの流れ",
+      body: (
+        <>
+          <p>
+            初回のご相談から申告書の提出まで、およそ3〜4か月をいただいています。
+            期限が迫っている場合は短縮した進め方もご提案しますので、まずはご連絡ください。
+          </p>
+          <ol>
+            <li>
+              <strong>初回相談（無料・約60分）</strong><br />
+              お手元の資料を拝見し、申告が必要かどうか、費用の見込み、今後の流れをお伝えします。
+            </li>
+            <li>
+              <strong>ご契約・資料のご準備</strong><br />
+              必要書類の一覧をお渡しします。取得が難しいものは当事務所で代行します。
+            </li>
+            <li>
+              <strong>財産の評価</strong><br />
+              土地・建物・株式・預貯金などを評価し、財産目録を作成します。
+            </li>
+            <li>
+              <strong>遺産分割のご相談</strong><br />
+              分け方によって税額が変わります。複数の案を試算してご提示します。
+            </li>
+            <li>
+              <strong>申告書の作成・提出</strong><br />
+              内容をご確認いただいたうえで、税務署へ提出します。
+            </li>
+          </ol>
+          <div className="ss-note is-warn">
+            <div className="ss-note-title">期限にご注意ください</div>
+            <p>
+              申告と納税の期限は、亡くなったことを知った日の翌日から<strong>10か月以内</strong>です。
+              遅れると延滞税・無申告加算税がかかるほか、配偶者の税額軽減などの特例が
+              使えなくなる場合があります。
+            </p>
+          </div>
+        </>
+      ),
+    },
+    {
+      id: "documents",
+      title: "ご準備いただく資料",
+      body: (
+        <>
+          <p>初回のご相談の時点では、下記のうち手元にあるものだけで構いません。</p>
+          <h4>必ず必要になるもの</h4>
+          <ul>
+            <li>被相続人の出生から死亡までの戸籍謄本</li>
+            <li>相続人全員の戸籍謄本・住民票</li>
+            <li>固定資産税の納税通知書（直近のもの）</li>
+            <li>預貯金の残高証明書</li>
+          </ul>
+          <h4>お持ちであれば</h4>
+          <ul>
+            <li>遺言書の写し</li>
+            <li>生命保険金の支払通知書</li>
+            <li>証券会社の取引残高報告書</li>
+            <li>借入金の残高が分かる書類</li>
+          </ul>
+          <h5>取得が難しい書類について</h5>
+          <p>
+            戸籍の収集や名寄帳の取得は、当事務所で代行できます（実費のみ頂戴します）。
+            遠方の役所とのやり取りが必要な場合もご相談ください。
+          </p>
+        </>
+      ),
+    },
+    {
+      id: "fee",
+      title: "報酬の目安",
+      body: (
+        <>
+          <p>
+            遺産の総額を基準にした料金体系です。ご契約前に必ずお見積りをご提示し、
+            金額にご納得いただいてから着手します。
+          </p>
+          <div className="ss-table-wrap">
+            <table>
+              <thead>
+                <tr><th>遺産総額</th><th>基本報酬（税込）</th><th>目安の期間</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>5,000万円未満</td><td>27万5,000円〜</td><td>約2か月</td></tr>
+                <tr><td>5,000万円〜1億円</td><td>44万円〜</td><td>約3か月</td></tr>
+                <tr><td>1億円〜3億円</td><td>77万円〜</td><td>約3〜4か月</td></tr>
+                <tr><td>3億円以上</td><td>お見積り</td><td>ご相談</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p className="ss-table-note">
+            ※ 土地の評価が複数箇所にわたる場合、相続人が4名以上の場合などは加算報酬を頂戴します。
+            金額は必ず事前にお伝えします。
+          </p>
+        </>
+      ),
+    },
+    {
+      id: "faq",
+      title: "よくあるご質問",
+      body: null, // FAQ は下でアコーディオンとして描画します
+    },
+  ],
+  faqs: [
+    {
+      q: "相続税がかからない場合でも相談できますか。",
+      a: "はい。申告が必要かどうかの判断も含めてご相談ください。試算の結果、申告不要と分かった場合、初回相談の範囲であれば費用は頂戴しません。",
+    },
+    {
+      q: "他の相続人と話がまとまっていません。それでも依頼できますか。",
+      a: "できます。分け方が決まらないまま期限を迎える場合は、いったん法定相続分で申告し、後日修正する方法があります。ただし特例の適用に条件がありますので、早めにご相談ください。",
+    },
+    {
+      q: "遠方に住んでいます。来所せずに進められますか。",
+      a: "オンライン面談と郵送でのやり取りに対応しています。これまでも県外・海外にお住まいの方の申告をお引き受けしてきました。",
+    },
+    {
+      q: "税務調査が来ると聞いて不安です。",
+      a: "申告内容の根拠を書面（書面添付制度）にまとめてお出しすることで、調査の可能性を下げる取り組みをしています。万一調査となった場合も、立ち会いから対応まで当事務所が行います。",
+    },
+  ],
+  related: [
+    { title: "生前対策・贈与のご相談", desc: "将来の相続に備えて、今からできる対策をご提案します。" },
+    { title: "事業承継・自社株対策", desc: "後継者への引き継ぎを、税負担と経営の両面から検討します。" },
+    { title: "不動産の評価・売却相談", desc: "土地の評価減の可否、相続後の売却まで一貫して対応します。" },
+  ],
+};
+
+/* トップページ用データ */
+const SERVICES = [
+  { title: "法人の税務顧問", desc: "月次の記帳確認から決算・申告まで。数字を経営判断に使える形でお渡しします。", tag: "法人" },
+  { title: "相続税申告", desc: "財産の洗い出しから遺産分割のご相談、申告、税務調査対応まで一貫して。", tag: "個人" },
+  { title: "事業承継・自社株対策", desc: "後継者への引き継ぎを、税負担と経営の両面から設計します。", tag: "法人" },
+  { title: "個人の確定申告", desc: "不動産所得・譲渡所得・副業収入など、判断の分かれる論点に対応します。", tag: "個人" },
+  { title: "創業・融資支援", desc: "事業計画の作成から金融機関との交渉まで、創業期を伴走します。", tag: "創業" },
+  { title: "給与計算・労務相談", desc: "社会保険労務士が在籍。給与から社会保険の手続きまでまとめて。", tag: "法人" },
+];
+
+const REASONS = [
+  { no: "01", title: "相続の実績が地域で最多水準", desc: "年間60件超の相続税申告を担当しています。土地の評価が絡む難しい案件も、経験のある税理士が直接担当します。" },
+  { no: "02", title: "担当者が代わりません", desc: "契約から担当が固定です。「前に話したことをまた説明する」ということがありません。" },
+  { no: "03", title: "料金を先にお伝えします", desc: "着手前に必ずお見積りを出します。追加費用が発生する場合も、必ず事前にご相談します。" },
+];
+
+const NEWS = [
+  { date: "2026.08.01", cat: "お知らせ", title: "夏季休業のご案内（8月13日〜8月16日）" },
+  { date: "2026.07.18", cat: "税務情報", title: "定額減税の年末調整における取扱いについて" },
+  { date: "2026.07.02", cat: "セミナー", title: "【9月開催】経営者のための事業承継セミナーのご案内" },
+];
+
+const STEPS = [
+  { no: "1", title: "お問い合わせ", desc: "お電話またはフォームからご連絡ください。" },
+  { no: "2", title: "初回相談（無料）", desc: "ご状況を伺い、進め方と費用の見込みをお伝えします。" },
+  { no: "3", title: "お見積り・ご契約", desc: "金額にご納得いただいてから着手します。" },
+  { no: "4", title: "業務開始", desc: "担当者が窓口となり、継続してご対応します。" },
+];
+
+const TOP_FAQS = [
+  { q: "初回の相談は本当に無料ですか。", a: "はい。約60分、費用は頂戴しません。ご相談のうえで依頼されない場合も、費用は発生しません。" },
+  { q: "顧問料はいくらぐらいですか。", a: "法人のお客さまで月額3万3,000円（税込）からです。訪問の頻度と記帳の範囲によって変わりますので、お見積りをご覧いただいたうえでご判断ください。" },
+  { q: "今の税理士から変更を考えています。", a: "決算期の途中でも引き継げます。これまでの資料をお預かりし、引き継ぎに必要な手続きはこちらで進めます。" },
+];
+
+/* ==================================================================
+   共通パーツ
+================================================================== */
+function SectionHead({ en, ja }) {
+  return (
+    <div className="ss-sec-head">
+      <span className="en">{en}</span>
+      <h2 className="ja">{ja}</h2>
+    </div>
+  );
+}
+
+function Faq({ q, a, defaultOpen }) {
+  const [open, setOpen] = useState(!!defaultOpen);
+  return (
+    <div className={"ss-faq" + (open ? " is-open" : "")}>
+      <button className="ss-faq-q" onClick={() => setOpen(!open)} aria-expanded={open}>
+        <span className="ss-faq-mark q">Q</span>
+        <span className="flex-1">{q}</span>
+        <span className="ss-faq-icon">▼</span>
+      </button>
+      {open && (
+        <div className="ss-faq-a">
+          <span className="ss-faq-mark a">A</span>
+          <span className="flex-1">{a}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* サイト共通ヘッダー */
+function SiteHeader({ onNav }) {
+  const [openMenu, setOpenMenu] = useState(false);
+  const items = ["事務所について", "取扱業務", "料金", "お知らせ", "アクセス"];
+  // 実サイトでは追従ヘッダーにしますが、このデモでは上部の切り替えバーと
+  // 重なってしまうため固定していません。
+  return (
+    <header className="relative z-30 bg-white border-b" style={{ borderColor: "var(--c-line)" }}>
+      <div className="ss-container flex items-center gap-6 py-3">
+        <button onClick={() => onNav("home")} className="text-left flex-none">
+          <div style={{ fontFamily: "var(--f-heading)", color: "var(--c-primary)" }}
+               className="text-base sm:text-lg font-semibold leading-tight whitespace-nowrap">{OFFICE.name}</div>
+          <div className="text-[10px] tracking-[.2em] whitespace-nowrap" style={{ color: "var(--c-muted)" }}>{OFFICE.nameEn}</div>
+        </button>
+        <nav className="ml-auto hidden lg:flex items-center gap-6 text-sm">
+          {items.map((x) => (
+            <button key={x} onClick={() => onNav("sub")} className="hover:opacity-70" style={{ color: "var(--c-ink)" }}>
+              {x}
+            </button>
+          ))}
+        </nav>
+        <div className="hidden md:block ml-auto lg:ml-0 text-right leading-tight">
+          <div style={{ fontFamily: "var(--f-heading)", color: "var(--c-primary)" }} className="text-xl font-semibold">
+            {OFFICE.tel}
+          </div>
+          <div className="text-[10px]" style={{ color: "var(--c-muted)" }}>{OFFICE.telNote}</div>
+        </div>
+        {/* .ss-btn は display を持つため、表示切替は外側の要素で行います */}
+        <div className="hidden md:block flex-none">
+          <button className="ss-btn ss-btn-accent !py-2.5 !px-5 text-sm">無料相談のご予約</button>
+        </div>
+        <button className="lg:hidden ml-auto flex-none text-sm border px-3 py-2 rounded"
+                style={{ borderColor: "var(--c-line)" }}
+                onClick={() => setOpenMenu(!openMenu)}>メニュー</button>
+      </div>
+      {openMenu && (
+        <div className="lg:hidden border-t" style={{ borderColor: "var(--c-line)" }}>
+          <div className="ss-container py-3 grid gap-1 text-sm">
+            {items.map((x) => (
+              <button key={x} onClick={() => { onNav("sub"); setOpenMenu(false); }}
+                      className="text-left py-2 border-b" style={{ borderColor: "var(--c-line)" }}>{x}</button>
+            ))}
+            <div className="pt-3 text-center" style={{ fontFamily: "var(--f-heading)", color: "var(--c-primary)" }}>
+              <div className="text-2xl font-semibold">{OFFICE.tel}</div>
+              <div className="text-[10px]" style={{ color: "var(--c-muted)" }}>{OFFICE.telNote}</div>
+            </div>
+          </div>
+        </div>
+      )}
+    </header>
+  );
+}
+
+/* 問い合わせ導線（全ページ共通） */
+function ContactBand() {
+  return (
+    <section style={{ background: "var(--c-primary)" }} className="text-white">
+      <div className="ss-container ss-section !py-14 text-center">
+        <p className="ss-eyebrow" style={{ color: "#d9c48f" }}>CONTACT</p>
+        <h2 style={{ fontFamily: "var(--f-heading)", fontSize: "var(--fs-h2)" }} className="mt-3 font-semibold">
+          初回のご相談は無料です
+        </h2>
+        <p className="mt-4 text-sm leading-relaxed opacity-90 max-w-xl mx-auto">
+          「まだ依頼するか決めていない」という段階で構いません。
+          お話を伺って、必要かどうかからお答えします。
+        </p>
+        <div className="mt-8 grid gap-4 sm:grid-cols-2 max-w-2xl mx-auto text-left">
+          <div className="rounded p-5" style={{ background: "rgba(255,255,255,.08)", borderRadius: "var(--radius)" }}>
+            <div className="text-xs tracking-widest opacity-70">お電話</div>
+            <div style={{ fontFamily: "var(--f-heading)" }} className="text-3xl font-semibold mt-1">{OFFICE.tel}</div>
+            <div className="text-xs opacity-70 mt-1">{OFFICE.telNote}</div>
+          </div>
+          <div className="rounded p-5 flex flex-col justify-center" style={{ background: "rgba(255,255,255,.08)", borderRadius: "var(--radius)" }}>
+            <div className="text-xs tracking-widest opacity-70">フォーム</div>
+            <p className="text-xs opacity-80 mt-1 mb-3">24時間受付。2営業日以内にご返信します。</p>
+            <button className="ss-btn ss-btn-accent w-full">相談フォームへ進む</button>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function SiteFooter({ onNav }) {
+  return (
+    <footer style={{ background: "var(--c-primary-dark)" }} className="text-white/80">
+      <div className="ss-container py-12 grid gap-8 md:grid-cols-3 text-sm">
+        <div>
+          <div style={{ fontFamily: "var(--f-heading)" }} className="text-white text-lg font-semibold">{OFFICE.name}</div>
+          <div className="text-[10px] tracking-[.2em] opacity-60 mt-1">{OFFICE.nameEn}</div>
+          <p className="mt-4 leading-relaxed text-xs opacity-80">
+            {OFFICE.address}<br />TEL {OFFICE.tel}<br />{OFFICE.telNote}
+          </p>
+        </div>
+        <div>
+          <div className="text-white font-semibold mb-3 text-xs tracking-widest">取扱業務</div>
+          <ul className="space-y-2 text-xs">
+            {SERVICES.slice(0, 5).map((s) => (
+              <li key={s.title}>
+                <button onClick={() => onNav("sub")} className="hover:text-white text-left">{s.title}</button>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div>
+          <div className="text-white font-semibold mb-3 text-xs tracking-widest">事務所案内</div>
+          <ul className="space-y-2 text-xs">
+            {["事務所について", "スタッフ紹介", "料金表", "お知らせ", "アクセス", "個人情報保護方針"].map((x) => (
+              <li key={x}><button onClick={() => onNav("sub")} className="hover:text-white text-left">{x}</button></li>
+            ))}
+          </ul>
+        </div>
+      </div>
+      <div className="border-t border-white/10">
+        <div className="ss-container py-4 text-[10px] opacity-60">
+          © {OFFICE.name} All Rights Reserved.（本デモはサンプル表記です）
+        </div>
+      </div>
+    </footer>
+  );
+}
+
+/* ==================================================================
+   【1】トップページ
+================================================================== */
+function TopPage({ onNav }) {
+  return (
+    <div>
+      <SiteHeader onNav={onNav} />
+
+      {/* ファーストビュー */}
+      <section className="relative overflow-hidden" style={{ background: "var(--c-primary)" }}>
+        <div aria-hidden="true" className="absolute inset-0 opacity-[.10]"
+             style={{ backgroundImage: "repeating-linear-gradient(135deg, #fff 0 1px, transparent 1px 14px)" }} />
+        <div className="ss-container relative py-20 md:py-28">
+          <div className="max-w-2xl text-white">
+            <p className="ss-eyebrow" style={{ color: "#d9c48f" }}>SINCE {OFFICE.established.replace("年", "")}</p>
+            <h1 style={{ fontFamily: "var(--f-heading)", fontSize: "var(--fs-h1)", lineHeight: "1.4" }}
+                className="mt-4 font-semibold">
+              {OFFICE.catch}
+            </h1>
+            <p className="mt-6 leading-loose text-sm md:text-base opacity-90">{OFFICE.lead}</p>
+            <div className="mt-9 flex flex-wrap gap-3">
+              <button className="ss-btn ss-btn-accent">無料相談を予約する</button>
+              <button onClick={() => onNav("sub")}
+                      className="ss-btn-outline !text-white !border-white/60 hover:!bg-white/10">
+                取扱業務を見る
+              </button>
+            </div>
+          </div>
+        </div>
+        <div className="relative border-t border-white/15">
+          <div className="ss-container grid grid-cols-3 divide-x divide-white/15 text-center text-white">
+            {[
+              { k: "創業", v: OFFICE.established, s: "地域とともに50年" },
+              { k: "関与先", v: OFFICE.clients, s: "法人・個人あわせて" },
+              { k: "相続税申告", v: "年60件超", s: "土地評価の実績多数" },
+            ].map((x) => (
+              <div key={x.k} className="py-6 px-2">
+                <div className="text-[10px] tracking-widest opacity-70">{x.k}</div>
+                <div style={{ fontFamily: "var(--f-heading)" }} className="text-xl md:text-2xl font-semibold mt-1">{x.v}</div>
+                <div className="text-[10px] opacity-60 mt-1">{x.s}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* お知らせ */}
+      <section className="bg-white border-b" style={{ borderColor: "var(--c-line)" }}>
+        <div className="ss-container py-8 md:flex md:gap-10 md:items-start">
+          <div className="md:w-40 flex-none">
+            <div className="ss-eyebrow">NEWS</div>
+            <div style={{ fontFamily: "var(--f-heading)", color: "var(--c-primary)" }} className="font-semibold">お知らせ</div>
+          </div>
+          <ul className="flex-1 mt-4 md:mt-0">
+            {NEWS.map((n) => (
+              <li key={n.title} className="border-b last:border-0 py-3" style={{ borderColor: "var(--c-line)" }}>
+                <button onClick={() => onNav("sub")} className="text-left w-full flex flex-wrap items-center gap-3 text-sm hover:opacity-70">
+                  <time className="text-xs tabular-nums" style={{ color: "var(--c-muted)" }}>{n.date}</time>
+                  <span className="text-[10px] px-2 py-0.5 border rounded-full"
+                        style={{ borderColor: "var(--c-accent)", color: "var(--c-accent)" }}>{n.cat}</span>
+                  <span className="flex-1 min-w-[12rem]">{n.title}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </section>
+
+      {/* 取扱業務 */}
+      <section className="ss-section">
+        <div className="ss-container">
+          <SectionHead en="SERVICE" ja="取扱業務" />
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            {SERVICES.map((s) => (
+              <button key={s.title} onClick={() => onNav("sub")}
+                      className="ss-card p-6 text-left transition hover:-translate-y-0.5 hover:shadow-md">
+                <span className="text-[10px] px-2 py-0.5 rounded-full"
+                      style={{ background: "var(--c-primary-soft)", color: "var(--c-primary)" }}>{s.tag}</span>
+                <h3 style={{ fontFamily: "var(--f-heading)", color: "var(--c-primary)", fontSize: "var(--fs-h3)" }}
+                    className="mt-3 font-semibold">{s.title}</h3>
+                <p className="mt-3 text-sm leading-relaxed" style={{ color: "var(--c-muted)" }}>{s.desc}</p>
+                <span className="mt-4 inline-block text-xs font-bold" style={{ color: "var(--c-accent)" }}>
+                  詳しく見る →
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* 選ばれる理由 */}
+      <section className="ss-section" style={{ background: "var(--c-primary-soft)" }}>
+        <div className="ss-container">
+          <SectionHead en="REASON" ja="選ばれる理由" />
+          <div className="grid gap-5 md:grid-cols-3">
+            {REASONS.map((r) => (
+              <div key={r.no} className="ss-card p-7">
+                <div style={{ fontFamily: "var(--f-heading)", color: "var(--c-accent)" }} className="text-3xl font-semibold">{r.no}</div>
+                <h3 style={{ fontFamily: "var(--f-heading)", color: "var(--c-primary)" }} className="mt-3 text-lg font-semibold leading-snug">{r.title}</h3>
+                <p className="mt-3 text-sm leading-loose" style={{ color: "var(--c-muted)" }}>{r.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* 事務所紹介 */}
+      <section className="ss-section">
+        <div className="ss-container grid gap-10 lg:grid-cols-2 lg:items-start">
+          <div>
+            <SectionHead en="ABOUT" ja="事務所紹介" />
+            <div className="ss-card p-7">
+              <p className="text-sm leading-loose">
+                当事務所は{OFFICE.established}の開業以来、地域の中小企業と個人のお客さまとともに歩んでまいりました。
+                私たちが大切にしているのは、<strong style={{ background: "linear-gradient(transparent 62%, var(--c-accent-soft) 62%)" }}>数字の説明を、専門用語なしでお伝えすること</strong>です。
+              </p>
+              <p className="mt-4 text-sm leading-loose" style={{ color: "var(--c-muted)" }}>
+                決算書は、経営者の方が判断に使えて初めて意味を持ちます。
+                相続についても同じで、ご家族が納得して次に進めることが、税額を数万円下げること以上に大切だと考えています。
+                どうぞお気軽にご相談ください。
+              </p>
+              <div className="mt-6 pt-5 border-t flex items-center gap-4" style={{ borderColor: "var(--c-line)" }}>
+                <div className="w-14 h-14 rounded-full flex items-center justify-center flex-none"
+                     style={{ background: "var(--c-primary-soft)", color: "var(--c-primary)", fontFamily: "var(--f-heading)" }}>
+                  <span className="text-xl font-semibold">山城</span>
+                </div>
+                <div>
+                  <div className="text-xs" style={{ color: "var(--c-muted)" }}>所長・税理士</div>
+                  <div style={{ fontFamily: "var(--f-heading)", color: "var(--c-primary)" }} className="text-lg font-semibold">山城 誠一</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="lg:pt-[7.5rem]">
+            <div className="ss-table-wrap">
+              <table className="ss-table">
+                <tbody>
+                  <tr><th className="w-32">名称</th><td>{OFFICE.name}</td></tr>
+                  <tr><th>所在地</th><td>{OFFICE.address}</td></tr>
+                  <tr><th>電話</th><td>{OFFICE.tel}（{OFFICE.telNote}）</td></tr>
+                  <tr><th>開業</th><td>{OFFICE.established}</td></tr>
+                  <tr><th>職員数</th><td>{OFFICE.staff}</td></tr>
+                  <tr><th>登録番号</th><td>近畿税理士会 〇〇支部 第00000号</td></tr>
+                  <tr><th>対応地域</th><td>〇〇県全域、近隣府県（オンライン面談は全国対応）</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p className="ss-table-note">※ 記載内容はデモ用のサンプルです。</p>
+          </div>
+        </div>
+      </section>
+
+      {/* 料金の目安 */}
+      <section className="ss-section" style={{ background: "var(--c-primary-soft)" }}>
+        <div className="ss-container">
+          <SectionHead en="PRICE" ja="料金の目安" />
+          <div className="ss-table-wrap">
+            <table className="ss-table">
+              <thead>
+                <tr><th>サービス</th><th>料金（税込）</th><th>内容</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>法人顧問（年商5,000万円未満）</td><td>月額 33,000円〜</td><td>月次確認・決算申告・税務相談</td></tr>
+                <tr><td>法人顧問（年商1億円未満）</td><td>月額 44,000円〜</td><td>上記＋訪問（隔月）</td></tr>
+                <tr><td>個人の確定申告</td><td>55,000円〜</td><td>不動産・譲渡・事業所得</td></tr>
+                <tr><td>相続税申告</td><td>275,000円〜</td><td>遺産総額に応じて変動</td></tr>
+                <tr><td>創業融資のサポート</td><td>110,000円〜</td><td>事業計画作成・金融機関同行</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p className="ss-table-note">
+            ※ 記帳代行を含む場合、仕訳数に応じて加算されます。着手前に必ずお見積りをご提示します。
+          </p>
+          <div className="mt-8 text-center">
+            <button onClick={() => onNav("sub")} className="ss-btn-outline">料金の詳細を見る</button>
+          </div>
+        </div>
+      </section>
+
+      {/* ご相談の流れ */}
+      <section className="ss-section">
+        <div className="ss-container">
+          <SectionHead en="FLOW" ja="ご相談の流れ" />
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+            {STEPS.map((s) => (
+              <div key={s.no} className="ss-card p-6 relative">
+                <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold text-white"
+                     style={{ background: "var(--c-accent)", fontFamily: "var(--f-heading)" }}>{s.no}</div>
+                <h3 style={{ fontFamily: "var(--f-heading)", color: "var(--c-primary)" }} className="mt-4 font-semibold">{s.title}</h3>
+                <p className="mt-2 text-sm leading-relaxed" style={{ color: "var(--c-muted)" }}>{s.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* よくあるご質問 */}
+      <section className="ss-section !pt-0">
+        <div className="ss-container ss-narrow">
+          <SectionHead en="FAQ" ja="よくあるご質問" />
+          {TOP_FAQS.map((f, i) => <Faq key={f.q} q={f.q} a={f.a} defaultOpen={i === 0} />)}
+        </div>
+      </section>
+
+      <ContactBand />
+      <SiteFooter onNav={onNav} />
+    </div>
+  );
+}
+
+/* ==================================================================
+   【2】下層ページのベース
+   このコンポーネントは SUBPAGE の中身だけを見て組み立てます。
+   別の業務ページを作るときは SUBPAGE をコピーして差し替えます。
+================================================================== */
+function SubPage({ onNav }) {
+  const toc = useMemo(() => SUBPAGE.sections.map((s) => ({ id: s.id, title: s.title })), []);
+
+  return (
+    <div>
+      <SiteHeader onNav={onNav} />
+
+      {/* ページヘッダー */}
+      <section style={{ background: "var(--c-primary)" }} className="text-white">
+        <div className="ss-container py-12 md:py-16">
+          <p className="ss-eyebrow" style={{ color: "#d9c48f" }}>{SUBPAGE.category}</p>
+          <h1 style={{ fontFamily: "var(--f-heading)", fontSize: "var(--fs-h1)" }} className="mt-3 font-semibold">
+            {SUBPAGE.title}
+          </h1>
+        </div>
+      </section>
+
+      {/* パンくず */}
+      <div className="bg-white border-b" style={{ borderColor: "var(--c-line)" }}>
+        <div className="ss-container py-3 ss-crumbs flex flex-wrap gap-2">
+          <button onClick={() => onNav("home")} className="hover:underline">ホーム</button>
+          <span aria-hidden="true">›</span>
+          <button onClick={() => onNav("home")} className="hover:underline">{SUBPAGE.category}</button>
+          <span aria-hidden="true">›</span>
+          <span aria-current="page">{SUBPAGE.title}</span>
+        </div>
+      </div>
+
+      <div className="ss-container py-12 lg:py-16 grid gap-10 lg:grid-cols-[1fr_300px] items-start">
+        {/* 本文 */}
+        <main>
+          <p className="text-base leading-loose pb-6 mb-2 border-b" style={{ borderColor: "var(--c-line)" }}>
+            {SUBPAGE.lead}
+          </p>
+          <p className="text-xs" style={{ color: "var(--c-muted)" }}>最終更新日：{SUBPAGE.updated}</p>
+
+          {/* 目次（スマホでは本文上に表示） */}
+          <div className="ss-toc mt-8 lg:hidden">
+            <div className="ss-toc-title">このページの内容</div>
+            <ol>
+              {toc.map((s) => <li key={s.id}><a href={"#" + s.id}>{s.title}</a></li>)}
+            </ol>
+          </div>
+
+          <article className="entry mt-2">
+            {SUBPAGE.sections.map((s) => (
+              <section key={s.id} id={s.id}>
+                <h2>{s.title}</h2>
+                {s.body}
+                {s.id === "faq" && (
+                  <div className="mt-6">
+                    {SUBPAGE.faqs.map((f, i) => <Faq key={f.q} q={f.q} a={f.a} defaultOpen={i === 0} />)}
+                  </div>
+                )}
+              </section>
+            ))}
+          </article>
+
+          {/* 記事末の相談導線 */}
+          <div className="mt-14 p-7 text-center" style={{ background: "var(--c-accent-soft)", borderRadius: "var(--radius)", border: "1px solid var(--c-line)" }}>
+            <h2 style={{ fontFamily: "var(--f-heading)", color: "var(--c-primary)", fontSize: "var(--fs-h3)" }} className="font-semibold">
+              {SUBPAGE.title}のご相談はこちらから
+            </h2>
+            <p className="mt-3 text-sm leading-relaxed" style={{ color: "var(--c-muted)" }}>
+              初回のご相談は無料です。まだ依頼を決めていない段階でも構いません。
+            </p>
+            <div className="mt-6 flex flex-wrap gap-3 justify-center">
+              <a href={"tel:" + OFFICE.tel} className="ss-btn">お電話 {OFFICE.tel}</a>
+              <button className="ss-btn ss-btn-accent">相談フォームへ進む</button>
+            </div>
+          </div>
+
+          {/* 関連ページ */}
+          <div className="mt-14">
+            <h2 className="font-semibold pb-3 border-b"
+                style={{ fontFamily: "var(--f-heading)", color: "var(--c-primary)",
+                         fontSize: "var(--fs-h3)", borderColor: "var(--c-line)" }}>
+              関連するページ
+            </h2>
+            <div className="mt-5 grid gap-4 sm:grid-cols-3">
+              {SUBPAGE.related.map((r) => (
+                <button key={r.title} onClick={() => onNav("sub")} className="ss-card p-5 text-left hover:shadow-md transition">
+                  <div style={{ color: "var(--c-primary)", fontFamily: "var(--f-heading)" }} className="font-semibold leading-snug">{r.title}</div>
+                  <p className="mt-2 text-xs leading-relaxed" style={{ color: "var(--c-muted)" }}>{r.desc}</p>
+                  <span className="mt-3 inline-block text-xs font-bold" style={{ color: "var(--c-accent)" }}>詳しく見る →</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </main>
+
+        {/* サイドバー */}
+        <aside className="hidden lg:block sticky top-24 space-y-5">
+          <div className="ss-toc">
+            <div className="ss-toc-title">このページの内容</div>
+            <ol>
+              {toc.map((s) => <li key={s.id}><a href={"#" + s.id}>{s.title}</a></li>)}
+            </ol>
+          </div>
+
+          <div className="ss-card p-5">
+            <div className="ss-toc-title">取扱業務</div>
+            <ul className="space-y-2 text-sm">
+              {SERVICES.map((s) => (
+                <li key={s.title}>
+                  <button onClick={() => onNav("sub")} className="text-left hover:underline flex gap-2">
+                    <span style={{ color: "var(--c-accent)" }}>›</span>{s.title}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="p-5 text-center text-white" style={{ background: "var(--c-primary)", borderRadius: "var(--radius)" }}>
+            <div className="text-xs opacity-80">初回相談は無料です</div>
+            <div style={{ fontFamily: "var(--f-heading)" }} className="text-2xl font-semibold mt-1">{OFFICE.tel}</div>
+            <div className="text-[10px] opacity-70 mt-1">{OFFICE.telNote}</div>
+            <button className="ss-btn ss-btn-accent w-full mt-4 !py-2.5 text-sm">相談フォーム</button>
+          </div>
+        </aside>
+      </div>
+
+      <ContactBand />
+      <SiteFooter onNav={onNav} />
+    </div>
+  );
+}
+
+/* ==================================================================
+   【3】見出し・パーツのパターン集
+================================================================== */
+function Pattern({ block, note, children }) {
+  return (
+    <div className="ss-card overflow-hidden">
+      <div className="p-6 md:p-8 bg-white">{children}</div>
+      <div className="ss-spec">
+        <span className="ss-chip">{block}</span>{note}
+      </div>
+    </div>
+  );
+}
+
+function PatternGroup({ no, title, desc, children }) {
+  return (
+    <section className="mt-14 first:mt-0">
+      <div className="flex items-baseline gap-3">
+        <span style={{ fontFamily: "var(--f-heading)", color: "var(--c-accent)" }} className="text-2xl font-semibold">{no}</span>
+        <h2 style={{ fontFamily: "var(--f-heading)", color: "var(--c-primary)", fontSize: "var(--fs-h2)" }} className="font-semibold">{title}</h2>
+      </div>
+      <p className="mt-2 text-sm leading-relaxed" style={{ color: "var(--c-muted)" }}>{desc}</p>
+      <div className="mt-6 space-y-5">{children}</div>
+    </section>
+  );
+}
+
+function PatternsPage() {
+  const tokens = [
+    { name: "基調色（primary）", value: THEME.color.primary, use: "ヘッダー・見出し・ボタン" },
+    { name: "基調色 濃（primaryDark）", value: THEME.color.primaryDark, use: "ホバー時・フッター" },
+    { name: "基調色 淡（primarySoft）", value: THEME.color.primarySoft, use: "H2の背景・表の見出し行" },
+    { name: "差し色（accent）", value: THEME.color.accent, use: "罫線・リストの点・強調" },
+    { name: "差し色 淡（accentSoft）", value: THEME.color.accentSoft, use: "注意書きの背景・マーカー" },
+    { name: "本文（ink）", value: THEME.color.ink, use: "本文の文字色" },
+    { name: "補助（inkMuted）", value: THEME.color.inkMuted, use: "注釈・日付・説明文" },
+    { name: "罫線（line）", value: THEME.color.line, use: "枠線・区切り線" },
+  ];
+
+  return (
+    <div style={{ background: "var(--c-bg)" }}>
+      {/* 見出し */}
+      <div style={{ background: "var(--c-primary)" }} className="text-white">
+        <div className="ss-container py-12">
+          <p className="ss-eyebrow" style={{ color: "#d9c48f" }}>DESIGN SYSTEM</p>
+          <h1 style={{ fontFamily: "var(--f-heading)", fontSize: "var(--fs-h1)" }} className="mt-3 font-semibold">
+            見出し・パーツのパターン集
+          </h1>
+          <p className="mt-5 text-sm leading-loose opacity-90 max-w-3xl">
+            下層ページを量産するための部品一覧です。ここにあるパーツを組み合わせるだけで、
+            どのページも同じ見た目・同じ余白でそろいます。
+            実装時はこれらを WordPress の投稿画面から選べるブロックとして登録しますので、
+            HTMLやCSSを触らずにページを増やせます。
+          </p>
+        </div>
+      </div>
+
+      <div className="ss-container py-14">
+        {/* 見出し */}
+        <PatternGroup
+          no="01"
+          title="見出し（H2〜H5）"
+          desc="H2が最も大きく、H5にかけて段階的に控えめになります。見出しのレベルは検索エンジンにも構造として伝わるため、見た目の好みではなく、内容の階層で選んでください。"
+        >
+          <Pattern block="見出し 2" note="WordPressの投稿画面でこの見出しを選ぶと、この見た目になります。ページ内の大きな区切り（章）に使います。1ページに3〜6個が目安です。">
+            <div className="entry"><h2 style={{ marginTop: 0 }}>相続税申告とは</h2></div>
+          </Pattern>
+
+          <Pattern block="見出し 3" note="WordPressの投稿画面でこの見出しを選ぶと、この見た目になります。H2の中を分けるときに使います。下の金色の線が目印です。">
+            <div className="entry"><h3 style={{ marginTop: 0 }}>基礎控除額の計算</h3></div>
+          </Pattern>
+
+          <Pattern block="見出し 4" note="WordPressの投稿画面でこの見出しを選ぶと、この見た目になります。H3の中の小項目です。左の縦線だけの、軽い見出しです。">
+            <div className="entry"><h4 style={{ marginTop: 0 }}>判断に迷いやすいケース</h4></div>
+          </Pattern>
+
+          <Pattern block="見出し 5" note="WordPressの投稿画面でこの見出しを選ぶと、この見た目になります。補足や但し書きのまとまりに付ける、最も小さい見出しです。">
+            <div className="entry"><h5 style={{ marginTop: 0 }}>取得が難しい書類について</h5></div>
+          </Pattern>
+
+          <Pattern block="見出し 2〜5 の組み合わせ" note="実際のページでは、この順序で入れ子になります。H2の次にH4を置くなど段階を飛ばすと構造が崩れますので、上から順にお使いください。">
+            <div className="entry">
+              <h2 style={{ marginTop: 0 }}>H2 見出し｜ページの大きな区切り</h2>
+              <p>H2の下には、その章全体の説明を1〜2段落置きます。</p>
+              <h3>H3 見出し｜章の中の項目</h3>
+              <p>H3の下に本文が続きます。ここが最も分量の多くなる階層です。</p>
+              <h4>H4 見出し｜項目の中の小分け</h4>
+              <p>箇条書きや表を置く直前の見出しとしてよく使います。</p>
+              <h5>H5 見出し｜補足のまとまり</h5>
+              <p>但し書き、例外の説明などに使います。</p>
+            </div>
+          </Pattern>
+        </PatternGroup>
+
+        {/* リスト */}
+        <PatternGroup
+          no="02"
+          title="リスト"
+          desc="順序に意味があるかどうかで選び分けます。手順は番号つき、並列に並ぶ項目は番号なしです。"
+        >
+          <Pattern block="箇条書きリスト" note="投稿画面で「リスト」ブロックを選ぶと、この見た目になります。順序に意味のない項目を並べるときに使います。">
+            <div className="entry">
+              <ul style={{ marginTop: 0 }}>
+                <li>被相続人の出生から死亡までの戸籍謄本</li>
+                <li>相続人全員の戸籍謄本・住民票</li>
+                <li>固定資産税の納税通知書（直近のもの）
+                  <ul>
+                    <li>入れ子にすると、内側も同じ体裁でそろいます</li>
+                    <li>2階層までを推奨しています</li>
+                  </ul>
+                </li>
+                <li>預貯金の残高証明書</li>
+              </ul>
+            </div>
+          </Pattern>
+
+          <Pattern block="番号つきリスト" note="投稿画面で「リスト」ブロックを選び、番号つきに切り替えるとこの見た目になります。手続きの流れなど、順序に意味がある場合に使います。">
+            <div className="entry">
+              <ol style={{ marginTop: 0 }}>
+                <li><strong>初回相談（無料・約60分）</strong><br />ご状況を伺い、費用の見込みと流れをお伝えします。</li>
+                <li><strong>ご契約・資料のご準備</strong><br />必要書類の一覧をお渡しします。</li>
+                <li><strong>財産の評価</strong><br />土地・建物・株式などを評価し、財産目録を作成します。</li>
+              </ol>
+            </div>
+          </Pattern>
+        </PatternGroup>
+
+        {/* 注意書き */}
+        <PatternGroup
+          no="03"
+          title="注意書きボックス"
+          desc="本文の流れから少し浮かせて読ませたい内容に使います。色によって役割を分けています。使いすぎると効果が薄れますので、1ページに2〜3個までを目安にしてください。"
+        >
+          <Pattern block="注意書き（補足）" note="投稿画面で「注意書き」ブロックを挿入し、種類に「補足」を選ぶとこの見た目になります。読み飛ばしても困らない、参考情報に使います。">
+            <div className="ss-note">
+              <div className="ss-note-title">補足</div>
+              <p>申告期限が土日祝にあたる場合は、その翌開庁日が期限となります。</p>
+            </div>
+          </Pattern>
+
+          <Pattern block="注意書き（重要）" note="投稿画面で「注意書き」ブロックを挿入し、種類に「重要」を選ぶとこの見た目になります。見落とすと不利益が生じる内容だけに使ってください。">
+            <div className="ss-note is-warn">
+              <div className="ss-note-title">期限にご注意ください</div>
+              <p>申告と納税の期限は、亡くなったことを知った日の翌日から<strong>10か月以内</strong>です。遅れると延滞税・無申告加算税がかかります。</p>
+            </div>
+          </Pattern>
+
+          <Pattern block="注意書き（ポイント）" note="投稿画面で「注意書き」ブロックを挿入し、種類に「ポイント」を選ぶとこの見た目になります。計算式や結論など、覚えて帰ってほしい内容に使います。">
+            <div className="ss-note is-point">
+              <div className="ss-note-title">計算式</div>
+              <p>3,000万円 ＋ 600万円 × 法定相続人の数</p>
+              <ul>
+                <li>相続人が3名の場合 → 4,800万円</li>
+                <li>相続人が4名の場合 → 5,400万円</li>
+              </ul>
+            </div>
+          </Pattern>
+        </PatternGroup>
+
+        {/* 表 */}
+        <PatternGroup
+          no="04"
+          title="表"
+          desc="表は横幅が足りない画面では自動で横スクロールします。スマートフォンでレイアウトが崩れることはありません。"
+        >
+          <Pattern block="料金表" note="投稿画面で「表」ブロックを挿入すると、この見た目になります。見出し行のオン・オフは投稿画面から切り替えられます。">
+            <div className="ss-table-wrap">
+              <table className="ss-table">
+                <thead>
+                  <tr><th>遺産総額</th><th>基本報酬（税込）</th><th>目安の期間</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td>5,000万円未満</td><td>27万5,000円〜</td><td>約2か月</td></tr>
+                  <tr><td>5,000万円〜1億円</td><td>44万円〜</td><td>約3か月</td></tr>
+                  <tr><td>1億円〜3億円</td><td>77万円〜</td><td>約3〜4か月</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p className="ss-table-note">※ 表の下の注記は「注釈」スタイルの段落です。</p>
+          </Pattern>
+
+          <Pattern block="定義表（見出しが左）" note="投稿画面で「表」ブロックを挿入し、1列目を見出しに設定するとこの見た目になります。事務所概要やスタッフ紹介など、項目と内容が対になる情報に使います。">
+            <div className="ss-table-wrap">
+              <table className="ss-table">
+                <tbody>
+                  <tr><th className="w-32">名称</th><td>{OFFICE.name}</td></tr>
+                  <tr><th>所在地</th><td>{OFFICE.address}</td></tr>
+                  <tr><th>開業</th><td>{OFFICE.established}</td></tr>
+                  <tr><th>職員数</th><td>{OFFICE.staff}</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </Pattern>
+        </PatternGroup>
+
+        {/* FAQ・引用 */}
+        <PatternGroup
+          no="05"
+          title="よくある質問・引用"
+          desc="質問はクリックで開閉します。ページが縦に長くなりすぎるのを防ぎながら、検索エンジンにはQ&Aとして認識される形で出力します。"
+        >
+          <Pattern block="よくある質問" note="投稿画面で「よくある質問」ブロックを挿入し、質問と回答を入力するとこの見た目になります。項目はいくつでも増やせます。">
+            <Faq q="相続税がかからない場合でも相談できますか。"
+                 a="はい。申告が必要かどうかの判断も含めてご相談ください。試算の結果、申告不要と分かった場合、初回相談の範囲であれば費用は頂戴しません。"
+                 defaultOpen />
+            <Faq q="遠方に住んでいます。来所せずに進められますか。"
+                 a="オンライン面談と郵送でのやり取りに対応しています。" />
+          </Pattern>
+
+          <Pattern block="引用" note="投稿画面で「引用」ブロックを挿入すると、この見た目になります。法令や通達の条文、お客さまの声を載せるときに使います。出典は必ず記載してください。">
+            <blockquote className="ss-quote">
+              相続税の申告書は、その相続の開始があったことを知った日の翌日から十月以内に、
+              被相続人の死亡の時における住所地を所轄する税務署長に提出しなければならない。
+              <cite>相続税法 第27条（要約）</cite>
+            </blockquote>
+          </Pattern>
+        </PatternGroup>
+
+        {/* 本文・リンク・ボタン */}
+        <PatternGroup
+          no="06"
+          title="本文・強調・ボタン"
+          desc="本文の行間は広めに設定しています。士業サイトは文章量が多くなるため、詰めるより空ける方が読み進めてもらえます。"
+        >
+          <Pattern block="段落・リード文・強調" note="投稿画面で「段落」ブロックに入力した文章は、この見た目になります。太字にした箇所には自動で下線マーカーが付きます。リンクは基調色の下線付きです。">
+            <div className="entry">
+              <p style={{ marginTop: 0, fontSize: "1.05rem" }}>
+                リード文は、通常の本文より少し大きく設定しています。ページの冒頭に1段落だけ置きます。
+              </p>
+              <p>
+                通常の段落です。<strong>強調したい箇所</strong>は太字にすると、下線のマーカーが付きます。
+                本文中から<a href="#top">他のページへのリンク</a>を張ることもできます。
+                1文を短く区切ると読みやすくなります。
+              </p>
+            </div>
+          </Pattern>
+
+          <Pattern block="ボタン" note="投稿画面で「ボタン」ブロックを挿入し、種類を選ぶとこの見た目になります。相談へ進んでほしい箇所に置きます。色の指定は不要で、種類を選ぶだけです。">
+            <div className="flex flex-wrap gap-3">
+              <button className="ss-btn">基本のボタン</button>
+              <button className="ss-btn ss-btn-accent">申し込みボタン</button>
+              <button className="ss-btn-outline">枠線のボタン</button>
+            </div>
+          </Pattern>
+
+          <Pattern block="目次" note="投稿画面で「目次」ブロックを挿入すると、そのページのH2を自動で拾って一覧にします。見出しを増減しても、目次は手で直す必要がありません。">
+            <div className="ss-toc" style={{ maxWidth: "22rem" }}>
+              <div className="ss-toc-title">このページの内容</div>
+              <ol>
+                {SUBPAGE.sections.map((s) => <li key={s.id}><a href={"#" + s.id}>{s.title}</a></li>)}
+              </ol>
+            </div>
+          </Pattern>
+        </PatternGroup>
+
+        {/* 設定オブジェクト */}
+        <PatternGroup
+          no="07"
+          title="色と文字の設定"
+          desc="ここに並ぶ値は、ファイル冒頭の設定オブジェクト1か所で決まっています。事務所のカラーに合わせて変更する場合、この値を書き換えるだけで3画面すべてに反映されます。"
+        >
+          <Pattern block="カラーパレット" note="WordPress化する際は、この値をテーマ設定（theme.json）に移します。投稿画面の色選択にも、ここで決めた色だけが並びます。ページごとに色がばらつくことを防げます。">
+            <div className="grid gap-3 sm:grid-cols-2">
+              {tokens.map((t) => (
+                <div key={t.name} className="flex items-center gap-3 border p-3" style={{ borderColor: "var(--c-line)", borderRadius: "var(--radius)" }}>
+                  <div className="w-10 h-10 flex-none border" style={{ background: t.value, borderColor: "var(--c-line)", borderRadius: "4px" }} />
+                  <div className="min-w-0">
+                    <div className="text-xs font-bold">{t.name}</div>
+                    <div className="text-[11px] tabular-nums" style={{ color: "var(--c-muted)" }}>{t.value}　{t.use}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Pattern>
+
+          <Pattern block="文字サイズ・余白" note="文字サイズは画面幅に応じて自動で伸縮します（スマートフォンでは小さく、大画面では大きく）。投稿者が個別にサイズを指定する必要はありません。">
+            <div className="ss-table-wrap">
+              <table className="ss-table">
+                <thead><tr><th>項目</th><th>設定値</th><th>用途</th></tr></thead>
+                <tbody>
+                  <tr><td>見出しの書体</td><td className="text-xs">明朝体</td><td>H1・H2・数字。信頼感を出す箇所</td></tr>
+                  <tr><td>本文の書体</td><td className="text-xs">ゴシック体</td><td>本文全般。画面での可読性を優先</td></tr>
+                  <tr><td>H1</td><td className="text-xs tabular-nums">{THEME.font.h1}</td><td>ページタイトル（1ページに1つ）</td></tr>
+                  <tr><td>H2</td><td className="text-xs tabular-nums">{THEME.font.h2}</td><td>章見出し</td></tr>
+                  <tr><td>H3 / H4 / H5</td><td className="text-xs tabular-nums">{THEME.font.h3} / {THEME.font.h4} / {THEME.font.h5}</td><td>下位の見出し</td></tr>
+                  <tr><td>本文</td><td className="text-xs tabular-nums">{THEME.font.base}（行間 {THEME.font.lineHeight}）</td><td>段落・リスト</td></tr>
+                  <tr><td>セクション余白</td><td className="text-xs tabular-nums">{THEME.space.section}</td><td>大きな区切りの上下</td></tr>
+                  <tr><td>本文の最大幅</td><td className="text-xs tabular-nums">{THEME.space.containerNarrow}</td><td>1行が長くなりすぎないように制限</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </Pattern>
+        </PatternGroup>
+      </div>
+    </div>
+  );
+}
+
+/* ==================================================================
+   デモ用のスイッチャーと注記
+================================================================== */
+const SCREENS = [
+  { id: "home", label: "① トップページ", note: "ファーストビューから問い合わせまで。ラフデザインをいただければ、その構成に合わせて作り替えます。" },
+  { id: "sub", label: "② 下層ページのベース", note: "「相続税申告」を例にした1枚です。この構造をコピーして、他の業務ページを量産します。" },
+  { id: "patterns", label: "③ 見出し・パーツ集", note: "H2〜H5・リスト・表・注意書きなど、下層ページを組み立てる部品の一覧です。" },
+];
+
+function App() {
+  const [screen, setScreen] = useState("home");
+  const css = useMemo(() => buildCss(THEME), []);
+  const current = SCREENS.find((s) => s.id === screen);
+
+  const go = (id) => {
+    setScreen(id);
+    window.scrollTo({ top: 0, behavior: "auto" });
+  };
+
+  return (
+    <div id="top">
+      <style>{css}</style>
+
+      {/* デモ用スイッチャー（実際のサイトには入りません） */}
+      <div className="ss-switch sticky top-0 z-50 text-white">
+        <div className="ss-container py-2.5 flex flex-wrap items-center gap-2">
+          <span className="text-[10px] tracking-[.18em] opacity-60 mr-1">DEMO</span>
+          {SCREENS.map((s) => (
+            <button key={s.id} data-on={screen === s.id ? "1" : "0"} onClick={() => go(s.id)}>
+              {s.label}
+            </button>
+          ))}
+          <span className="hidden xl:block text-[11px] opacity-55 ml-auto">画面を切り替えてご確認いただけます</span>
+        </div>
+      </div>
+      <div className="ss-switch border-t border-white/10 text-white/60">
+        <div className="ss-container pt-1 pb-2.5 text-[11px] leading-relaxed">{current.note}</div>
+      </div>
+
+      {screen === "home" && <TopPage onNav={go} />}
+      {screen === "sub" && <SubPage onNav={go} />}
+      {screen === "patterns" && <PatternsPage />}
+
+      {/* 注記（全画面共通） */}
+      <div style={{ background: "#111a24" }} className="text-white/70">
+        <div className="ss-container py-8">
+          <div className="border-l-4 pl-4" style={{ borderColor: "var(--c-accent)" }}>
+            <div className="text-xs font-bold tracking-widest mb-2" style={{ color: "#d9c48f" }}>本デモについて</div>
+            <p className="text-sm leading-loose">
+              本デモはデザインと構造の確認用です。実装はWordPressテーマとして行い、
+              見出しやリストは投稿画面から選択できるブロックとして登録します。
+            </p>
+            <p className="text-xs leading-loose mt-3 opacity-70">
+              画面上部の切り替えタブは、3画面をまとめてご確認いただくためのもので、実際のサイトには含まれません。
+              掲載している事務所名・料金・実績はすべてサンプルです。
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>

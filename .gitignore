@@ -1,3 +1,6 @@
 out/
 __pycache__/
 *.pyc
+
+# 30万件のサンプルは make_samples.py で生成します（サイズが大きいため置きません）
+demos/hanbai-list/samples/

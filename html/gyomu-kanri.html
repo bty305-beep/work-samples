@@ -1,0 +1,433 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>業務管理システム デモ | 拠点・権限・項目定義を設定で切り替え</title>
+<meta name="description" content="人材管理・在庫管理・設備点検を同じ仕組みで扱う業務管理システムのデモ。マルチテナント構成と権限管理つき。">
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" data-presets="react">
+const { useState, useMemo } = React;
+
+/* ------------------------------------------------------------------
+   業務定義。ここを差し替えるだけで別業務の管理システムになります。
+   実案件では JSON / DB に外出しします。
+------------------------------------------------------------------ */
+const SCHEMAS = {
+  staff: {
+    label: "人材管理",
+    unit: "名",
+    noun: "スタッフ",
+    fields: [
+      { key: "name", label: "氏名", type: "text", required: true, primary: true },
+      { key: "role", label: "職種", type: "select", options: ["調理", "接客", "清掃", "設備", "事務"], required: true },
+      { key: "employment", label: "雇用区分", type: "select", options: ["正社員", "パート", "業務委託"], required: true },
+      { key: "startedOn", label: "着任日", type: "date", required: true },
+      { key: "status", label: "状態", type: "status", options: ["稼働中", "休職", "退職"], required: true },
+      { key: "note", label: "備考", type: "textarea" },
+    ],
+  },
+  stock: {
+    label: "在庫管理",
+    unit: "点",
+    noun: "品目",
+    fields: [
+      { key: "name", label: "品名", type: "text", required: true, primary: true },
+      { key: "category", label: "分類", type: "select", options: ["消耗品", "備品", "食材", "資材"], required: true },
+      { key: "qty", label: "在庫数", type: "number", required: true },
+      { key: "checkedOn", label: "最終棚卸日", type: "date", required: true },
+      { key: "status", label: "状態", type: "status", options: ["適正", "要発注", "欠品"], required: true },
+      { key: "note", label: "備考", type: "textarea" },
+    ],
+  },
+  inspection: {
+    label: "設備点検",
+    unit: "件",
+    noun: "点検記録",
+    fields: [
+      { key: "name", label: "対象設備", type: "text", required: true, primary: true },
+      { key: "kind", label: "点検区分", type: "select", options: ["日常", "月次", "法定"], required: true },
+      { key: "inspector", label: "点検者", type: "text", required: true },
+      { key: "checkedOn", label: "点検日", type: "date", required: true },
+      { key: "status", label: "判定", type: "status", options: ["異常なし", "要観察", "要修理"], required: true },
+      { key: "note", label: "所見", type: "textarea" },
+    ],
+  },
+};
+
+const TENANTS = [
+  { id: "t1", name: "本店", accent: "bg-sky-600" },
+  { id: "t2", name: "北営業所", accent: "bg-emerald-600" },
+  { id: "t3", name: "南工場", accent: "bg-amber-600" },
+];
+
+const ROLES = {
+  admin: { label: "本部管理者", scope: "all", canEdit: true, canDelete: true },
+  manager: { label: "拠点責任者", scope: "own", canEdit: true, canDelete: false },
+  staff: { label: "現場スタッフ", scope: "own", canEdit: false, canDelete: false },
+};
+
+const STATUS_TONE = {
+  稼働中: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+  休職: "bg-amber-50 text-amber-700 ring-amber-200",
+  退職: "bg-slate-100 text-slate-500 ring-slate-200",
+  適正: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+  要発注: "bg-amber-50 text-amber-700 ring-amber-200",
+  欠品: "bg-rose-50 text-rose-700 ring-rose-200",
+  異常なし: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+  要観察: "bg-amber-50 text-amber-700 ring-amber-200",
+  要修理: "bg-rose-50 text-rose-700 ring-rose-200",
+};
+
+const SEED = {
+  staff: [
+    { id: 1, tenantId: "t1", name: "佐藤 玲奈", role: "接客", employment: "正社員", startedOn: "2023-04-01", status: "稼働中", note: "" },
+    { id: 2, tenantId: "t1", name: "大槻 亮", role: "調理", employment: "パート", startedOn: "2024-09-15", status: "稼働中", note: "土日のみ" },
+    { id: 3, tenantId: "t2", name: "峰岸 千秋", role: "事務", employment: "正社員", startedOn: "2022-06-01", status: "休職", note: "10月復帰予定" },
+    { id: 4, tenantId: "t3", name: "由良 敬介", role: "設備", employment: "業務委託", startedOn: "2025-02-10", status: "稼働中", note: "" },
+    { id: 5, tenantId: "t3", name: "谷 真悠子", role: "清掃", employment: "パート", startedOn: "2021-11-05", status: "退職", note: "" },
+  ],
+  stock: [
+    { id: 1, tenantId: "t1", name: "ペーパータオル 200枚", category: "消耗品", qty: 48, checkedOn: "2026-08-10", status: "適正", note: "" },
+    { id: 2, tenantId: "t1", name: "業務用洗剤 5L", category: "消耗品", qty: 3, checkedOn: "2026-08-10", status: "要発注", note: "発注済 8/12" },
+    { id: 3, tenantId: "t2", name: "ラベルプリンタ用紙", category: "備品", qty: 0, checkedOn: "2026-08-08", status: "欠品", note: "" },
+    { id: 4, tenantId: "t3", name: "軍手 Lサイズ", category: "資材", qty: 120, checkedOn: "2026-08-11", status: "適正", note: "" },
+  ],
+  inspection: [
+    { id: 1, tenantId: "t1", name: "空調設備 1F", kind: "月次", inspector: "由良", checkedOn: "2026-08-01", status: "異常なし", note: "" },
+    { id: 2, tenantId: "t2", name: "非常用発電機", kind: "法定", inspector: "峰岸", checkedOn: "2026-07-20", status: "要観察", note: "始動音にばらつき" },
+    { id: 3, tenantId: "t3", name: "コンベア B系統", kind: "日常", inspector: "由良", checkedOn: "2026-08-14", status: "要修理", note: "ベルト片減り。部品手配中" },
+    { id: 4, tenantId: "t3", name: "フォークリフト 2号機", kind: "日常", inspector: "谷", checkedOn: "2026-08-14", status: "異常なし", note: "" },
+  ],
+};
+
+const blankRecord = (fields) =>
+  fields.reduce((acc, f) => ({ ...acc, [f.key]: f.type === "number" ? "" : f.type === "status" || f.type === "select" ? f.options[0] : "" }), {});
+
+function App() {
+  const [schemaKey, setSchemaKey] = useState("staff");
+  const [roleKey, setRoleKey] = useState("admin");
+  const [viewTenant, setViewTenant] = useState("t1");
+  const [data, setData] = useState(SEED);
+  const [query, setQuery] = useState("");
+  const [editing, setEditing] = useState(null);
+
+  const schema = SCHEMAS[schemaKey];
+  const role = ROLES[roleKey];
+  const rows = data[schemaKey];
+
+  const visible = useMemo(() => {
+    const scoped = role.scope === "all" ? rows : rows.filter((r) => r.tenantId === viewTenant);
+    if (!query.trim()) return scoped;
+    const q = query.trim().toLowerCase();
+    return scoped.filter((r) =>
+      schema.fields.some((f) => String(r[f.key] ?? "").toLowerCase().includes(q))
+    );
+  }, [rows, role.scope, viewTenant, query, schema.fields]);
+
+  const tenantOf = (id) => TENANTS.find((t) => t.id === id);
+
+  const exportCsv = () => {
+    const header = ["拠点", ...schema.fields.map((f) => f.label)];
+    const body = visible.map((r) => [tenantOf(r.tenantId).name, ...schema.fields.map((f) => r[f.key] ?? "")]);
+    const csv = [header, ...body]
+      .map((line) => line.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(","))
+      .join("\r\n");
+    const url = URL.createObjectURL(new Blob(["\uFEFF" + csv], { type: "text/csv" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${schema.label}_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const save = (record) => {
+    setData((prev) => {
+      const list = prev[schemaKey];
+      const next = record.id
+        ? list.map((r) => (r.id === record.id ? record : r))
+        : [...list, { ...record, id: Math.max(0, ...list.map((r) => r.id)) + 1 }];
+      return { ...prev, [schemaKey]: next };
+    });
+    setEditing(null);
+  };
+
+  const remove = (id) => {
+    setData((prev) => ({ ...prev, [schemaKey]: prev[schemaKey].filter((r) => r.id !== id) }));
+    setEditing(null);
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-50 text-slate-900">
+      {/* 常時表示：いま誰として、どの拠点を見ているか */}
+      <div className="sticky top-0 z-20 border-b border-slate-200 bg-white">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-3 px-4 py-3">
+          <div className="flex items-baseline gap-2">
+            <span className="text-sm font-semibold tracking-tight">現場管理システム</span>
+            <span className="text-xs text-slate-400">デモ</span>
+          </div>
+
+          <label className="flex items-center gap-2 text-xs text-slate-500">
+            業務
+            <select
+              value={schemaKey}
+              onChange={(e) => { setSchemaKey(e.target.value); setQuery(""); }}
+              className="rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-900"
+            >
+              {Object.entries(SCHEMAS).map(([k, s]) => (
+                <option key={k} value={k}>{s.label}</option>
+              ))}
+            </select>
+          </label>
+
+          <label className="flex items-center gap-2 text-xs text-slate-500">
+            権限
+            <select
+              value={roleKey}
+              onChange={(e) => setRoleKey(e.target.value)}
+              className="rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-900"
+            >
+              {Object.entries(ROLES).map(([k, r]) => (
+                <option key={k} value={k}>{r.label}</option>
+              ))}
+            </select>
+          </label>
+
+          <label className="flex items-center gap-2 text-xs text-slate-500">
+            所属拠点
+            <select
+              value={viewTenant}
+              onChange={(e) => setViewTenant(e.target.value)}
+              className="rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-900"
+            >
+              {TENANTS.map((t) => (
+                <option key={t.id} value={t.id}>{t.name}</option>
+              ))}
+            </select>
+          </label>
+
+          <span className="ml-auto text-xs text-slate-500">
+            {role.scope === "all" ? "全拠点を横断表示" : `${tenantOf(viewTenant).name}のみ表示`}
+          </span>
+        </div>
+      </div>
+
+      <main className="mx-auto max-w-6xl px-4 py-6">
+        <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h1 className="text-xl font-semibold tracking-tight">{schema.label}</h1>
+            <p className="mt-1 text-sm text-slate-500">
+              {visible.length}
+              {schema.unit}を表示中
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={`${schema.noun}を検索`}
+              className="w-44 rounded border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-900"
+            />
+            <button
+              onClick={exportCsv}
+              className="rounded border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-100"
+            >
+              CSVで書き出す
+            </button>
+            {role.canEdit && (
+              <button
+                onClick={() => setEditing({ ...blankRecord(schema.fields), tenantId: viewTenant })}
+                className="rounded bg-slate-900 px-3 py-2 text-sm text-white hover:bg-slate-700"
+              >
+                {schema.noun}を追加
+              </button>
+            )}
+          </div>
+        </div>
+
+        {visible.length === 0 ? (
+          <div className="rounded border border-dashed border-slate-300 bg-white px-6 py-16 text-center">
+            <p className="text-sm text-slate-600">条件に合う{schema.noun}がありません。</p>
+            <p className="mt-1 text-sm text-slate-400">検索語を消すか、拠点を切り替えてください。</p>
+          </div>
+        ) : (
+          <div className="overflow-hidden rounded border border-slate-200 bg-white">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="px-4 py-3 font-medium">拠点</th>
+                  {schema.fields
+                    .filter((f) => f.type !== "textarea")
+                    .map((f) => (
+                      <th key={f.key} className="px-4 py-3 font-medium">{f.label}</th>
+                    ))}
+                  <th className="px-4 py-3" />
+                </tr>
+              </thead>
+              <tbody>
+                {visible.map((r) => (
+                  <tr key={r.id} className="border-t border-slate-100 hover:bg-slate-50">
+                    <td className="px-4 py-3">
+                      <span className="flex items-center gap-2">
+                        <span className={`h-3 w-1 rounded-full ${tenantOf(r.tenantId).accent}`} />
+                        <span className="text-slate-600">{tenantOf(r.tenantId).name}</span>
+                      </span>
+                    </td>
+                    {schema.fields
+                      .filter((f) => f.type !== "textarea")
+                      .map((f) => (
+                        <td key={f.key} className="px-4 py-3">
+                          {f.type === "status" ? (
+                            <span className={`inline-flex rounded-full px-2 py-0.5 text-xs ring-1 ${STATUS_TONE[r[f.key]] ?? "bg-slate-100 text-slate-600 ring-slate-200"}`}>
+                              {r[f.key]}
+                            </span>
+                          ) : f.type === "number" ? (
+                            <span className="font-mono tabular-nums">{r[f.key]}</span>
+                          ) : f.type === "date" ? (
+                            <span className="font-mono text-slate-600">{r[f.key]}</span>
+                          ) : f.primary ? (
+                            <span className="font-medium">{r[f.key]}</span>
+                          ) : (
+                            <span className="text-slate-600">{r[f.key]}</span>
+                          )}
+                        </td>
+                      ))}
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        onClick={() => setEditing(r)}
+                        className="text-xs text-slate-500 underline underline-offset-4 hover:text-slate-900"
+                      >
+                        {role.canEdit ? "編集" : "詳細"}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <p className="mt-6 text-xs leading-relaxed text-slate-400">
+          項目定義を差し替えるだけで別業務の管理システムになります。上部の「業務」を切り替えると、
+          同じ画面が人材管理・在庫管理・設備点検に変わります。実案件ではここをデータベース側に持たせ、
+          拠点ごとのデータ分離と権限制御をサーバー側で担保します。
+        </p>
+      </main>
+
+      {editing && (
+        <RecordForm
+          schema={schema}
+          record={editing}
+          readOnly={!role.canEdit}
+          canDelete={role.canDelete && Boolean(editing.id)}
+          tenantLocked={role.scope !== "all"}
+          onCancel={() => setEditing(null)}
+          onSave={save}
+          onDelete={() => remove(editing.id)}
+        />
+      )}
+    </div>
+  );
+}
+
+function RecordForm({ schema, record, readOnly, canDelete, tenantLocked, onCancel, onSave, onDelete }) {
+  const [draft, setDraft] = useState(record);
+  const [touched, setTouched] = useState(false);
+
+  const missing = schema.fields.filter((f) => f.required && !String(draft[f.key] ?? "").trim());
+
+  const set = (key, value) => setDraft((d) => ({ ...d, [key]: value }));
+
+  const submit = () => {
+    setTouched(true);
+    if (missing.length > 0) return;
+    onSave(draft);
+  };
+
+  return (
+    <div className="fixed inset-0 z-30 flex items-end justify-center bg-slate-900/40 p-0 sm:items-center sm:p-6">
+      <div className="max-h-full w-full max-w-lg overflow-y-auto rounded-t-lg bg-white sm:rounded-lg">
+        <div className="sticky top-0 flex items-center justify-between border-b border-slate-200 bg-white px-5 py-4">
+          <h2 className="text-sm font-semibold">
+            {record.id ? `${schema.noun}の${readOnly ? "詳細" : "編集"}` : `${schema.noun}を追加`}
+          </h2>
+          <button onClick={onCancel} className="text-sm text-slate-500 hover:text-slate-900">閉じる</button>
+        </div>
+
+        <div className="space-y-4 px-5 py-5">
+          <div>
+            <label className="mb-1 block text-xs text-slate-500">拠点</label>
+            <select
+              value={draft.tenantId}
+              disabled={readOnly || tenantLocked}
+              onChange={(e) => set("tenantId", e.target.value)}
+              className="w-full rounded border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-50 disabled:text-slate-500"
+            >
+              {TENANTS.map((t) => (
+                <option key={t.id} value={t.id}>{t.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {schema.fields.map((f) => {
+            const isMissing = touched && f.required && !String(draft[f.key] ?? "").trim();
+            const base = `w-full rounded border px-3 py-2 text-sm disabled:bg-slate-50 disabled:text-slate-500 ${isMissing ? "border-rose-400" : "border-slate-300"}`;
+            return (
+              <div key={f.key}>
+                <label className="mb-1 block text-xs text-slate-500">
+                  {f.label}
+                  {f.required && <span className="ml-1 text-rose-500">必須</span>}
+                </label>
+                {f.type === "select" || f.type === "status" ? (
+                  <select value={draft[f.key]} disabled={readOnly} onChange={(e) => set(f.key, e.target.value)} className={base}>
+                    {f.options.map((o) => (
+                      <option key={o} value={o}>{o}</option>
+                    ))}
+                  </select>
+                ) : f.type === "textarea" ? (
+                  <textarea rows={3} value={draft[f.key] ?? ""} disabled={readOnly} onChange={(e) => set(f.key, e.target.value)} className={base} />
+                ) : (
+                  <input
+                    type={f.type === "number" ? "number" : f.type === "date" ? "date" : "text"}
+                    value={draft[f.key] ?? ""}
+                    disabled={readOnly}
+                    onChange={(e) => set(f.key, e.target.value)}
+                    className={base}
+                  />
+                )}
+                {isMissing && <p className="mt-1 text-xs text-rose-600">{f.label}を入力してください。</p>}
+              </div>
+            );
+          })}
+        </div>
+
+        {!readOnly && (
+          <div className="sticky bottom-0 flex items-center gap-2 border-t border-slate-200 bg-white px-5 py-4">
+            <button onClick={submit} className="rounded bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-700">
+              保存する
+            </button>
+            <button onClick={onCancel} className="rounded border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">
+              やめる
+            </button>
+            {canDelete && (
+              <button onClick={onDelete} className="ml-auto text-sm text-rose-600 underline underline-offset-4">
+                削除する
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>

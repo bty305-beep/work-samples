@@ -1,0 +1,1031 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>出店者管理システム デモ | 出展者マイページと主催者の管理画面</title>
+<meta name="description" content="イベント出店者を管理するウェブアプリのデモ。出展者は次回出店日・出店ステータス・支払い・出店申請を1画面で確認でき、主催者は一覧・一括承認・未入金の絞り込み・CSV出力を行えます。">
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body>
+<div id="root"></div>
+<script>Babel.registerPreset("react-classic", { presets: [[Babel.availablePresets["react"], { runtime: "classic" }]] });</script>
+<script type="text/babel" data-presets="react-classic">
+const { useState, useMemo } = React;
+
+/* ==================================================================
+   イベント定義。ここを差し替えるだけで別イベントに対応できます。
+   出店区分・プラン・オプション・ステータス・料金は、
+   すべてこのブロックだけで完結させています。
+   実案件では JSON / DB に外出しし、主催者が画面から編集できる形にします。
+================================================================== */
+
+const EVENT = {
+  name: "みなと河岸マルシェ",
+  organizer: "みなと河岸マルシェ実行委員会",
+  venue: "みなと河岸公園 中央広場",
+  taxRate: 0.1,
+  paymentDueDays: 10, // 出店日の何日前を支払期限にするか
+  bank: {
+    name: "みなと信用金庫 河岸支店",
+    type: "普通",
+    number: "1234567",
+    holder: "ミナトカシマルシエジツコウイインカイ",
+  },
+  // 開催回。過去回も残しておくと、支払履歴と実績がそのまま残ります。
+  sessions: [
+    { id: "s0627", date: "2026-06-27", open: "10:00", close: "16:00", setupFrom: "08:30", teardownBy: "17:00" },
+    { id: "s0725", date: "2026-07-25", open: "10:00", close: "16:00", setupFrom: "08:30", teardownBy: "17:00" },
+    { id: "s0829", date: "2026-08-29", open: "10:00", close: "16:00", setupFrom: "08:30", teardownBy: "17:00" },
+    { id: "s0926", date: "2026-09-26", open: "11:00", close: "17:00", setupFrom: "09:30", teardownBy: "18:00" },
+  ],
+};
+
+// 出店区分。基本料はここで持ちます。
+const BOOTH_TYPES = [
+  { id: "cook", label: "飲食（調理あり）", baseFee: 15000, note: "保健所の臨時営業許可証と火気使用届の提出が必要です。" },
+  { id: "pack", label: "飲食（包装済み）", baseFee: 12000, note: "表示ラベルの写真を申請時に添付してください。" },
+  { id: "craft", label: "物販・クラフト", baseFee: 9000, note: "" },
+  { id: "workshop", label: "ワークショップ", baseFee: 8000, note: "所要時間と定員を備考にご記入ください。" },
+  { id: "car", label: "キッチンカー", baseFee: 20000, note: "車両の全長・全幅を備考にご記入ください。" },
+];
+
+// プラン（区画）。基本料への加算で持たせています。
+const PLANS = [
+  { id: "half", label: "ハーフ区画", size: "1.5m × 1.5m", addFee: 0, note: "長机1台分の広さです。" },
+  { id: "std", label: "スタンダード区画", size: "3.0m × 1.5m", addFee: 4000, note: "" },
+  { id: "wide", label: "ワイド区画", size: "4.5m × 2.0m", addFee: 9000, note: "角地の指定ができます。" },
+];
+
+// 有料オプション。
+const OPTIONS = [
+  { id: "power", label: "電源（〜1500W）", fee: 3000 },
+  { id: "tent", label: "テント貸出（2.0m角）", fee: 5000 },
+  { id: "table", label: "長机・イスセット", fee: 2000 },
+  { id: "invehicle", label: "車両乗り入れ（搬入時のみ）", fee: 1000 },
+];
+
+// 出店ステータス。step は進捗バーの並び順です。
+const STATUSES = {
+  applied: { label: "申請中", step: 1, tone: "bg-neutral-100 text-neutral-700 ring-neutral-300", desc: "申請を受け付けました。事務局の確認をお待ちください。" },
+  review: { label: "審査中", step: 2, tone: "bg-amber-50 text-amber-800 ring-amber-300", desc: "事務局が内容を確認しています。追加書類をお願いする場合があります。" },
+  fixed: { label: "確定", step: 3, tone: "bg-violet-100 text-violet-800 ring-violet-300", desc: "出店が確定しました。期限までに出店料をお支払いください。" },
+  done: { label: "出店済み", step: 4, tone: "bg-neutral-200 text-neutral-700 ring-neutral-400", desc: "ご出店ありがとうございました。" },
+  canceled: { label: "キャンセル", step: 0, tone: "bg-rose-50 text-rose-700 ring-rose-200", desc: "この回はキャンセル済みです。" },
+};
+const STATUS_FLOW = ["applied", "review", "fixed", "done"];
+
+// 入金状況。
+const PAY_STATUSES = {
+  none: { label: "未請求", tone: "bg-neutral-100 text-neutral-600 ring-neutral-300" },
+  unpaid: { label: "未払い", tone: "bg-rose-100 text-rose-700 ring-rose-300" },
+  reported: { label: "振込確認中", tone: "bg-amber-50 text-amber-800 ring-amber-300" },
+  paid: { label: "入金済み", tone: "bg-teal-50 text-teal-800 ring-teal-300" },
+};
+
+/* ------------------------------------------------------------------
+   ここから下はイベントに依存しない共通処理です。
+------------------------------------------------------------------ */
+
+const WEEK = ["日", "月", "火", "水", "木", "金", "土"];
+const toDate = (s) => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
+const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const addDays = (s, n) => { const d = toDate(s); d.setDate(d.getDate() + n); return iso(d); };
+const diffDays = (from, to) => Math.round((toDate(to) - toDate(from)) / 86400000);
+const fmtMd = (s) => { const d = toDate(s); return `${d.getMonth() + 1}月${d.getDate()}日(${WEEK[d.getDay()]})`; };
+const fmtYmd = (s) => { const d = toDate(s); return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`; };
+const yen = (n) => `¥${n.toLocaleString("ja-JP")}`;
+const TODAY = iso(new Date());
+
+const boothOf = (id) => BOOTH_TYPES.find((b) => b.id === id);
+const planOf = (id) => PLANS.find((p) => p.id === id);
+const sessionOf = (id) => EVENT.sessions.find((s) => s.id === id);
+const optionLabels = (ids) => (ids || []).map((id) => OPTIONS.find((o) => o.id === id)?.label).filter(Boolean);
+
+// 料金は保存せず、設定から毎回計算します。単価を直せば全画面に反映されます。
+const calcFee = (entry) => {
+  const base = boothOf(entry.boothTypeId)?.baseFee ?? 0;
+  const plan = planOf(entry.planId)?.addFee ?? 0;
+  const opt = (entry.optionIds || []).reduce((sum, id) => sum + (OPTIONS.find((o) => o.id === id)?.fee ?? 0), 0);
+  const sub = base + plan + opt;
+  const tax = Math.round(sub * EVENT.taxRate);
+  return { base, plan, opt, sub, tax, total: sub + tax };
+};
+
+const dueDateOf = (sessionId) => addDays(sessionOf(sessionId).date, -EVENT.paymentDueDays);
+
+/* ------------------------------------------------------------------
+   ダミーデータ。出展者6件、うち未入金2件・審査中1件。
+------------------------------------------------------------------ */
+
+const EXHIBITORS = [
+  { id: "e1", name: "焙煎所コハク", person: "小早川 彩", tel: "090-1234-0001", since: "2024-05" },
+  { id: "e2", name: "ベーカリー穂積", person: "穂積 剛", tel: "090-1234-0002", since: "2025-03" },
+  { id: "e3", name: "木工舎トネリコ", person: "刀根 亮介", tel: "090-1234-0003", since: "2023-11" },
+  { id: "e4", name: "タコスワゴン海路", person: "海路 千夏", tel: "090-1234-0004", since: "2026-06" },
+  { id: "e5", name: "手しごとアトリエ結", person: "結城 みなみ", tel: "090-1234-0005", since: "2025-09" },
+  { id: "e6", name: "農園ひなたぼっこ", person: "日向 慎一", tel: "090-1234-0006", since: "2026-08" },
+];
+
+const SEED_ENTRIES = [
+  // 次回（8/29）— 未入金2件（e1・e3）、審査中1件（e4）
+  { id: 101, exhibitorId: "e1", sessionId: "s0829", boothTypeId: "cook", planId: "std", optionIds: ["power"], boothNo: "A-04", goods: "自家焙煎コーヒー、焼き菓子", status: "fixed",
+    pay: { status: "unpaid", invoiceNo: "INV-2026-0829-001", issuedOn: "2026-08-05" } },
+  { id: 102, exhibitorId: "e2", sessionId: "s0829", boothTypeId: "pack", planId: "std", optionIds: ["tent"], boothNo: "A-05", goods: "食パン、スコーン", status: "fixed",
+    pay: { status: "paid", invoiceNo: "INV-2026-0829-002", issuedOn: "2026-08-05", paidOn: "2026-08-08", method: "オンライン決済", receiptNo: "RCT-2026-0829-002" } },
+  { id: 103, exhibitorId: "e3", sessionId: "s0829", boothTypeId: "craft", planId: "wide", optionIds: ["power", "table"], boothNo: "B-01", goods: "木製カトラリー、まな板", status: "fixed",
+    pay: { status: "unpaid", invoiceNo: "INV-2026-0829-003", issuedOn: "2026-08-05" } },
+  { id: 104, exhibitorId: "e4", sessionId: "s0829", boothTypeId: "car", planId: "wide", optionIds: ["invehicle"], boothNo: "—", goods: "タコス、ドリンク", status: "review",
+    pay: { status: "none" }, note: "車両 全長4.8m / 全幅1.9m" },
+  { id: 105, exhibitorId: "e5", sessionId: "s0829", boothTypeId: "workshop", planId: "half", optionIds: ["table"], boothNo: "C-02", goods: "刺し子コースター作り（40分・定員6名）", status: "fixed",
+    pay: { status: "reported", invoiceNo: "INV-2026-0829-005", issuedOn: "2026-08-05", report: { date: "2026-08-14", name: "ユウキ ミナミ", amount: 11000 } } },
+  { id: 106, exhibitorId: "e6", sessionId: "s0829", boothTypeId: "craft", planId: "std", optionIds: [], boothNo: "—", goods: "季節野菜、自家製ジャム", status: "applied",
+    pay: { status: "none" } },
+
+  // 過去回。支払履歴と実績はここに残ります。
+  { id: 91, exhibitorId: "e1", sessionId: "s0725", boothTypeId: "cook", planId: "std", optionIds: ["power"], boothNo: "A-04", goods: "自家焙煎コーヒー", status: "done",
+    pay: { status: "paid", invoiceNo: "INV-2026-0725-001", issuedOn: "2026-07-01", paidOn: "2026-07-10", method: "銀行振込", receiptNo: "RCT-2026-0725-001" } },
+  { id: 92, exhibitorId: "e2", sessionId: "s0725", boothTypeId: "pack", planId: "half", optionIds: [], boothNo: "A-07", goods: "食パン", status: "done",
+    pay: { status: "paid", invoiceNo: "INV-2026-0725-002", issuedOn: "2026-07-01", paidOn: "2026-07-09", method: "オンライン決済", receiptNo: "RCT-2026-0725-002" } },
+  { id: 93, exhibitorId: "e3", sessionId: "s0725", boothTypeId: "craft", planId: "std", optionIds: ["table"], boothNo: "B-03", goods: "木製カトラリー", status: "done",
+    pay: { status: "paid", invoiceNo: "INV-2026-0725-003", issuedOn: "2026-07-01", paidOn: "2026-07-12", method: "銀行振込", receiptNo: "RCT-2026-0725-003" } },
+  { id: 94, exhibitorId: "e5", sessionId: "s0725", boothTypeId: "workshop", planId: "half", optionIds: [], boothNo: "—", goods: "刺し子ワークショップ", status: "canceled",
+    pay: { status: "none" }, note: "台風接近のため出展者都合でキャンセル" },
+  { id: 81, exhibitorId: "e1", sessionId: "s0627", boothTypeId: "cook", planId: "half", optionIds: ["power"], boothNo: "A-11", goods: "自家焙煎コーヒー", status: "done",
+    pay: { status: "paid", invoiceNo: "INV-2026-0627-001", issuedOn: "2026-06-03", paidOn: "2026-06-11", method: "銀行振込", receiptNo: "RCT-2026-0627-001" } },
+];
+
+/* ------------------------------------------------------------------
+   共通パーツ
+------------------------------------------------------------------ */
+
+const Badge = ({ tone, children }) => (
+  <span className={`inline-flex shrink-0 items-center whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${tone}`}>{children}</span>
+);
+
+const StatusBadge = ({ status }) => <Badge tone={STATUSES[status].tone}>{STATUSES[status].label}</Badge>;
+const PayBadge = ({ status }) => <Badge tone={PAY_STATUSES[status].tone}>{PAY_STATUSES[status].label}</Badge>;
+
+const Card = ({ title, right, children, className = "" }) => (
+  <section className={`rounded-lg border border-neutral-200 bg-white ${className}`}>
+    {title && (
+      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-neutral-200 px-4 py-2.5">
+        <h2 className="text-sm font-semibold tracking-tight text-neutral-900">{title}</h2>
+        {right}
+      </header>
+    )}
+    <div className="px-4 py-3">{children}</div>
+  </section>
+);
+
+// サーバー側で処理する箇所は、画面上で明示します。
+const ServerNote = ({ children }) => (
+  <p className="mt-2 flex gap-1.5 text-xs leading-relaxed text-neutral-500">
+    <span className="mt-px shrink-0 rounded bg-neutral-100 px-1 font-medium text-neutral-600">実装</span>
+    <span>{children}</span>
+  </p>
+);
+
+const Modal = ({ title, onClose, children }) => (
+  <div className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-neutral-900/50 p-4 sm:items-center">
+    <div className="w-full max-w-lg rounded-lg border border-neutral-200 bg-white shadow-xl">
+      <header className="flex items-center justify-between border-b border-neutral-200 px-4 py-3">
+        <h3 className="text-sm font-semibold">{title}</h3>
+        <button onClick={onClose} className="rounded px-2 py-1 text-sm text-neutral-500 hover:bg-neutral-100">閉じる</button>
+      </header>
+      <div className="px-4 py-4">{children}</div>
+    </div>
+  </div>
+);
+
+const Field = ({ label, hint, children }) => (
+  <label className="block">
+    <span className="mb-1 block text-xs font-medium text-neutral-600">{label}</span>
+    {children}
+    {hint && <span className="mt-1 block text-xs text-neutral-500">{hint}</span>}
+  </label>
+);
+
+const inputCls = "w-full rounded border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-violet-600";
+const btnPrimary = "rounded bg-violet-700 px-3 py-2 text-sm font-medium text-white hover:bg-violet-800 disabled:bg-neutral-300";
+const btnGhost = "rounded border border-neutral-300 bg-white px-3 py-2 text-sm hover:bg-neutral-100 disabled:text-neutral-400";
+const btnSmall = "rounded border border-neutral-300 bg-white px-2 py-1 text-xs whitespace-nowrap hover:bg-neutral-100 disabled:border-neutral-200 disabled:text-neutral-400";
+const btnSmallOn = "rounded border border-violet-700 bg-violet-700 px-2 py-1 text-xs font-medium whitespace-nowrap text-white hover:bg-violet-800 disabled:border-neutral-200 disabled:bg-neutral-200 disabled:text-neutral-400";
+const btnBulk = "rounded border border-neutral-300 bg-white px-3 py-1.5 text-xs whitespace-nowrap hover:bg-neutral-100 disabled:border-neutral-200 disabled:text-neutral-400";
+const btnBulkOn = "rounded border border-violet-700 bg-violet-700 px-3 py-1.5 text-xs font-medium whitespace-nowrap text-white hover:bg-violet-800 disabled:border-neutral-200 disabled:bg-neutral-200 disabled:text-neutral-400";
+
+/* ------------------------------------------------------------------
+   出展者マイページ
+------------------------------------------------------------------ */
+
+function MyPage({ exhibitor, entries, actions, toast }) {
+  const [modal, setModal] = useState(null); // { kind: "transfer" | "pay", entryId }
+
+  const mine = useMemo(
+    () => entries.filter((e) => e.exhibitorId === exhibitor.id)
+      .slice()
+      .sort((a, b) => sessionOf(b.sessionId).date.localeCompare(sessionOf(a.sessionId).date)),
+    [entries, exhibitor.id]
+  );
+
+  // 次回出店：今日以降の開催回のうち、キャンセル以外でいちばん近いもの
+  const upcoming = mine
+    .filter((e) => e.status !== "canceled" && sessionOf(e.sessionId).date >= TODAY)
+    .sort((a, b) => sessionOf(a.sessionId).date.localeCompare(sessionOf(b.sessionId).date))[0];
+
+  const billed = mine.filter((e) => e.pay.status !== "none");
+  const unpaid = mine.filter((e) => e.pay.status === "unpaid");
+  const paid = mine.filter((e) => e.pay.status === "paid");
+  const unpaidTotal = unpaid.reduce((sum, e) => sum + calcFee(e).total, 0);
+  const nearestDue = unpaid.map((e) => dueDateOf(e.sessionId)).sort()[0];
+  const dueIn = nearestDue ? diffDays(TODAY, nearestDue) : null;
+
+  const target = modal ? mine.find((e) => e.id === modal.entryId) : null;
+
+  return (
+    <div className="mx-auto max-w-6xl px-4 py-5">
+      {/* 次回出店日と時間。最上部に大きく置きます。 */}
+      <section className="overflow-hidden rounded-lg border border-violet-900 bg-violet-950 text-violet-50">
+        {upcoming ? (
+          <div className="flex flex-wrap items-stretch">
+            <div className="flex-1 px-5 py-4">
+              <p className="text-xs tracking-wide text-violet-300">次回の出店</p>
+              <p className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                <span className="text-3xl font-bold tracking-tight sm:text-4xl">{fmtMd(sessionOf(upcoming.sessionId).date)}</span>
+                <span className="text-2xl font-semibold tabular-nums sm:text-3xl">
+                  {sessionOf(upcoming.sessionId).open}–{sessionOf(upcoming.sessionId).close}
+                </span>
+                {diffDays(TODAY, sessionOf(upcoming.sessionId).date) >= 0 && (
+                  <span className="rounded bg-violet-800 px-2 py-0.5 text-xs text-violet-100">
+                    あと{diffDays(TODAY, sessionOf(upcoming.sessionId).date)}日
+                  </span>
+                )}
+              </p>
+              <dl className="mt-3 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
+                <div className="flex gap-2"><dt className="w-16 shrink-0 text-violet-300">搬入</dt><dd>{sessionOf(upcoming.sessionId).setupFrom} 開始</dd></div>
+                <div className="flex gap-2"><dt className="w-16 shrink-0 text-violet-300">撤収</dt><dd>{sessionOf(upcoming.sessionId).teardownBy} まで</dd></div>
+                <div className="flex gap-2"><dt className="w-16 shrink-0 text-violet-300">会場</dt><dd>{EVENT.venue}</dd></div>
+                <div className="flex gap-2"><dt className="w-16 shrink-0 text-violet-300">区画番号</dt><dd className="tabular-nums">{upcoming.boothNo}</dd></div>
+              </dl>
+            </div>
+            <div className="flex w-full flex-col justify-center gap-2 border-t border-violet-900 bg-violet-900/40 px-5 py-4 sm:w-64 sm:border-l sm:border-t-0">
+              <p className="text-xs text-violet-300">出店ステータス</p>
+              <p><StatusBadge status={upcoming.status} /></p>
+              <p className="text-xs leading-relaxed text-violet-200">{STATUSES[upcoming.status].desc}</p>
+              <p className="mt-1 text-xs text-violet-300">
+                {boothOf(upcoming.boothTypeId).label} ／ {planOf(upcoming.planId).label}
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="px-5 py-6">
+            <p className="text-lg font-semibold">予定されている出店はありません</p>
+            <p className="mt-1 text-sm text-violet-200">下の「出店を申請する」から、次回以降の開催回にお申し込みください。</p>
+          </div>
+        )}
+      </section>
+
+      {/* 未払いアラート */}
+      {unpaid.length > 0 && (
+        <section className="mt-4 rounded-lg border-2 border-rose-500 bg-rose-50 px-4 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="flex items-center gap-2 text-sm font-bold text-rose-800">
+                <span className="rounded bg-rose-600 px-1.5 py-0.5 text-xs text-white">未払い</span>
+                お支払いが {unpaid.length}件 残っています（合計 {yen(unpaidTotal)}）
+              </p>
+              <p className="mt-1 text-sm text-rose-700">
+                直近のお支払い期限は {fmtYmd(nearestDue)}
+                {dueIn >= 0 ? `（あと${dueIn}日）` : `（${-dueIn}日超過）`}です。
+                期限を過ぎると出店確定が取り消しになる場合があります。
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <button className={btnPrimary} onClick={() => setModal({ kind: "pay", entryId: unpaid[0].id })}>オンラインで支払う</button>
+              <button className={btnGhost} onClick={() => setModal({ kind: "transfer", entryId: unpaid[0].id })}>銀行振込を報告する</button>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* 進捗ステップ */}
+      {upcoming && upcoming.status !== "canceled" && (
+        <div className="mt-4 flex flex-wrap gap-1.5">
+          {STATUS_FLOW.map((key) => {
+            const cur = STATUSES[upcoming.status].step;
+            const s = STATUSES[key];
+            const state = s.step < cur ? "done" : s.step === cur ? "now" : "todo";
+            return (
+              <div key={key} className={`flex-1 rounded border px-3 py-2 text-xs ${
+                state === "now" ? "border-violet-600 bg-violet-50 font-semibold text-violet-800"
+                : state === "done" ? "border-neutral-300 bg-neutral-100 text-neutral-500"
+                : "border-dashed border-neutral-300 bg-white text-neutral-400"}`}>
+                <span className="tabular-nums">{s.step}. </span>{s.label}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <div className="mt-4 grid gap-4 lg:grid-cols-3">
+        {/* 支払い管理 */}
+        <div className="space-y-4 lg:col-span-2">
+          <Card title="請求と支払い">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead className="border-b border-neutral-200 text-xs text-neutral-500">
+                  <tr>
+                    <th className="py-2 pr-3 font-medium">請求番号</th>
+                    <th className="py-2 pr-3 font-medium">対象回</th>
+                    <th className="py-2 pr-3 font-medium">支払期限</th>
+                    <th className="py-2 pr-3 text-right font-medium">金額（税込）</th>
+                    <th className="py-2 pr-3 font-medium">状態</th>
+                    <th className="py-2 font-medium">操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {billed.length === 0 && (
+                    <tr><td colSpan="6" className="py-6 text-center text-sm text-neutral-500">請求はまだありません。出店が確定すると請求書が発行されます。</td></tr>
+                  )}
+                  {billed.map((e) => {
+                    const fee = calcFee(e);
+                    const due = dueDateOf(e.sessionId);
+                    const over = e.pay.status === "unpaid" && diffDays(TODAY, due) < 0;
+                    return (
+                      <tr key={e.id} className={`border-b border-neutral-100 align-middle ${e.pay.status === "unpaid" ? "bg-rose-50/60" : ""}`}>
+                        <td className="py-2.5 pr-3 font-mono text-xs">{e.pay.invoiceNo}</td>
+                        <td className="py-2.5 pr-3 whitespace-nowrap">{fmtMd(sessionOf(e.sessionId).date)}</td>
+                        <td className={`py-2.5 pr-3 whitespace-nowrap tabular-nums ${over ? "font-semibold text-rose-700" : ""}`}>
+                          {fmtYmd(due)}{over && "（超過）"}
+                        </td>
+                        <td className="py-2.5 pr-3 text-right tabular-nums">{yen(fee.total)}</td>
+                        <td className="py-2.5 pr-3"><PayBadge status={e.pay.status} /></td>
+                        <td className="py-2.5">
+                          <div className="flex flex-wrap gap-1.5">
+                            <button className={btnSmall} onClick={() => actions.downloadInvoice(e)}>請求書PDF</button>
+                            {e.pay.status === "unpaid" && (
+                              <React.Fragment>
+                                <button className={btnSmallOn} onClick={() => setModal({ kind: "pay", entryId: e.id })}>決済</button>
+                                <button className={btnSmall} onClick={() => setModal({ kind: "transfer", entryId: e.id })}>振込報告</button>
+                              </React.Fragment>
+                            )}
+                            {e.pay.status === "reported" && <span className="px-1 py-1 text-xs text-amber-700">事務局で照合中</span>}
+                            {e.pay.status === "paid" && <button className={btnSmall} onClick={() => actions.issueReceipt(e)}>領収書</button>}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <ServerNote>
+              請求書・領収書のPDFはサーバー側で生成して署名付きURLで配布します。オンライン決済は決済代行（Stripe等）のリンクへ遷移し、入金結果はWebhookで受け取ります。このデモではボタンの挙動だけを再現しています。
+            </ServerNote>
+          </Card>
+
+          <Card title="支払履歴" right={<span className="text-xs text-neutral-500">入金済み {paid.length}件</span>}>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead className="border-b border-neutral-200 text-xs text-neutral-500">
+                  <tr>
+                    <th className="py-2 pr-3 font-medium">入金日</th>
+                    <th className="py-2 pr-3 font-medium">方法</th>
+                    <th className="py-2 pr-3 font-medium">請求番号</th>
+                    <th className="py-2 pr-3 text-right font-medium">金額（税込）</th>
+                    <th className="py-2 pr-3 font-medium">領収書番号</th>
+                    <th className="py-2 font-medium">発行</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paid.length === 0 && (
+                    <tr><td colSpan="6" className="py-6 text-center text-sm text-neutral-500">入金の記録はまだありません。</td></tr>
+                  )}
+                  {paid.map((e) => (
+                    <tr key={e.id} className="border-b border-neutral-100">
+                      <td className="py-2.5 pr-3 whitespace-nowrap tabular-nums">{fmtYmd(e.pay.paidOn)}</td>
+                      <td className="py-2.5 pr-3 whitespace-nowrap">{e.pay.method}</td>
+                      <td className="py-2.5 pr-3 font-mono text-xs">{e.pay.invoiceNo}</td>
+                      <td className="py-2.5 pr-3 text-right tabular-nums">{yen(calcFee(e).total)}</td>
+                      <td className="py-2.5 pr-3 font-mono text-xs">{e.pay.receiptNo}</td>
+                      <td className="py-2.5"><button className={btnSmall} onClick={() => actions.issueReceipt(e)}>領収書PDF</button></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+
+          <ApplyForm exhibitor={exhibitor} onSubmit={actions.apply} />
+        </div>
+
+        {/* 右カラム：申込状況と振込先 */}
+        <div className="space-y-4">
+          <Card title="申込中・過去の出店" right={<span className="text-xs text-neutral-500">{mine.length}件</span>}>
+            <ul className="divide-y divide-neutral-100">
+              {mine.map((e) => (
+                <li key={e.id} className="flex items-start justify-between gap-2 py-2.5">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium">{fmtMd(sessionOf(e.sessionId).date)}</p>
+                    <p className="truncate text-xs text-neutral-500">
+                      {boothOf(e.boothTypeId).label} ／ {planOf(e.planId).label}
+                      {e.boothNo !== "—" && ` ／ ${e.boothNo}`}
+                    </p>
+                    {optionLabels(e.optionIds).length > 0 && (
+                      <p className="truncate text-xs text-neutral-400">OP: {optionLabels(e.optionIds).join("・")}</p>
+                    )}
+                  </div>
+                  <div className="flex shrink-0 flex-col items-end gap-1">
+                    <StatusBadge status={e.status} />
+                    <PayBadge status={e.pay.status} />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </Card>
+
+          <Card title="お振込先">
+            <dl className="space-y-1 text-sm">
+              <div className="flex gap-2"><dt className="w-20 shrink-0 text-neutral-500">金融機関</dt><dd>{EVENT.bank.name}</dd></div>
+              <div className="flex gap-2"><dt className="w-20 shrink-0 text-neutral-500">口座</dt><dd className="tabular-nums">{EVENT.bank.type} {EVENT.bank.number}</dd></div>
+              <div className="flex gap-2"><dt className="w-20 shrink-0 text-neutral-500">口座名義</dt><dd className="break-all">{EVENT.bank.holder}</dd></div>
+            </dl>
+            <p className="mt-2 text-xs text-neutral-500">振込手数料は出展者さまのご負担でお願いします。お振込後は「振込報告」をお送りください。</p>
+          </Card>
+
+          <Card title="お問い合わせ">
+            <p className="text-sm">{EVENT.organizer}</p>
+            <p className="mt-1 text-xs text-neutral-500">
+              担当：{exhibitor.person} 様のご登録内容<br />
+              電話 {exhibitor.tel} ／ 初回出店 {exhibitor.since}
+            </p>
+          </Card>
+        </div>
+      </div>
+
+      {modal?.kind === "transfer" && target && (
+        <TransferModal entry={target} onClose={() => setModal(null)} onSubmit={(form) => { actions.reportTransfer(target.id, form); setModal(null); }} />
+      )}
+      {modal?.kind === "pay" && target && (
+        <PayModal entry={target} onClose={() => setModal(null)} onPay={() => { actions.payOnline(target.id); setModal(null); }} />
+      )}
+      {toast}
+    </div>
+  );
+}
+
+/* 銀行振込報告フォーム */
+function TransferModal({ entry, onClose, onSubmit }) {
+  const fee = calcFee(entry);
+  const [form, setForm] = useState({ date: TODAY, name: "", amount: String(fee.total), note: "" });
+  const set = (k) => (ev) => setForm({ ...form, [k]: ev.target.value });
+  const valid = form.date && form.name.trim() && Number(form.amount) > 0;
+
+  return (
+    <Modal title="銀行振込の報告" onClose={onClose}>
+      <p className="mb-3 rounded bg-neutral-50 px-3 py-2 text-xs text-neutral-600">
+        請求番号 <span className="font-mono">{entry.pay.invoiceNo}</span> ／ 請求額 {yen(fee.total)}
+      </p>
+      <div className="space-y-3">
+        <Field label="振込日">
+          <input type="date" value={form.date} onChange={set("date")} className={inputCls} />
+        </Field>
+        <Field label="振込名義（カナ）" hint="登録名と異なる名義で振り込まれると照合できません。実際の名義をご記入ください。">
+          <input value={form.name} onChange={set("name")} placeholder="コハヤカワ アヤ" className={inputCls} />
+        </Field>
+        <Field label="振込金額" hint="振込手数料を差し引いた金額で振り込んだ場合は、実際の入金額をご記入ください。">
+          <input type="number" value={form.amount} onChange={set("amount")} className={inputCls} />
+        </Field>
+        <Field label="連絡事項（任意）">
+          <textarea value={form.note} onChange={set("note")} rows="2" className={inputCls} />
+        </Field>
+      </div>
+      <ServerNote>報告を受け取ると事務局に通知が届き、入金明細と照合したうえで「入金済み」に切り替わります。</ServerNote>
+      <div className="mt-4 flex gap-2">
+        <button className={btnPrimary} disabled={!valid} onClick={() => onSubmit(form)}>報告する</button>
+        <button className={btnGhost} onClick={onClose}>やめる</button>
+      </div>
+    </Modal>
+  );
+}
+
+/* オンライン決済（デモ） */
+function PayModal({ entry, onClose, onPay }) {
+  const fee = calcFee(entry);
+  return (
+    <Modal title="オンライン決済" onClose={onClose}>
+      <dl className="space-y-1.5 text-sm">
+        <div className="flex justify-between"><dt className="text-neutral-500">請求番号</dt><dd className="font-mono text-xs">{entry.pay.invoiceNo}</dd></div>
+        <div className="flex justify-between"><dt className="text-neutral-500">対象回</dt><dd>{fmtYmd(sessionOf(entry.sessionId).date)}</dd></div>
+        <div className="flex justify-between"><dt className="text-neutral-500">出店料</dt><dd className="tabular-nums">{yen(fee.base)}</dd></div>
+        <div className="flex justify-between"><dt className="text-neutral-500">区画</dt><dd className="tabular-nums">{yen(fee.plan)}</dd></div>
+        <div className="flex justify-between"><dt className="text-neutral-500">オプション</dt><dd className="tabular-nums">{yen(fee.opt)}</dd></div>
+        <div className="flex justify-between"><dt className="text-neutral-500">消費税({Math.round(EVENT.taxRate * 100)}%)</dt><dd className="tabular-nums">{yen(fee.tax)}</dd></div>
+        <div className="flex justify-between border-t border-neutral-200 pt-1.5 text-base font-semibold"><dt>お支払い額</dt><dd className="tabular-nums">{yen(fee.total)}</dd></div>
+      </dl>
+      <ServerNote>
+        本番では決済代行の決済ページへ遷移します。カード情報はこのアプリを経由しません。決済完了の通知はWebhookで受け取り、入金状況を自動で更新します。
+      </ServerNote>
+      <div className="mt-4 flex gap-2">
+        <button className={btnPrimary} onClick={onPay}>決済する（デモ）</button>
+        <button className={btnGhost} onClick={onClose}>やめる</button>
+      </div>
+    </Modal>
+  );
+}
+
+/* 出店申請フォーム */
+function ApplyForm({ exhibitor, onSubmit }) {
+  const openSessions = EVENT.sessions.filter((s) => s.date >= TODAY);
+  const blank = {
+    sessionId: openSessions[0]?.id ?? EVENT.sessions[EVENT.sessions.length - 1].id,
+    boothTypeId: BOOTH_TYPES[0].id,
+    planId: PLANS[0].id,
+    optionIds: [],
+    goods: "",
+    note: "",
+  };
+  const [form, setForm] = useState(blank);
+  const set = (k, v) => setForm({ ...form, [k]: v });
+  const toggleOption = (id) =>
+    set("optionIds", form.optionIds.includes(id) ? form.optionIds.filter((x) => x !== id) : [...form.optionIds, id]);
+
+  const fee = calcFee(form);
+  const booth = boothOf(form.boothTypeId);
+  const plan = planOf(form.planId);
+  const valid = form.goods.trim().length > 0;
+
+  return (
+    <Card title="出店を申請する" right={<span className="text-xs text-neutral-500">{exhibitor.name} として申請</span>}>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="出店を希望する回">
+          <select value={form.sessionId} onChange={(e) => set("sessionId", e.target.value)} className={inputCls}>
+            {openSessions.map((s) => (
+              <option key={s.id} value={s.id}>{fmtYmd(s.date)}（{s.open}–{s.close}）</option>
+            ))}
+          </select>
+        </Field>
+        <Field label="出店区分" hint={booth.note}>
+          <select value={form.boothTypeId} onChange={(e) => set("boothTypeId", e.target.value)} className={inputCls}>
+            {BOOTH_TYPES.map((b) => (
+              <option key={b.id} value={b.id}>{b.label}（{yen(b.baseFee)}）</option>
+            ))}
+          </select>
+        </Field>
+        <Field label="プラン（区画）" hint={`${plan.size}${plan.note ? " ／ " + plan.note : ""}`}>
+          <select value={form.planId} onChange={(e) => set("planId", e.target.value)} className={inputCls}>
+            {PLANS.map((p) => (
+              <option key={p.id} value={p.id}>{p.label} {p.size}（{p.addFee === 0 ? "加算なし" : "+" + yen(p.addFee)}）</option>
+            ))}
+          </select>
+        </Field>
+        <Field label="販売・提供予定のもの">
+          <input value={form.goods} onChange={(e) => set("goods", e.target.value)} placeholder="自家焙煎コーヒー、焼き菓子" className={inputCls} />
+        </Field>
+        <div className="sm:col-span-2">
+          <span className="mb-1 block text-xs font-medium text-neutral-600">オプション</span>
+          <div className="flex flex-wrap gap-2">
+            {OPTIONS.map((o) => {
+              const on = form.optionIds.includes(o.id);
+              return (
+                <button key={o.id} type="button" onClick={() => toggleOption(o.id)}
+                  className={`rounded border px-3 py-1.5 text-xs ${on ? "border-violet-600 bg-violet-50 font-medium text-violet-800" : "border-neutral-300 bg-white text-neutral-600 hover:bg-neutral-50"}`}>
+                  {on ? "✓ " : "＋ "}{o.label}（{yen(o.fee)}）
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <div className="sm:col-span-2">
+          <Field label="備考（任意）" hint="車両サイズ、必要な設備、近隣配置の希望など。">
+            <textarea value={form.note} onChange={(e) => set("note", e.target.value)} rows="2" className={inputCls} />
+          </Field>
+        </div>
+      </div>
+
+      <div className="mt-3 rounded border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-neutral-600">
+          <span>出店料 {yen(fee.base)}</span>
+          <span>区画 {yen(fee.plan)}</span>
+          <span>オプション {yen(fee.opt)}</span>
+          <span>消費税 {yen(fee.tax)}</span>
+          <span className="ml-auto text-base font-semibold text-neutral-900">合計 {yen(fee.total)}（税込）</span>
+        </div>
+        <p className="mt-1 text-xs text-neutral-500">
+          お支払い期限は出店日の{EVENT.paymentDueDays}日前（{fmtYmd(dueDateOf(form.sessionId))}）です。請求書は出店確定後に発行されます。
+        </p>
+      </div>
+
+      <div className="mt-3 flex gap-2">
+        <button className={btnPrimary} disabled={!valid} onClick={() => { onSubmit({ ...form, exhibitorId: exhibitor.id }); setForm(blank); }}>
+          この内容で申請する
+        </button>
+        <button className={btnGhost} onClick={() => setForm(blank)}>入力をやり直す</button>
+      </div>
+      {!valid && <p className="mt-2 text-xs text-neutral-500">「販売・提供予定のもの」をご記入ください。</p>}
+    </Card>
+  );
+}
+
+/* ------------------------------------------------------------------
+   主催者の管理画面
+------------------------------------------------------------------ */
+
+function AdminPage({ entries, actions, toast }) {
+  const nextSession = EVENT.sessions.find((s) => s.date >= TODAY) ?? EVENT.sessions[EVENT.sessions.length - 1];
+  const [sessionFilter, setSessionFilter] = useState(nextSession.id);
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [boothFilter, setBoothFilter] = useState("all");
+  const [unpaidOnly, setUnpaidOnly] = useState(false);
+  const [query, setQuery] = useState("");
+  const [selected, setSelected] = useState([]);
+
+  const nameOf = (id) => EXHIBITORS.find((x) => x.id === id)?.name ?? "";
+
+  const rows = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return entries
+      .filter((e) => sessionFilter === "all" || e.sessionId === sessionFilter)
+      .filter((e) => statusFilter === "all" || e.status === statusFilter)
+      .filter((e) => boothFilter === "all" || e.boothTypeId === boothFilter)
+      .filter((e) => !unpaidOnly || e.pay.status === "unpaid" || e.pay.status === "reported")
+      .filter((e) => !q || [nameOf(e.exhibitorId), e.goods, e.pay.invoiceNo, e.boothNo].some((v) => String(v ?? "").toLowerCase().includes(q)))
+      .sort((a, b) => sessionOf(a.sessionId).date.localeCompare(sessionOf(b.sessionId).date) || nameOf(a.exhibitorId).localeCompare(nameOf(b.exhibitorId), "ja"));
+  }, [entries, sessionFilter, statusFilter, boothFilter, unpaidOnly, query]);
+
+  const visibleIds = rows.map((r) => r.id);
+  const allChecked = visibleIds.length > 0 && visibleIds.every((id) => selected.includes(id));
+  const toggle = (id) => setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  const toggleAll = () => setSelected(allChecked ? selected.filter((id) => !visibleIds.includes(id)) : Array.from(new Set([...selected, ...visibleIds])));
+
+  const selectedRows = entries.filter((e) => selected.includes(e.id));
+  const toFix = selectedRows.filter((e) => e.status === "review");
+  const toReview = selectedRows.filter((e) => e.status === "applied");
+
+  // 集計は表示中の行に対して出します。絞り込みと数字がずれると使えないためです。
+  const sum = (list, f) => list.reduce((acc, e) => acc + f(e), 0);
+  const unpaidRows = rows.filter((e) => e.pay.status === "unpaid");
+  const reportedRows = rows.filter((e) => e.pay.status === "reported");
+  const paidRows = rows.filter((e) => e.pay.status === "paid");
+
+  const stats = [
+    { label: "申込", value: `${rows.length}件`, sub: `確定 ${rows.filter((e) => e.status === "fixed").length}／審査中 ${rows.filter((e) => e.status === "review").length}／申請中 ${rows.filter((e) => e.status === "applied").length}` },
+    { label: "請求合計", value: yen(sum(rows.filter((e) => e.pay.status !== "none"), (e) => calcFee(e).total)), sub: "税込" },
+    { label: "入金済み", value: yen(sum(paidRows, (e) => calcFee(e).total)), sub: `${paidRows.length}件` },
+    { label: "未入金", value: yen(sum(unpaidRows, (e) => calcFee(e).total)), sub: `${unpaidRows.length}件（振込確認中 ${reportedRows.length}件）`, alert: unpaidRows.length > 0 },
+  ];
+
+  const exportCsv = () => {
+    const header = ["出店日", "出展者名", "担当者", "出店区分", "プラン", "区画", "オプション", "販売品", "ステータス", "入金状況", "請求番号", "支払期限", "金額(税込)", "入金日", "入金方法"];
+    const body = rows.map((e) => [
+      sessionOf(e.sessionId).date,
+      nameOf(e.exhibitorId),
+      EXHIBITORS.find((x) => x.id === e.exhibitorId)?.person ?? "",
+      boothOf(e.boothTypeId).label,
+      planOf(e.planId).label,
+      e.boothNo,
+      optionLabels(e.optionIds).join(" / "),
+      e.goods ?? "",
+      STATUSES[e.status].label,
+      PAY_STATUSES[e.pay.status].label,
+      e.pay.invoiceNo ?? "",
+      e.pay.status === "none" ? "" : dueDateOf(e.sessionId),
+      calcFee(e).total,
+      e.pay.paidOn ?? "",
+      e.pay.method ?? "",
+    ]);
+    const csv = [header, ...body]
+      .map((line) => line.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(","))
+      .join("\r\n");
+    // Excelで文字化けしないよう BOM 付き UTF-8 で出力します。
+    const url = URL.createObjectURL(new Blob(["\uFEFF" + csv], { type: "text/csv" }));
+    const a = document.createElement("a");
+    a.href = url;
+    // ブラウザによっては日本語のファイル名が落ちるため、ASCIIで組み立てます。
+    a.download = `shutten-list_${TODAY}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div className="mx-auto max-w-7xl px-4 py-5">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-lg font-semibold tracking-tight">出展者管理</h1>
+          <p className="mt-0.5 text-xs text-neutral-500">{EVENT.organizer} ／ 表示中の {rows.length}件を集計しています。</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button className={btnGhost} onClick={exportCsv}>CSVで書き出す</button>
+        </div>
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-2 lg:grid-cols-4">
+        {stats.map((s) => (
+          <div key={s.label} className={`rounded-lg border px-3 py-2 ${s.alert ? "border-rose-300 bg-rose-50" : "border-neutral-200 bg-white"}`}>
+            <p className={`text-xs ${s.alert ? "text-rose-700" : "text-neutral-500"}`}>{s.label}</p>
+            <p className={`mt-0.5 text-xl font-semibold tabular-nums ${s.alert ? "text-rose-800" : "text-neutral-900"}`}>{s.value}</p>
+            <p className="text-xs text-neutral-500">{s.sub}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* 絞り込み */}
+      <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-neutral-200 bg-white px-3 py-2">
+        <label className="flex items-center gap-1.5 text-xs text-neutral-500">
+          開催回
+          <select value={sessionFilter} onChange={(e) => setSessionFilter(e.target.value)} className="rounded border border-neutral-300 px-2 py-1 text-xs text-neutral-900">
+            <option value="all">すべて</option>
+            {EVENT.sessions.map((s) => <option key={s.id} value={s.id}>{fmtMd(s.date)}</option>)}
+          </select>
+        </label>
+        <label className="flex items-center gap-1.5 text-xs text-neutral-500">
+          ステータス
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="rounded border border-neutral-300 px-2 py-1 text-xs text-neutral-900">
+            <option value="all">すべて</option>
+            {Object.entries(STATUSES).map(([k, s]) => <option key={k} value={k}>{s.label}</option>)}
+          </select>
+        </label>
+        <label className="flex items-center gap-1.5 text-xs text-neutral-500">
+          出店区分
+          <select value={boothFilter} onChange={(e) => setBoothFilter(e.target.value)} className="rounded border border-neutral-300 px-2 py-1 text-xs text-neutral-900">
+            <option value="all">すべて</option>
+            {BOOTH_TYPES.map((b) => <option key={b.id} value={b.id}>{b.label}</option>)}
+          </select>
+        </label>
+        <label className={`flex cursor-pointer items-center gap-1.5 rounded border px-2 py-1 text-xs ${unpaidOnly ? "border-rose-400 bg-rose-50 font-medium text-rose-700" : "border-neutral-300 text-neutral-600"}`}>
+          <input type="checkbox" checked={unpaidOnly} onChange={(e) => setUnpaidOnly(e.target.checked)} className="accent-rose-600" />
+          未入金だけを表示
+        </label>
+        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="出展者名・請求番号で検索"
+          className="w-52 rounded border border-neutral-300 px-2 py-1 text-xs outline-none focus:border-violet-600" />
+        {(sessionFilter !== "all" || statusFilter !== "all" || boothFilter !== "all" || unpaidOnly || query) && (
+          <button className="text-xs text-neutral-500 underline underline-offset-4"
+            onClick={() => { setSessionFilter("all"); setStatusFilter("all"); setBoothFilter("all"); setUnpaidOnly(false); setQuery(""); }}>
+            条件をすべて外す
+          </button>
+        )}
+      </div>
+
+      {/* 一括操作 */}
+      <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2">
+        <span className="text-xs font-medium text-violet-900">選択中 {selected.length}件</span>
+        <button className={btnBulkOn}
+          disabled={toFix.length === 0}
+          onClick={() => { actions.bulkStatus(toFix.map((e) => e.id), "fixed"); setSelected([]); }}>
+          審査中 → 確定にする（{toFix.length}件）
+        </button>
+        <button className={btnBulk} disabled={toReview.length === 0}
+          onClick={() => { actions.bulkStatus(toReview.map((e) => e.id), "review"); setSelected([]); }}>
+          申請中 → 審査中にする（{toReview.length}件）
+        </button>
+        <button className={btnBulk} disabled={selected.length === 0} onClick={() => setSelected([])}>選択を解除</button>
+        <span className="text-xs text-violet-800">確定にすると、その場で請求（未払い）が発行されます。</span>
+      </div>
+
+      <div className="mt-2 overflow-x-auto rounded-lg border border-neutral-200 bg-white">
+        <table className="w-full text-left text-sm">
+          <thead className="bg-neutral-50 text-xs text-neutral-500">
+            <tr>
+              <th className="w-8 px-3 py-2"><input type="checkbox" checked={allChecked} onChange={toggleAll} className="accent-violet-700" /></th>
+              <th className="px-3 py-2 font-medium">出店日</th>
+              <th className="px-3 py-2 font-medium">出展者名</th>
+              <th className="px-3 py-2 font-medium">出店区分</th>
+              <th className="px-3 py-2 font-medium">プラン</th>
+              <th className="px-3 py-2 font-medium">区画</th>
+              <th className="whitespace-nowrap px-3 py-2 text-right font-medium">金額(税込)</th>
+              <th className="whitespace-nowrap px-3 py-2 font-medium">ステータス</th>
+              <th className="whitespace-nowrap px-3 py-2 font-medium">入金状況</th>
+              <th className="px-3 py-2 font-medium">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 && (
+              <tr><td colSpan="10" className="px-3 py-12 text-center text-sm text-neutral-500">条件に合う申込がありません。「条件をすべて外す」で戻せます。</td></tr>
+            )}
+            {rows.map((e) => {
+              const over = e.pay.status === "unpaid" && diffDays(TODAY, dueDateOf(e.sessionId)) < 0;
+              return (
+                <tr key={e.id} className={`border-t border-neutral-100 hover:bg-neutral-50 ${selected.includes(e.id) ? "bg-violet-50" : ""}`}>
+                  <td className="px-3 py-2"><input type="checkbox" checked={selected.includes(e.id)} onChange={() => toggle(e.id)} className="accent-violet-700" /></td>
+                  <td className="whitespace-nowrap px-3 py-2 tabular-nums">{fmtMd(sessionOf(e.sessionId).date)}</td>
+                  <td className="px-3 py-2">
+                    <span className="font-medium">{nameOf(e.exhibitorId)}</span>
+                    <span className="block text-xs text-neutral-500">{e.goods}</span>
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2">{boothOf(e.boothTypeId).label}</td>
+                  <td className="whitespace-nowrap px-3 py-2">
+                    {planOf(e.planId).label}
+                    {optionLabels(e.optionIds).length > 0 && (
+                      <span className="block text-xs text-neutral-500">OP: {optionLabels(e.optionIds).join("・")}</span>
+                    )}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2 tabular-nums">{e.boothNo}</td>
+                  <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">{yen(calcFee(e).total)}</td>
+                  <td className="px-3 py-2"><StatusBadge status={e.status} /></td>
+                  <td className="whitespace-nowrap px-3 py-2">
+                    <PayBadge status={e.pay.status} />
+                    {e.pay.status === "unpaid" && (
+                      <span className={`block text-xs ${over ? "font-semibold text-rose-700" : "text-neutral-500"}`}>
+                        期限 {dueDateOf(e.sessionId)}{over && "（超過）"}
+                      </span>
+                    )}
+                    {e.pay.status === "reported" && e.pay.report && (
+                      <span className="block text-xs text-neutral-500">{e.pay.report.date} {e.pay.report.name} {yen(Number(e.pay.report.amount))}</span>
+                    )}
+                    {e.pay.status === "paid" && <span className="block text-xs text-neutral-500">{e.pay.paidOn} {e.pay.method}</span>}
+                  </td>
+                  <td className="px-3 py-2">
+                    <div className="flex flex-wrap gap-1.5">
+                      {e.status === "review" && <button className={btnSmall} onClick={() => actions.bulkStatus([e.id], "fixed")}>確定</button>}
+                      {e.status === "applied" && <button className={btnSmall} onClick={() => actions.bulkStatus([e.id], "review")}>審査へ</button>}
+                      {(e.pay.status === "unpaid" || e.pay.status === "reported") && (
+                        <button className={btnSmall} onClick={() => actions.confirmPayment(e.id)}>入金確認</button>
+                      )}
+                      {e.pay.status === "unpaid" && <button className={btnSmall} onClick={() => actions.remind(e)}>督促</button>}
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      <ServerNote>
+        CSVはこの画面の絞り込み結果をそのまま書き出します（BOM付きUTF-8。Excelでそのまま開けます）。督促メールの送信、入金明細との自動照合、請求書PDFの一括発行はサーバー側の処理です。
+      </ServerNote>
+      {toast}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------
+   アプリ本体
+------------------------------------------------------------------ */
+
+function App() {
+  const [screen, setScreen] = useState("mypage");
+  const [exhibitorId, setExhibitorId] = useState("e1");
+  const [entries, setEntries] = useState(SEED_ENTRIES);
+  const [message, setMessage] = useState(null);
+  const [nextId, setNextId] = useState(200);
+
+  const notify = (text) => {
+    setMessage(text);
+    window.setTimeout(() => setMessage((cur) => (cur === text ? null : cur)), 4000);
+  };
+
+  const patch = (id, fn) => setEntries((prev) => prev.map((e) => (e.id === id ? fn(e) : e)));
+
+  const actions = {
+    downloadInvoice: (e) =>
+      notify(`請求書 ${e.pay.invoiceNo} をダウンロードしました（デモ）。本番ではサーバーでPDFを生成します。`),
+
+    issueReceipt: (e) =>
+      notify(`領収書 ${e.pay.receiptNo ?? "（発行）"} を発行しました（デモ）。宛名・但し書きは登録情報から差し込みます。`),
+
+    payOnline: (id) =>
+      patch(id, (e) => {
+        notify(`${yen(calcFee(e).total)} の決済が完了しました（デモ）。領収書を発行できます。`);
+        return { ...e, pay: { ...e.pay, status: "paid", paidOn: TODAY, method: "オンライン決済", receiptNo: e.pay.invoiceNo.replace("INV", "RCT") } };
+      }),
+
+    reportTransfer: (id, form) =>
+      patch(id, (e) => {
+        notify("振込報告を受け付けました。事務局が入金を照合すると「入金済み」に変わります。");
+        return { ...e, pay: { ...e.pay, status: "reported", report: { date: form.date, name: form.name, amount: Number(form.amount), note: form.note } } };
+      }),
+
+    confirmPayment: (id) =>
+      patch(id, (e) => {
+        notify("入金を確認済みにしました。出展者のマイページにも反映されます。");
+        return {
+          ...e,
+          pay: {
+            ...e.pay,
+            status: "paid",
+            paidOn: e.pay.report?.date ?? TODAY,
+            method: e.pay.report ? "銀行振込" : "銀行振込（事務局確認）",
+            receiptNo: e.pay.invoiceNo.replace("INV", "RCT"),
+          },
+        };
+      }),
+
+    // 確定にすると請求を発行します。実務では確定と請求はセットで動きます。
+    bulkStatus: (ids, next) => {
+      if (ids.length === 0) return;
+      setEntries((prev) =>
+        prev.map((e) => {
+          if (!ids.includes(e.id)) return e;
+          const shouldBill = next === "fixed" && e.pay.status === "none";
+          if (!shouldBill) return { ...e, status: next };
+          const seq = String(e.id).slice(-3).padStart(3, "0");
+          return {
+            ...e,
+            status: next,
+            pay: { status: "unpaid", invoiceNo: `INV-${sessionOf(e.sessionId).date.replace(/-/g, "").slice(0, 8)}-${seq}`, issuedOn: TODAY },
+          };
+        })
+      );
+      notify(
+        next === "fixed"
+          ? `${ids.length}件を確定にし、請求を発行しました（デモ）。本番では確定通知メールを送信します。`
+          : `${ids.length}件を審査中にしました。`
+      );
+    },
+
+    apply: (form) => {
+      const entry = {
+        id: nextId,
+        exhibitorId: form.exhibitorId,
+        sessionId: form.sessionId,
+        boothTypeId: form.boothTypeId,
+        planId: form.planId,
+        optionIds: form.optionIds,
+        boothNo: "—",
+        goods: form.goods,
+        status: "applied",
+        pay: { status: "none" },
+        note: form.note,
+      };
+      setEntries((prev) => [...prev, entry]);
+      setNextId((n) => n + 1);
+      notify(`${fmtYmd(sessionOf(form.sessionId).date)} の出店を申請しました。事務局の確認をお待ちください。`);
+    },
+
+    remind: (e) => notify(`${EXHIBITORS.find((x) => x.id === e.exhibitorId).name} 宛に督促メールを送信しました（デモ）。`),
+  };
+
+  const exhibitor = EXHIBITORS.find((x) => x.id === exhibitorId);
+  const unpaidCount = entries.filter((e) => e.pay.status === "unpaid").length;
+
+  const toast = message ? (
+    <div className="fixed inset-x-0 bottom-4 z-50 mx-auto w-fit max-w-[92vw] rounded-lg bg-neutral-900 px-4 py-2.5 text-sm text-white shadow-lg">
+      {message}
+    </div>
+  ) : null;
+
+  return (
+    <div className="min-h-screen bg-neutral-100 text-neutral-900">
+      <header className="sticky top-0 z-30 border-b border-violet-900 bg-violet-950 text-violet-50">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2.5">
+          <div className="flex items-baseline gap-2">
+            <span className="text-sm font-semibold tracking-tight">{EVENT.name}</span>
+            <span className="text-xs text-violet-400">出店者管理システム デモ</span>
+          </div>
+
+          <nav className="flex overflow-hidden rounded border border-violet-700">
+            {[
+              { key: "mypage", label: "出展者マイページ" },
+              { key: "admin", label: "主催者の管理画面" },
+            ].map((t) => (
+              <button key={t.key} onClick={() => setScreen(t.key)}
+                className={`px-3 py-1.5 text-xs font-medium ${screen === t.key ? "bg-violet-100 text-violet-950" : "text-violet-200 hover:bg-violet-900"}`}>
+                {t.label}
+              </button>
+            ))}
+          </nav>
+
+          {screen === "mypage" && (
+            <label className="flex items-center gap-1.5 text-xs text-violet-300">
+              表示する出展者
+              <select value={exhibitorId} onChange={(e) => setExhibitorId(e.target.value)}
+                className="rounded border border-violet-700 bg-violet-900 px-2 py-1 text-xs text-violet-50">
+                {EXHIBITORS.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+              </select>
+            </label>
+          )}
+
+          <span className="ml-auto text-xs text-violet-300">
+            {screen === "mypage"
+              ? `${exhibitor.name} さまとしてログイン中`
+              : `未入金 ${unpaidCount}件`}
+          </span>
+        </div>
+      </header>
+
+      {screen === "mypage"
+        ? <MyPage exhibitor={exhibitor} entries={entries} actions={actions} toast={toast} />
+        : <AdminPage entries={entries} actions={actions} toast={toast} />}
+
+      <footer className="mx-auto max-w-7xl px-4 pb-8 pt-2 text-xs leading-relaxed text-neutral-500">
+        <p>
+          デモのため、データはページを開くたびに初期状態へ戻ります（保存はしていません）。
+          出店区分・プラン・オプション・料金・ステータスはファイル冒頭の設定オブジェクトにまとめてあり、
+          そこを差し替えるだけで別のイベントに対応できます。
+        </p>
+        <p className="mt-1">
+          本番の構成：請求書・領収書のPDF生成、オンライン決済、入金の消込、通知メールはサーバー側で処理します。
+        </p>
+      </footer>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>

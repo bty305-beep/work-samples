@@ -1,0 +1,807 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>講座申込フォーム＋申込管理 デモ | 講座・支払い方法・ステータスを設定で切り替え</title>
+<meta name="description" content="AI資格対策講座の申込フォームと、申込から受講開始までを管理する画面のデモ。自動返信メールの文面、ステータス管理、CSV出力つき。">
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body>
+<div id="root"></div>
+<script>Babel.registerPreset("react-classic", { presets: [[Babel.availablePresets["react"], { runtime: "classic" }]] });</script>
+<script type="text/babel" data-presets="react-classic">
+const { useState, useMemo } = React;
+
+/* ------------------------------------------------------------------
+   運用定義。ここを差し替えるだけで、別の講座・別の運用に対応できます。
+   講座 / 支払い方法 / ステータス / 自動返信メールの文面を、
+   すべてこの1か所にまとめています。実案件では管理画面から編集できる形にします。
+------------------------------------------------------------------ */
+const CONFIG = {
+  org: {
+    name: "AI資格対策アカデミー",
+    email: "info@example-academy.jp",
+    tel: "03-0000-0000",
+    hours: "平日 10:00〜18:00",
+  },
+
+  /* 講座。増減させるだけで、フォームの選択肢・管理画面の集計・CSVがすべて追従します。 */
+  courses: [
+    {
+      id: "g-kentei",
+      name: "G検定 対策講座（全8回）",
+      short: "G検定 対策",
+      price: 44000,
+      schedule: "2026年10月3日 開講 / 毎週土曜 10:00〜12:00",
+      note: "オンライン録画あり。試験範囲を8回で一巡します。",
+    },
+    {
+      id: "e-shikaku",
+      name: "E資格 対策講座（全12回）",
+      short: "E資格 対策",
+      price: 132000,
+      schedule: "2026年10月7日 開講 / 毎週水曜 19:00〜21:30",
+      note: "JDLA認定プログラム相当の演習を含みます。",
+    },
+    {
+      id: "seisei-ai",
+      name: "生成AIパスポート 対策講座（全4回）",
+      short: "生成AIパスポート",
+      price: 19800,
+      schedule: "2026年9月12日 開講 / 隔週金曜 19:00〜20:30",
+      note: "初学者向け。前提知識は不要です。",
+    },
+  ],
+
+  /* 支払い方法。案内文と入金確認までの目安も、方法ごとにここで持ちます。 */
+  payments: [
+    {
+      id: "bank",
+      label: "銀行振込",
+      hint: "お申込み後、メールで口座をご案内します。",
+      guide:
+        "下記口座宛に、お申込みから7日以内にお振込みください。\n" +
+        "  さくら銀行 神田支店 普通 1234567\n" +
+        "  カ）エーアイシカクタイサクアカデミー\n" +
+        "※振込手数料はお客さまのご負担でお願いいたします。\n" +
+        "※お振込名義がお申込者名と異なる場合は、本メールへご返信ください。",
+      confirmLead: "ご入金から1〜2営業日で確認いたします",
+    },
+    {
+      id: "card",
+      label: "クレジットカード",
+      hint: "決済ページのURLを1営業日以内にお送りします。",
+      guide:
+        "1営業日以内に、決済ページのURLをメールでお送りします。\n" +
+        "URLの有効期限は発行から7日間です。\n" +
+        "※カード情報は決済代行会社側で処理され、当校では保持いたしません。",
+      confirmLead: "決済完了後、自動で確認いたします",
+    },
+    {
+      id: "conveni",
+      label: "コンビニ払い",
+      hint: "払込票番号を1営業日以内にお送りします。",
+      guide:
+        "1営業日以内に、払込票番号をメールでお送りします。\n" +
+        "お近くのコンビニエンスストアで、発行から7日以内にお支払いください。\n" +
+        "※払込手数料は当校が負担いたします。",
+      confirmLead: "お支払いから1〜2営業日で確認いたします",
+    },
+  ],
+
+  /* ステータス。申込から受講開始までの段階です。増やす場合はここに足します。 */
+  statuses: [
+    { id: "applied", label: "申込受付", tone: "bg-neutral-100 text-neutral-600 ring-neutral-300", desc: "自動返信メール送信済み。入金待ち" },
+    { id: "paid", label: "入金確認", tone: "bg-amber-50 text-amber-700 ring-amber-200", desc: "入金確認済み。受講案内の送付待ち" },
+    { id: "started", label: "受講開始", tone: "bg-teal-50 text-teal-700 ring-teal-200", desc: "受講案内を送付済み。対応完了" },
+  ],
+
+  /* 自動返信メールの文面。差し込み項目は {} で表します。 */
+  mail: {
+    subject: "【{org}】お申込みを受け付けました（{course}）",
+    body:
+      "{name} 様\n" +
+      "\n" +
+      "このたびは {org} の\n" +
+      "「{course}」にお申込みいただき、ありがとうございます。\n" +
+      "下記の内容で受け付けました。\n" +
+      "\n" +
+      "──────────────────────────────\n" +
+      "  申込番号　：{code}\n" +
+      "  お名前　　：{name} 様\n" +
+      "  講座　　　：{course}\n" +
+      "  日程　　　：{schedule}\n" +
+      "  受講料　　：{price}円（税込）\n" +
+      "  支払い方法：{payment}\n" +
+      "──────────────────────────────\n" +
+      "\n" +
+      "■ お支払いについて\n" +
+      "{paymentGuide}\n" +
+      "\n" +
+      "■ 受講開始までの流れ\n" +
+      "  1. お申込み受付（このメール）\n" +
+      "  2. ご入金の確認（{confirmLead}）\n" +
+      "  3. 受講案内メールの送付 → 受講開始\n" +
+      "{messageBlock}" +
+      "\n" +
+      "ご不明な点は、本メールへそのままご返信ください。\n" +
+      "\n" +
+      "──────────────────────────────\n" +
+      "  {org}\n" +
+      "  {email} / {tel}（{hours}）\n" +
+      "──────────────────────────────\n",
+    /* 連絡事項が入力されたときだけ差し込むブロック */
+    messageBlock:
+      "\n" +
+      "■ 承りましたご連絡事項\n" +
+      "{message}\n",
+  },
+
+  /* 申込番号の形式 */
+  codePrefix: "AP-2026-",
+};
+
+/* ------------------------------------------------------------------
+   ダミーデータ（8件・3ステータス混在）
+------------------------------------------------------------------ */
+const SEED = [
+  { id: 1, code: "AP-2026-0001", appliedAt: "2026-08-04 09:12", name: "五十嵐 咲希", email: "sakiigarashi@example.com", courseId: "g-kentei", paymentId: "bank", status: "started", message: "第3回のみ欠席予定です。録画で追いつけますか。" },
+  { id: 2, code: "AP-2026-0002", appliedAt: "2026-08-05 20:41", name: "湊 拓真", email: "t.minato@example.jp", courseId: "e-shikaku", paymentId: "card", status: "started", message: "" },
+  { id: 3, code: "AP-2026-0003", appliedAt: "2026-08-07 12:03", name: "宇都木 志保", email: "shiho.utsugi@example.com", courseId: "seisei-ai", paymentId: "conveni", status: "paid", message: "会社の経費で受講します。領収書の宛名は法人名でお願いします。" },
+  { id: 4, code: "AP-2026-0004", appliedAt: "2026-08-08 08:55", name: "白鳥 圭一", email: "k.shiratori@example.co.jp", courseId: "g-kentei", paymentId: "bank", status: "paid", message: "" },
+  { id: 5, code: "AP-2026-0005", appliedAt: "2026-08-10 22:17", name: "野々村 藍", email: "ai.nonomura@example.net", courseId: "seisei-ai", paymentId: "card", status: "applied", message: "受講に必要なPCの推奨スペックを教えてください。" },
+  { id: 6, code: "AP-2026-0006", appliedAt: "2026-08-12 13:26", name: "堀之内 誠", email: "m.horinouchi@example.com", courseId: "e-shikaku", paymentId: "bank", status: "applied", message: "" },
+  { id: 7, code: "AP-2026-0007", appliedAt: "2026-08-13 19:38", name: "上條 みなみ", email: "minami.kamijo@example.jp", courseId: "g-kentei", paymentId: "conveni", status: "applied", message: "同僚2名も検討中です。まとめて申し込む方法はありますか。" },
+  { id: 8, code: "AP-2026-0008", appliedAt: "2026-08-14 10:04", name: "門馬 悠人", email: "y.momma@example.com", courseId: "seisei-ai", paymentId: "bank", status: "applied", message: "" },
+];
+
+/* ------------------------------------------------------------------
+   小さなヘルパー
+------------------------------------------------------------------ */
+const courseOf = (id) => CONFIG.courses.find((c) => c.id === id);
+const paymentOf = (id) => CONFIG.payments.find((p) => p.id === id);
+const statusOf = (id) => CONFIG.statuses.find((s) => s.id === id);
+const yen = (n) => n.toLocaleString("ja-JP");
+
+const fill = (template, map) =>
+  Object.entries(map).reduce((acc, [k, v]) => acc.split(`{${k}}`).join(v), template);
+
+/* 申込1件から、自動返信メールの宛先・件名・本文を組み立てます。
+   実案件ではこの関数と同じ内容をサーバー側に置きます。 */
+const buildReplyMail = (app) => {
+  const course = courseOf(app.courseId);
+  const payment = paymentOf(app.paymentId);
+  const base = {
+    org: CONFIG.org.name,
+    email: CONFIG.org.email,
+    tel: CONFIG.org.tel,
+    hours: CONFIG.org.hours,
+    code: app.code,
+    name: app.name,
+    course: course.name,
+    schedule: course.schedule,
+    price: yen(course.price),
+    payment: payment.label,
+    paymentGuide: payment.guide,
+    confirmLead: payment.confirmLead,
+  };
+  const messageBlock = app.message.trim()
+    ? fill(CONFIG.mail.messageBlock, { message: app.message.trim() })
+    : "";
+  return {
+    to: app.email,
+    from: `${CONFIG.org.name} <${CONFIG.org.email}>`,
+    subject: fill(CONFIG.mail.subject, base),
+    body: fill(CONFIG.mail.body, { ...base, messageBlock }),
+  };
+};
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+const validate = (form) => {
+  const e = {};
+  const name = form.name.trim();
+  if (!name) e.name = "お名前を入力してください。";
+  else if (name.length > 40) e.name = "お名前は40文字以内で入力してください。";
+
+  const email = form.email.trim();
+  if (!email) e.email = "メールアドレスを入力してください。";
+  else if (!EMAIL_RE.test(email)) e.email = "メールアドレスの形式が正しくありません。（例）name@example.com";
+
+  if (!form.courseId) e.courseId = "希望講座を選択してください。";
+  if (!form.paymentId) e.paymentId = "支払い方法を選択してください。";
+  if (form.message.length > 500) e.message = `連絡事項は500文字以内で入力してください。（現在 ${form.message.length} 文字）`;
+  return e;
+};
+
+const EMPTY_FORM = { name: "", email: "", courseId: "", paymentId: "", message: "" };
+
+/* ------------------------------------------------------------------
+   ルート
+------------------------------------------------------------------ */
+function App() {
+  const [tab, setTab] = useState("form");
+  const [apps, setApps] = useState(SEED);
+  const [lastSubmitted, setLastSubmitted] = useState(null);
+
+  const addApplication = (form) => {
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, "0");
+    const nextId = Math.max(0, ...apps.map((a) => a.id)) + 1;
+    const record = {
+      id: nextId,
+      code: CONFIG.codePrefix + String(nextId).padStart(4, "0"),
+      appliedAt: `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`,
+      name: form.name.trim(),
+      email: form.email.trim(),
+      courseId: form.courseId,
+      paymentId: form.paymentId,
+      status: CONFIG.statuses[0].id,
+      message: form.message.trim(),
+    };
+    setApps((prev) => [record, ...prev]);
+    setLastSubmitted(record);
+  };
+
+  return (
+    <div className="min-h-screen bg-neutral-50 text-neutral-900">
+      <header className="border-b border-neutral-200 bg-white">
+        <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-6 gap-y-3 px-4 py-4">
+          <div className="flex items-baseline gap-2">
+            <span className="text-sm font-semibold tracking-tight text-teal-900">{CONFIG.org.name}</span>
+            <span className="text-xs text-neutral-400">デモ</span>
+          </div>
+          <nav className="flex overflow-hidden rounded border border-neutral-300">
+            {[
+              { key: "form", label: "申込フォーム", sub: "受講希望者" },
+              { key: "admin", label: "管理画面", sub: "運営者" },
+            ].map((t, i) => (
+              <button
+                key={t.key}
+                onClick={() => setTab(t.key)}
+                className={`px-4 py-1.5 text-xs ${i > 0 ? "border-l border-neutral-300" : ""} ${
+                  tab === t.key ? "bg-teal-800 text-white" : "bg-white text-neutral-600 hover:bg-neutral-50"
+                }`}
+              >
+                {t.label}
+                <span className={`ml-1.5 ${tab === t.key ? "text-teal-200" : "text-neutral-400"}`}>{t.sub}</span>
+              </button>
+            ))}
+          </nav>
+          <p className="ml-auto hidden text-xs text-neutral-400 sm:block">
+            データはブラウザ内のみ。再読み込みで初期状態に戻ります
+          </p>
+        </div>
+      </header>
+
+      {tab === "form" ? (
+        <ApplyScreen
+          onSubmit={addApplication}
+          submitted={lastSubmitted}
+          onReset={() => setLastSubmitted(null)}
+          onGoAdmin={() => setTab("admin")}
+        />
+      ) : (
+        <AdminScreen apps={apps} setApps={setApps} />
+      )}
+
+      <footer className="mx-auto max-w-5xl px-4 pb-10 pt-2 text-xs leading-relaxed text-neutral-400">
+        デモ用のサンプルです。講座・支払い方法・ステータス・返信メールの文面は、ファイル冒頭の設定
+        <code className="mx-1 rounded bg-neutral-100 px-1 py-0.5 text-neutral-500">CONFIG</code>
+        にまとまっています。ここを差し替えるだけで、別の講座・別の運用に対応できます。
+      </footer>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------
+   【1】申込フォーム
+------------------------------------------------------------------ */
+function ApplyScreen({ onSubmit, submitted, onReset, onGoAdmin }) {
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [touched, setTouched] = useState({});
+  const [tried, setTried] = useState(false);
+
+  const errors = validate(form);
+  const showError = (key) => (touched[key] || tried) && errors[key];
+
+  const set = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
+  const blur = (key) => setTouched((prev) => ({ ...prev, [key]: true }));
+
+  const submit = () => {
+    setTried(true);
+    if (Object.keys(errors).length > 0) return;
+    onSubmit(form);
+    setForm(EMPTY_FORM);
+    setTouched({});
+    setTried(false);
+  };
+
+  if (submitted) {
+    return <DoneScreen app={submitted} onReset={onReset} onGoAdmin={onGoAdmin} />;
+  }
+
+  const selectedCourse = courseOf(form.courseId);
+  const inputBase =
+    "w-full rounded border px-3 py-2 text-sm outline-none focus:border-teal-700 focus:ring-1 focus:ring-teal-700";
+  const errorCount = Object.keys(errors).length;
+
+  return (
+    <main className="mx-auto max-w-2xl px-4 py-8">
+      <div className="mb-6">
+        <h1 className="text-lg font-semibold tracking-tight">受講のお申込み</h1>
+        <p className="mt-2 text-sm leading-relaxed text-neutral-600">
+          下記のフォームからお申込みください。送信後、ご入力のメールアドレス宛に自動返信メールをお送りします。
+          お支払い方法のご案内も、そのメールに記載しています。
+        </p>
+      </div>
+
+      {tried && errorCount > 0 && (
+        <div className="mb-5 rounded border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          入力内容に {errorCount} 件の誤りがあります。下記の赤い表示をご確認ください。
+        </div>
+      )}
+
+      <div className="space-y-6 rounded border border-neutral-200 bg-white p-6">
+        {/* 氏名 */}
+        <Field label="氏名" required error={showError("name")}>
+          <input
+            type="text"
+            value={form.name}
+            onChange={(e) => set("name", e.target.value)}
+            onBlur={() => blur("name")}
+            placeholder="山田 太郎"
+            className={`${inputBase} ${showError("name") ? "border-rose-400 bg-rose-50/40" : "border-neutral-300"}`}
+          />
+        </Field>
+
+        {/* メールアドレス */}
+        <Field
+          label="メールアドレス"
+          required
+          error={showError("email")}
+          hint="自動返信メールと受講案内の送付先になります。"
+        >
+          <input
+            type="email"
+            value={form.email}
+            onChange={(e) => set("email", e.target.value)}
+            onBlur={() => blur("email")}
+            placeholder="name@example.com"
+            className={`${inputBase} ${showError("email") ? "border-rose-400 bg-rose-50/40" : "border-neutral-300"}`}
+          />
+        </Field>
+
+        {/* 希望講座 */}
+        <Field label="希望講座" required error={showError("courseId")}>
+          <select
+            value={form.courseId}
+            onChange={(e) => set("courseId", e.target.value)}
+            onBlur={() => blur("courseId")}
+            className={`${inputBase} bg-white ${showError("courseId") ? "border-rose-400 bg-rose-50/40" : "border-neutral-300"}`}
+          >
+            <option value="">選択してください</option>
+            {CONFIG.courses.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}（{yen(c.price)}円 税込）
+              </option>
+            ))}
+          </select>
+          {selectedCourse && (
+            <div className="mt-2 rounded border border-teal-100 bg-teal-50/60 px-3 py-2 text-xs leading-relaxed text-teal-900">
+              <div>{selectedCourse.schedule}</div>
+              <div className="mt-0.5 text-teal-800/80">{selectedCourse.note}</div>
+            </div>
+          )}
+        </Field>
+
+        {/* 支払い方法 */}
+        <Field label="支払い方法" required error={showError("paymentId")}>
+          <div className="space-y-2">
+            {CONFIG.payments.map((p) => (
+              <label
+                key={p.id}
+                className={`flex cursor-pointer items-start gap-3 rounded border px-3 py-2.5 text-sm ${
+                  form.paymentId === p.id
+                    ? "border-teal-700 bg-teal-50/60"
+                    : showError("paymentId")
+                    ? "border-rose-300 bg-rose-50/30"
+                    : "border-neutral-300 hover:bg-neutral-50"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="payment"
+                  checked={form.paymentId === p.id}
+                  onChange={() => {
+                    set("paymentId", p.id);
+                    blur("paymentId");
+                  }}
+                  className="mt-0.5 accent-teal-800"
+                />
+                <span>
+                  <span className="block">{p.label}</span>
+                  <span className="mt-0.5 block text-xs text-neutral-500">{p.hint}</span>
+                </span>
+              </label>
+            ))}
+          </div>
+        </Field>
+
+        {/* 連絡事項 */}
+        <Field label="連絡事項" error={showError("message")} hint="任意です。ご質問や、受講にあたり配慮が必要な点があればご記入ください。">
+          <textarea
+            rows={4}
+            value={form.message}
+            onChange={(e) => set("message", e.target.value)}
+            onBlur={() => blur("message")}
+            className={`${inputBase} ${showError("message") ? "border-rose-400 bg-rose-50/40" : "border-neutral-300"}`}
+          />
+          <div className={`mt-1 text-right text-xs ${form.message.length > 500 ? "text-rose-600" : "text-neutral-400"}`}>
+            {form.message.length} / 500
+          </div>
+        </Field>
+
+        <div className="border-t border-neutral-200 pt-5">
+          <button
+            onClick={submit}
+            className="w-full rounded bg-teal-800 px-4 py-3 text-sm font-medium text-white hover:bg-teal-700 sm:w-auto sm:px-8"
+          >
+            この内容で申し込む
+          </button>
+          <p className="mt-3 text-xs leading-relaxed text-neutral-500">
+            送信すると、ご入力のメールアドレス宛に自動返信メールをお送りします。
+            届かない場合は迷惑メールフォルダをご確認のうえ、{CONFIG.org.email} までご連絡ください。
+          </p>
+        </div>
+      </div>
+    </main>
+  );
+}
+
+function Field({ label, required, hint, error, children }) {
+  return (
+    <div>
+      <label className="mb-1.5 flex items-center gap-2 text-sm font-medium text-neutral-800">
+        {label}
+        {required ? (
+          <span className="rounded bg-rose-50 px-1.5 py-0.5 text-[10px] font-normal text-rose-600 ring-1 ring-rose-200">必須</span>
+        ) : (
+          <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] font-normal text-neutral-500 ring-1 ring-neutral-200">任意</span>
+        )}
+      </label>
+      {hint && <p className="mb-1.5 text-xs leading-relaxed text-neutral-500">{hint}</p>}
+      {children}
+      {error && <p className="mt-1.5 text-xs text-rose-600">{error}</p>}
+    </div>
+  );
+}
+
+/* 申込完了 + 自動返信メールの文面 */
+function DoneScreen({ app, onReset, onGoAdmin }) {
+  const mail = buildReplyMail(app);
+  const course = courseOf(app.courseId);
+
+  return (
+    <main className="mx-auto max-w-2xl px-4 py-8">
+      <div className="rounded border border-teal-200 bg-white">
+        <div className="border-b border-teal-100 bg-teal-50/70 px-6 py-5">
+          <h1 className="text-base font-semibold text-teal-900">お申込みを受け付けました</h1>
+          <p className="mt-2 text-sm leading-relaxed text-teal-900/80">
+            申込番号 <span className="font-mono font-semibold">{app.code}</span> で受け付けました。
+            {app.email} 宛に、下記の内容で自動返信メールが送られます。
+          </p>
+        </div>
+
+        <dl className="grid grid-cols-1 gap-x-6 gap-y-3 px-6 py-5 text-sm sm:grid-cols-2">
+          <Row label="お名前" value={`${app.name} 様`} />
+          <Row label="メールアドレス" value={app.email} />
+          <Row label="希望講座" value={course.name} />
+          <Row label="支払い方法" value={paymentOf(app.paymentId).label} />
+          <Row label="受講料" value={`${yen(course.price)}円（税込）`} />
+          <Row label="日程" value={course.schedule} />
+          {app.message && <div className="sm:col-span-2"><Row label="連絡事項" value={app.message} /></div>}
+        </dl>
+      </div>
+
+      <section className="mt-6">
+        <h2 className="text-sm font-semibold tracking-tight">この内容で自動返信メールが送られます</h2>
+        <p className="mt-1.5 text-xs leading-relaxed text-neutral-500">
+          下記は実際に送信される文面です。※このデモでは文面の確認のみで、メールは送信されません。
+          実案件では、送信はサーバー側（メール配信サービス経由）で行います。ブラウザからは送信しません。
+        </p>
+
+        <div className="mt-3 overflow-hidden rounded border border-neutral-300 bg-white">
+          <dl className="divide-y divide-neutral-100 border-b border-neutral-200 bg-neutral-50 px-4 py-3 text-xs">
+            <div className="flex gap-3 pb-1.5">
+              <dt className="w-12 shrink-0 text-neutral-400">From</dt>
+              <dd className="text-neutral-700">{mail.from}</dd>
+            </div>
+            <div className="flex gap-3 py-1.5">
+              <dt className="w-12 shrink-0 text-neutral-400">To</dt>
+              <dd className="text-neutral-700">{mail.to}</dd>
+            </div>
+            <div className="flex gap-3 pt-1.5">
+              <dt className="w-12 shrink-0 text-neutral-400">件名</dt>
+              <dd className="font-medium text-neutral-900">{mail.subject}</dd>
+            </div>
+          </dl>
+          <pre className="overflow-x-auto px-4 py-4 text-xs leading-relaxed text-neutral-800" style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>
+{mail.body}
+          </pre>
+        </div>
+      </section>
+
+      <div className="mt-6 flex flex-wrap gap-3">
+        <button onClick={onReset} className="rounded border border-neutral-300 bg-white px-4 py-2 text-sm hover:bg-neutral-100">
+          続けて別の申込を入力する
+        </button>
+        <button onClick={onGoAdmin} className="rounded bg-teal-800 px-4 py-2 text-sm text-white hover:bg-teal-700">
+          管理画面で確認する
+        </button>
+      </div>
+    </main>
+  );
+}
+
+function Row({ label, value }) {
+  return (
+    <div>
+      <dt className="text-xs text-neutral-500">{label}</dt>
+      <dd className="mt-0.5 whitespace-pre-wrap leading-relaxed text-neutral-900">{value}</dd>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------
+   【2】管理画面
+------------------------------------------------------------------ */
+function AdminScreen({ apps, setApps }) {
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [openId, setOpenId] = useState(null);
+
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return apps.filter((a) => {
+      if (statusFilter !== "all" && a.status !== statusFilter) return false;
+      if (!q) return true;
+      return a.name.toLowerCase().includes(q) || a.email.toLowerCase().includes(q);
+    });
+  }, [apps, query, statusFilter]);
+
+  const statusCounts = useMemo(
+    () => CONFIG.statuses.map((s) => ({ ...s, count: apps.filter((a) => a.status === s.id).length })),
+    [apps]
+  );
+  const courseCounts = useMemo(
+    () => CONFIG.courses.map((c) => ({ ...c, count: apps.filter((a) => a.courseId === c.id).length })),
+    [apps]
+  );
+  const maxCourseCount = Math.max(1, ...courseCounts.map((c) => c.count));
+
+  const changeStatus = (id, status) =>
+    setApps((prev) => prev.map((a) => (a.id === id ? { ...a, status } : a)));
+
+  const exportCsv = () => {
+    const header = ["申込番号", "申込日時", "氏名", "メールアドレス", "希望講座", "支払い方法", "ステータス", "連絡事項"];
+    const body = visible.map((a) => [
+      a.code,
+      a.appliedAt,
+      a.name,
+      a.email,
+      courseOf(a.courseId).name,
+      paymentOf(a.paymentId).label,
+      statusOf(a.status).label,
+      a.message,
+    ]);
+    const csv = [header, ...body]
+      .map((line) => line.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(","))
+      .join("\r\n");
+    // BOM付きUTF-8。Excelでそのまま開いても文字化けしません。
+    const url = URL.createObjectURL(new Blob(["\uFEFF" + csv], { type: "text/csv" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `moushikomi_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <main className="mx-auto max-w-5xl px-4 py-8">
+      <div className="mb-5 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <h1 className="text-lg font-semibold tracking-tight">申込管理</h1>
+        <p className="text-xs text-neutral-500">申込 {apps.length} 件 / 表示中 {visible.length} 件</p>
+      </div>
+
+      {/* ステータス別の件数（クリックで絞り込み） */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <CountCard
+          label="すべて"
+          count={apps.length}
+          desc="全申込"
+          active={statusFilter === "all"}
+          onClick={() => setStatusFilter("all")}
+        />
+        {statusCounts.map((s) => (
+          <CountCard
+            key={s.id}
+            label={s.label}
+            count={s.count}
+            desc={s.desc}
+            active={statusFilter === s.id}
+            onClick={() => setStatusFilter(s.id)}
+          />
+        ))}
+      </div>
+
+      {/* 講座別の申込数 */}
+      <div className="mt-3 rounded border border-neutral-200 bg-white px-4 py-3.5">
+        <h2 className="mb-2.5 text-xs font-medium text-neutral-500">
+          講座別の申込数<span className="ml-2 font-normal text-neutral-400">右端は受講料の合計（入金の有無は問わず）</span>
+        </h2>
+        <div className="space-y-2">
+          {courseCounts.map((c) => (
+            <div key={c.id} className="flex items-center gap-3 text-xs">
+              <span className="w-40 shrink-0 truncate text-neutral-700" title={c.name}>{c.short}</span>
+              <span className="h-2 flex-1 overflow-hidden rounded-full bg-neutral-100">
+                <span className="block h-full rounded-full bg-teal-700" style={{ width: `${(c.count / maxCourseCount) * 100}%` }} />
+              </span>
+              <span className="w-16 shrink-0 text-right tabular-nums text-neutral-600">{c.count} 件</span>
+              <span className="hidden w-24 shrink-0 text-right tabular-nums text-neutral-400 sm:block">
+                {yen(c.count * c.price)} 円
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* 検索・CSV */}
+      <div className="mt-5 flex flex-wrap items-center gap-3">
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="氏名・メールアドレスで検索"
+          className="w-64 rounded border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-teal-700 focus:ring-1 focus:ring-teal-700"
+        />
+        {(query || statusFilter !== "all") && (
+          <button
+            onClick={() => { setQuery(""); setStatusFilter("all"); }}
+            className="text-xs text-neutral-500 underline underline-offset-4 hover:text-neutral-800"
+          >
+            絞り込みを解除
+          </button>
+        )}
+        <button
+          onClick={exportCsv}
+          disabled={visible.length === 0}
+          className="ml-auto rounded border border-neutral-300 bg-white px-3 py-2 text-sm hover:bg-neutral-100 disabled:cursor-not-allowed disabled:text-neutral-300"
+        >
+          CSV書き出し（表示中 {visible.length} 件）
+        </button>
+      </div>
+
+      {/* 一覧 */}
+      <div className="mt-3 overflow-x-auto rounded border border-neutral-200 bg-white">
+        <table className="w-full min-w-[860px] text-sm">
+          <thead>
+            <tr className="border-b border-neutral-200 bg-neutral-50 text-left text-xs text-neutral-500">
+              <th className="px-4 py-2.5 font-medium">申込日時</th>
+              <th className="px-4 py-2.5 font-medium">氏名</th>
+              <th className="px-4 py-2.5 font-medium">メールアドレス</th>
+              <th className="px-4 py-2.5 font-medium">希望講座</th>
+              <th className="px-4 py-2.5 font-medium">支払い方法</th>
+              <th className="px-4 py-2.5 font-medium">ステータス</th>
+              <th className="px-4 py-2.5 font-medium"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {visible.map((a) => {
+              const open = openId === a.id;
+              return (
+                <React.Fragment key={a.id}>
+                  <tr className="border-b border-neutral-100 align-middle hover:bg-neutral-50/70">
+                    <td className="whitespace-nowrap px-4 py-2.5 tabular-nums text-neutral-600">{a.appliedAt}</td>
+                    <td className="whitespace-nowrap px-4 py-2.5">
+                      {a.name}
+                      {a.message && <span className="ml-1.5 text-xs text-amber-600" title="連絡事項あり">●</span>}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-2.5 text-neutral-600">{a.email}</td>
+                    <td className="whitespace-nowrap px-4 py-2.5 text-neutral-700" title={courseOf(a.courseId).name}>
+                      {courseOf(a.courseId).short}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-2.5 text-neutral-700">{paymentOf(a.paymentId).label}</td>
+                    <td className="whitespace-nowrap px-4 py-2.5">
+                      {/* 表示と変更を1つにまとめています。色は現在のステータスに追従します。 */}
+                      <select
+                        value={a.status}
+                        onChange={(e) => changeStatus(a.id, e.target.value)}
+                        title="ステータスを変更"
+                        className={`cursor-pointer rounded px-2 py-1 text-xs ring-1 outline-none focus:ring-2 ${statusOf(a.status).tone}`}
+                      >
+                        {CONFIG.statuses.map((s) => (
+                          <option key={s.id} value={s.id} className="bg-white text-neutral-900">{s.label}</option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-2.5 text-right">
+                      <button
+                        onClick={() => setOpenId(open ? null : a.id)}
+                        className="text-xs text-teal-800 underline underline-offset-4 hover:text-teal-600"
+                      >
+                        {open ? "閉じる" : "詳細"}
+                      </button>
+                    </td>
+                  </tr>
+                  {open && (
+                    <tr className="border-b border-neutral-100 bg-neutral-50/80">
+                      <td colSpan={7} className="px-4 py-4">
+                        <div className="grid gap-4 sm:grid-cols-3">
+                          <div>
+                            <p className="text-xs text-neutral-500">申込番号</p>
+                            <p className="mt-0.5 font-mono text-sm">{a.code}</p>
+                          </div>
+                          <div className="sm:col-span-2">
+                            <p className="text-xs text-neutral-500">連絡事項</p>
+                            <p className="mt-0.5 whitespace-pre-wrap text-sm leading-relaxed">
+                              {a.message || <span className="text-neutral-400">なし</span>}
+                            </p>
+                          </div>
+                        </div>
+                        <p className="mt-3 text-xs text-neutral-500">
+                          送信済みの自動返信メール：
+                          <span className="ml-1 text-neutral-700">{buildReplyMail(a).subject}</span>
+                        </p>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              );
+            })}
+            {visible.length === 0 && (
+              <tr>
+                <td colSpan={7} className="px-4 py-10 text-center text-sm text-neutral-400">
+                  条件に合う申込がありません。
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <p className="mt-3 text-xs leading-relaxed text-neutral-500">
+        ステータスは <span className="text-neutral-700">{CONFIG.statuses.map((s) => s.label).join(" → ")}</span> の順に進みます。
+        氏名の横の <span className="text-amber-600">●</span> は連絡事項ありの申込です。
+        CSVはBOM付きUTF-8で書き出すため、Excelでそのまま開けます。
+      </p>
+    </main>
+  );
+}
+
+function CountCard({ label, count, desc, active, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`rounded border px-4 py-3 text-left transition ${
+        active ? "border-teal-700 bg-white ring-1 ring-teal-700" : "border-neutral-200 bg-white hover:border-neutral-300"
+      }`}
+    >
+      <div className="text-xs text-neutral-500">{label}</div>
+      <div className="mt-1 text-2xl font-semibold tabular-nums tracking-tight text-neutral-900">
+        {count}
+        <span className="ml-1 text-xs font-normal text-neutral-400">件</span>
+      </div>
+      <div className="mt-0.5 truncate text-[11px] text-neutral-400" title={desc}>{desc}</div>
+    </button>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>

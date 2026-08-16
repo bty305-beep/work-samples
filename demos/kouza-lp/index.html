@@ -1,0 +1,1206 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI資格対策講座 紹介サイト デモ | 全6ページ・1ファイル完結</title>
+<meta name="description" content="AI関連資格の対策講座の紹介サイト（LP）デモ。トップ・講座詳細×2・料金・よくある質問・受講者の声の6ページ構成。講座名や料金はファイル冒頭の設定オブジェクトで差し替えできます。">
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body>
+<div id="root"></div>
+<script>Babel.registerPreset("react-classic", { presets: [[Babel.availablePresets["react"], { runtime: "classic" }]] });</script>
+<script type="text/babel" data-presets="react-classic">
+const { useState, useEffect, useMemo } = React;
+
+/* ==================================================================
+   サイト設定。講座名・料金・カリキュラムはすべてここに集約しています。
+   このオブジェクトを書き換えるだけで、別の講座の紹介サイトになります。
+   実案件では JSON / CMS に外出しして、非エンジニアでも編集できる形にします。
+================================================================== */
+const CONFIG = {
+  site: {
+    name: "AIスキル検定アカデミー",
+    nameSub: "オンライン資格対策講座",
+    catch: "AI関連資格を、独学より確実に。",
+    lead: "働きながら、週2時間から。出題範囲を絞り込んだカリキュラムと、質問できる環境で合格まで伴走します。",
+    // フッターなどに出す運営情報。実案件では実際の情報に差し替えます。
+    org: "AIスキル検定アカデミー運営事務局",
+    mail: "info@example.com",
+    hours: "平日 10:00〜18:00",
+  },
+
+  /* ----------------------------------------------------------------
+     申込導線。
+     申込フォームは別デモ demos/kouza-moushikomi/ に用意しています。
+     本番では申込フォームの公開URLに差し替えてください。
+     （このデモでは同じリポジトリ内の相対パスを指しています）
+  ---------------------------------------------------------------- */
+  apply: {
+    url: "../kouza-moushikomi/index.html",
+    label: "申込フォームへ進む",
+    subLabel: "入力は3分ほどで終わります",
+    note: "お申込みフォーム（別ページ）が開きます。送信後、2営業日以内に事務局からご連絡します。",
+  },
+
+  // トップの実績表示。数値は差し替え前提のダミーです。
+  stats: [
+    { value: "1,240", unit: "名", label: "累計受講者数" },
+    { value: "92", unit: "%", label: "受講者の合格率" },
+    { value: "4.6", unit: "/5.0", label: "受講後アンケート満足度" },
+  ],
+
+  features: [
+    {
+      title: "出題範囲を絞り込んだ教材",
+      body: "過去の出題傾向を分析し、配点の大きい範囲から先に学びます。網羅ではなく合格に必要な順番で進めるため、学習時間が短く済みます。",
+      point: "学習時間の目安：週2〜3時間",
+    },
+    {
+      title: "つまずいたら質問できる",
+      body: "受講期間中はチャットで何度でも質問できます。回答は原則1営業日以内。「調べても分からない」で止まる時間をなくします。",
+      point: "回答実績：平均5時間以内",
+    },
+    {
+      title: "録画で好きな時間に",
+      body: "全回の録画を配信します。ライブ講義に出られなくても、通勤中や休日にまとめて視聴できます。視聴期限は受講開始から6ヶ月です。",
+      point: "スマートフォン視聴に対応",
+    },
+    {
+      title: "本番形式の模擬試験",
+      body: "本番と同じ問題数・時間の模擬試験を実施し、分野別の正答率をレポートで返します。どこを復習すべきかが数字で分かります。",
+      point: "分野別の弱点レポート付き",
+    },
+  ],
+
+  flow: [
+    { step: "01", title: "お申込み", body: "申込フォームから、ご希望の講座とプランを選んで送信します。入力は3分ほどです。", days: "所要3分" },
+    { step: "02", title: "事務局からの連絡", body: "2営業日以内に、受講料のお支払い方法と開講日のご案内をメールでお送りします。", days: "2営業日以内" },
+    { step: "03", title: "お支払い", body: "銀行振込またはクレジットカード決済。分割払いをご希望の場合はこの時点でご相談ください。", days: "1週間以内" },
+    { step: "04", title: "受講環境のご案内", body: "教材ページのログイン情報と、質問用チャットのご招待をお送りします。開講前に予習教材が見られます。", days: "開講の3日前" },
+    { step: "05", title: "受講開始", body: "毎週決まった曜日にオンライン講義を実施します。録画は翌日に配信されるため、欠席しても遅れません。", days: "開講日" },
+  ],
+
+  /* ----------------------------------------------------------------
+     講座詳細ページ。ここに追加すればページとナビが自動で増えます。
+  ---------------------------------------------------------------- */
+  courses: [
+    {
+      id: "course-basic",
+      navLabel: "生成AI基礎講座",
+      title: "生成AIリテラシー検定 対策講座",
+      badge: "入門",
+      lead: "AIにこれから触れる方向けの講座です。用語の意味から始めて、検定に出る範囲を8回で一周します。",
+      spec: {
+        回数: "全8回（1回90分）",
+        期間: "約2ヶ月",
+        開講: "毎月第2火曜 開講",
+        曜日: "火曜 20:00〜21:30",
+        形式: "オンライン（録画あり）",
+        定員: "各回30名",
+      },
+      target: [
+        "AIという言葉は聞くが、業務で使ったことはない方",
+        "会社から資格取得を求められている事務・営業職の方",
+        "独学で教材を買ったものの、途中で止まってしまった方",
+        "IT系の予備知識がなく、用語の説明から必要な方",
+      ],
+      goals: [
+        "生成AIの仕組みを、専門用語を使わずに説明できる",
+        "検定の出題4分野それぞれで、6割以上を安定して取れる",
+        "業務で使う際の禁止事項（機密情報の入力など）を判断できる",
+        "自分の業務のどこにAIを使えるか、3つ挙げられる",
+      ],
+      // 「向かない人」を明示します。ミスマッチな申込を減らすほうが、結果として満足度が上がります。
+      notFor: [
+        { title: "すでに実務でAIを使いこなしている方", body: "本講座は用語の説明から始めます。物足りなく感じる可能性が高いため、下の実践講座をご検討ください。" },
+        { title: "プログラミングを学びたい方", body: "コードを書く演習は含みません。検定合格に必要な知識の習得が目的です。" },
+        { title: "1週間で合格したい方", body: "8回・約2ヶ月のカリキュラムです。直前対策のみのコースはご用意していません。" },
+      ],
+      curriculum: [
+        { no: 1, title: "AIと生成AIの違い", body: "用語の整理から始めます。機械学習・深層学習・生成AIの関係を、図で理解します。", homework: "用語カード20語" },
+        { no: 2, title: "大規模言語モデルの仕組み", body: "なぜ文章が生成できるのかを、数式を使わずに説明します。得意なことと苦手なことの境界を押さえます。", homework: "確認テスト（10問）" },
+        { no: 3, title: "プロンプトの基本", body: "指示の書き方で結果がどう変わるかを、実例で比較します。検定で問われる型を4つ覚えます。", homework: "プロンプト作成3本" },
+        { no: 4, title: "画像・音声・動画の生成", body: "テキスト以外の生成AIを扱います。代表的なモデルの名前と特徴が出題されるため、一覧で整理します。", homework: "確認テスト（10問）" },
+        { no: 5, title: "AIと著作権・個人情報", body: "配点の大きい分野です。業務で問題になりやすい事例を10件、判断の根拠つきで押さえます。", homework: "事例演習5問" },
+        { no: 6, title: "AI利用のリスクと社内ルール", body: "ハルシネーション、情報漏えい、バイアス。それぞれの対策とセットで覚えます。", homework: "確認テスト（15問）" },
+        { no: 7, title: "分野別の総復習", body: "模擬試験の結果をもとに、正答率の低い分野に時間を配分して復習します。", homework: "弱点分野の復習" },
+        { no: 8, title: "模擬試験と解説", body: "本番と同じ問題数・時間で実施し、その場で解説します。分野別の正答率レポートをお渡しします。", homework: "—" },
+      ],
+    },
+    {
+      id: "course-practice",
+      navLabel: "AI実務者検定講座",
+      title: "AI実務者検定（上位級） 対策講座",
+      badge: "実践",
+      lead: "基礎を終えた方、業務でAIに触れている方向けです。計算問題と事例問題の比重が高い試験に合わせて、演習を中心に10回で仕上げます。",
+      spec: {
+        回数: "全10回（1回120分）",
+        期間: "約3ヶ月",
+        開講: "毎月第4木曜 開講",
+        曜日: "木曜 20:00〜22:00",
+        形式: "オンライン（録画あり）",
+        定員: "各回20名",
+      },
+      target: [
+        "入門レベルの資格を取得済み、または同等の知識がある方",
+        "業務でAIツールを導入する立場にある方（情シス・企画・管理職）",
+        "統計や数学から離れて久しいが、計算問題に対応したい方",
+        "独学で過去問を解いたが、正答率が6割で頭打ちになっている方",
+      ],
+      goals: [
+        "機械学習の主要な手法を、用途と限界のセットで選べる",
+        "頻出の計算問題（精度・再現率・確率）を、見た瞬間に手が動く",
+        "AI導入の企画書を、目的・データ・評価指標の3点で書ける",
+        "模擬試験で安定して8割を取れる",
+      ],
+      notFor: [
+        { title: "AIに初めて触れる方", body: "1回目から機械学習の手法名が出てきます。まずは入門の生成AI基礎講座から受講してください。" },
+        { title: "予習・復習の時間が取れない方", body: "毎回、演習課題があります。講義時間のほかに週2時間ほど必要です。" },
+        { title: "研究レベルの理論を学びたい方", body: "試験に出る範囲に絞ります。論文実装や理論の証明は扱いません。" },
+      ],
+      curriculum: [
+        { no: 1, title: "試験の全体像と学習計画", body: "出題分野ごとの配点と、あなたの現在地を診断テストで確認します。3ヶ月の学習計画を個別に組みます。", homework: "診断テスト（40問）" },
+        { no: 2, title: "機械学習の主要手法", body: "回帰・分類・クラスタリング。それぞれの用途と、使ってはいけない場面を対で覚えます。", homework: "分類演習10問" },
+        { no: 3, title: "評価指標の計算", body: "正解率・適合率・再現率・F値。混同行列から手を動かして計算します。頻出かつ落としやすい分野です。", homework: "計算演習15問" },
+        { no: 4, title: "深層学習の基礎", body: "ニューラルネットワークの構造と学習の流れ。用語が集中する回のため、図解で整理します。", homework: "確認テスト（20問）" },
+        { no: 5, title: "画像・自然言語処理の応用", body: "代表的なモデルの系譜を、年表で押さえます。名称と特徴の組み合わせが問われます。", homework: "年表の穴埋め" },
+        { no: 6, title: "データの前処理と品質", body: "欠損値・外れ値・偏り。実務でも試験でも問われる、データ側の問題を扱います。", homework: "事例演習5問" },
+        { no: 7, title: "AI導入のプロジェクト設計", body: "目的の設定、必要なデータ量、評価方法。企画書の型を使って1本書き上げます。", homework: "企画書1本" },
+        { no: 8, title: "法規制とガバナンス", body: "国内外の規制動向と、社内で整備すべきルール。改正の多い分野のため、最新版で解説します。", homework: "確認テスト（20問）" },
+        { no: 9, title: "模擬試験（本番形式）", body: "本番と同じ問題数・時間で実施します。時間配分の練習を兼ねます。", homework: "自己採点" },
+        { no: 10, title: "解説と弱点補強", body: "模擬試験を分野別に振り返り、残り期間で何をやるかを個別に指示します。", homework: "個別の補強課題" },
+      ],
+    },
+  ],
+
+  /* ----------------------------------------------------------------
+     料金プラン。price は表示用の文字列で持ちます（税込表記の変更に対応するため）。
+  ---------------------------------------------------------------- */
+  plans: [
+    {
+      id: "light",
+      name: "ライト",
+      price: "49,800",
+      priceNote: "税込・一括",
+      forWhom: "自分のペースで進められる方",
+      summary: "教材と録画だけで完結するプラン。質問や添削は含みません。",
+      recommended: false,
+    },
+    {
+      id: "standard",
+      name: "スタンダード",
+      price: "89,800",
+      priceNote: "税込・分割可",
+      forWhom: "はじめて資格に挑戦する方",
+      summary: "質問と模擬試験がつきます。受講者の約7割がこのプランです。",
+      recommended: true,
+    },
+    {
+      id: "support",
+      name: "サポート",
+      price: "148,000",
+      priceNote: "税込・分割可",
+      forWhom: "期限までに確実に合格したい方",
+      summary: "個別面談と再受講保証つき。学習計画まで一緒に管理します。",
+      recommended: false,
+    },
+  ],
+
+  // 比較表の行。values は plans と同じ並び順です。
+  // 値が "○" / "△" / "×" のときは記号として、それ以外は文字として表示します。
+  compare: [
+    { group: "教材", label: "オンライン教材・講義資料", values: ["○", "○", "○"] },
+    { group: "教材", label: "全回の録画配信", values: ["○", "○", "○"] },
+    { group: "教材", label: "録画の視聴期限", values: ["3ヶ月", "6ヶ月", "12ヶ月"] },
+    { group: "教材", label: "確認テスト・演習課題", values: ["○", "○", "○"] },
+    { group: "サポート", label: "チャットでの質問", values: ["×", "無制限", "無制限"] },
+    { group: "サポート", label: "質問への回答目安", values: ["—", "1営業日以内", "当日中"] },
+    { group: "サポート", label: "課題の添削", values: ["×", "○", "○"] },
+    { group: "サポート", label: "個別面談（30分）", values: ["×", "×", "月1回"] },
+    { group: "サポート", label: "学習計画の作成・見直し", values: ["×", "△", "○"] },
+    { group: "試験対策", label: "模擬試験", values: ["1回", "2回", "3回"] },
+    { group: "試験対策", label: "分野別の弱点レポート", values: ["×", "○", "○"] },
+    { group: "試験対策", label: "直前対策ゼミ（2時間）", values: ["×", "○", "○"] },
+    { group: "保証・その他", label: "不合格時の再受講", values: ["×", "×", "無料で1回"] },
+    { group: "保証・その他", label: "分割払い", values: ["×", "3回まで", "6回まで"] },
+    { group: "保証・その他", label: "受講開始前のキャンセル", values: ["○", "○", "○"] },
+  ],
+
+  priceNotes: [
+    "表示価格はすべて税込です。受験料（各検定の公式サイトでお支払い）は含みません。",
+    "分割払いは事務局での手続きになります。手数料はかかりません。",
+    "開講日の前日までのキャンセルは全額返金します。開講後の返金は受講規約に従います。",
+    "法人でのお申込み（3名以上）は10%割引になります。請求書払いにも対応します。",
+  ],
+
+  /* ----------------------------------------------------------------
+     よくある質問。cat でページ内の絞り込みができます。
+  ---------------------------------------------------------------- */
+  faq: [
+    { cat: "受講前", q: "予備知識がまったくありません。ついていけますか。", a: "生成AI基礎講座は、AIという言葉の意味から説明します。受講者の約6割が、IT系以外の職種の方です。1回目の講義で用語を揃えてから本題に入るため、予備知識は不要です。ご不安であれば、申込前に体験講義（無料・60分）をご案内します。" },
+    { cat: "受講前", q: "仕事が忙しく、毎週は参加できません。", a: "全回の録画を翌日に配信します。ライブ講義への出席は必須ではありません。実際、受講者の約4割は録画中心で受講されています。質問はチャットで受け付けるため、リアルタイムで参加できなくても止まりません。" },
+    { cat: "受講前", q: "どちらの講座を選べばよいか分かりません。", a: "AI関連の資格が初めての方、業務でAIツールを日常的には使っていない方は、生成AI基礎講座をおすすめします。すでに入門資格をお持ちの方、社内でAI導入を進める立場の方はAI実務者検定講座です。判断がつかない場合は、無料の診断テスト（20問・10分）をお送りしますのでお問い合わせください。" },
+    { cat: "受講前", q: "パソコンは必要ですか。スマートフォンだけでも受講できますか。", a: "録画の視聴と教材の閲覧はスマートフォンで可能です。ただし演習課題の提出と模擬試験はパソコンを推奨します。画面が小さいと、計算問題の作図が難しいためです。" },
+    { cat: "受講中", q: "質問はどのくらい細かいことまで聞けますか。", a: "「この用語の意味が分からない」といった内容で問題ありません。回数の制限もありません。実績として、スタンダードプランの受講者一人あたり平均18件のご質問をいただいています。回答は原則1営業日以内、実績では平均5時間以内です。" },
+    { cat: "受講中", q: "途中で講座を変更できますか。", a: "開講後2回目までであれば、もう一方の講座へ変更できます。差額が生じる場合は精算します。3回目以降の変更はお受けしていません。" },
+    { cat: "受講中", q: "録画はいつまで見られますか。", a: "プランによって異なります。ライトは3ヶ月、スタンダードは6ヶ月、サポートは12ヶ月です。受講開始日から起算します。期限の延長は、1ヶ月あたり3,000円で承ります。" },
+    { cat: "料金・支払い", q: "分割払いはできますか。", a: "スタンダードは3回まで、サポートは6回まで分割できます。手数料はかかりません。ライトプランは一括のみです。分割をご希望の場合は、申込フォームの備考欄にご記入ください。" },
+    { cat: "料金・支払い", q: "受験料は含まれますか。", a: "含まれません。各検定の受験料は、公式サイトでお支払いいただきます。受験の申込時期と手続きは、講義内でご案内します。" },
+    { cat: "料金・支払い", q: "会社の経費で受講したいのですが。", a: "請求書払いに対応しています。宛名・支払期日のご指定も可能です。3名以上のお申込みで10%割引になります。見積書が必要な場合は、お問い合わせいただければ2営業日以内にお送りします。" },
+    { cat: "料金・支払い", q: "キャンセルや返金はできますか。", a: "開講日の前日までにご連絡いただければ全額返金します。開講後のキャンセルは、受講規約に従い、進行回数に応じた金額を差し引いて返金します。" },
+    { cat: "合格・その後", q: "不合格だった場合はどうなりますか。", a: "サポートプランに限り、次回の同一講座を無料で1回受講できます（受験票の写しをご提出ください）。ほかのプランでは、再受講を50%割引で承ります。" },
+    { cat: "合格・その後", q: "合格率92%とありますが、どういう数字ですか。", a: "直近1年間で、全8回中6回以上に出席（録画視聴を含む）し、模擬試験を受験した方のうち、検定に合格した方の割合です。母数は412名です。受講だけで受験しなかった方は母数に含めていません。" },
+    { cat: "合格・その後", q: "受講後も質問できますか。", a: "受講期間の終了後30日間は、チャットでの質問を受け付けます。それ以降は、卒業生向けの単発相談（1回30分・5,000円）をご利用ください。" },
+  ],
+
+  /* ----------------------------------------------------------------
+     受講者の声。すべてダミーです。画面上にも注記を出しています。
+     実案件では、掲載許諾を得たうえで実際のコメントに差し替えます。
+  ---------------------------------------------------------------- */
+  voices: {
+    notice: "このページに掲載しているコメント・お名前・数値は、レイアウト確認用のダミーです。公開前に、掲載許諾を得た実際の受講者コメントに差し替えてください。",
+    items: [
+      {
+        name: "A・T さん",
+        attr: "30代 / 一般事務 / 会社員",
+        course: "生成AIリテラシー検定 対策講座",
+        plan: "スタンダード",
+        result: "受講2ヶ月で合格",
+        body: "参考書を2冊買って、どちらも3章で止まっていました。講座では出る順に進むので、どこまでやれば良いかが分かるのが一番助かりました。質問すると、その日のうちに返ってくることが多かったです。",
+      },
+      {
+        name: "K・M さん",
+        attr: "40代 / 情報システム / 会社員",
+        course: "AI実務者検定（上位級） 対策講座",
+        plan: "サポート",
+        result: "模擬試験 58% → 本番 84%",
+        body: "計算問題が毎回8割落ちていたのですが、3回目の講義で解き方の型を教わってから安定しました。月1回の面談で残り時間の使い方を決められたのも、社会人には現実的でした。",
+      },
+      {
+        name: "S・Y さん",
+        attr: "20代 / 営業 / 会社員",
+        course: "生成AIリテラシー検定 対策講座",
+        plan: "ライト",
+        result: "受講1.5ヶ月で合格",
+        body: "出張が多く、ライブ講義にはほとんど出られませんでした。録画が翌日に届くので、移動中に消化していました。自力で進められる人なら、この価格帯で十分だと思います。",
+      },
+    ],
+  },
+};
+
+/* ==================================================================
+   ページ定義。講座を増やすと、ここも自動で増えます。
+================================================================== */
+const PAGES = [
+  { id: "home", label: "トップ" },
+  ...CONFIG.courses.map((c) => ({ id: c.id, label: c.navLabel })),
+  { id: "price", label: "料金" },
+  { id: "faq", label: "よくある質問" },
+  { id: "voice", label: "受講者の声" },
+];
+
+/* ==================================================================
+   共通パーツ
+================================================================== */
+
+// 申込ボタン。遷移先は CONFIG.apply.url（申込フォームのデモ）です。
+function ApplyButton({ size = "md", block = false, variant = "primary" }) {
+  const sizes = {
+    sm: "px-4 py-2 text-sm",
+    md: "px-6 py-3 text-base",
+    lg: "px-8 py-4 text-lg",
+  };
+  const variants = {
+    primary: "bg-amber-500 text-blue-950 hover:bg-amber-400 shadow-sm",
+    outline: "bg-white text-blue-900 border border-blue-900 hover:bg-blue-50",
+  };
+  return (
+    <a
+      href={CONFIG.apply.url}
+      className={`inline-flex items-center justify-center gap-2 rounded-lg font-bold transition ${sizes[size]} ${variants[variant]} ${block ? "w-full" : ""}`}
+    >
+      {CONFIG.apply.label}
+      <span aria-hidden="true">→</span>
+    </a>
+  );
+}
+
+function SectionTitle({ eyebrow, title, lead, align = "left" }) {
+  return (
+    <div className={`${align === "center" ? "text-center" : ""} mb-8`}>
+      {eyebrow && (
+        <p className="text-sm font-bold tracking-widest text-amber-600 mb-2">{eyebrow}</p>
+      )}
+      <h2 className="text-2xl md:text-3xl font-bold text-blue-950 leading-snug">{title}</h2>
+      {lead && (
+        <p className={`mt-3 text-neutral-600 leading-relaxed ${align === "center" ? "mx-auto max-w-2xl" : "max-w-3xl"}`}>
+          {lead}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function Mark({ value }) {
+  if (value === "○") return <span className="text-blue-700 font-bold text-lg" title="あり">○</span>;
+  if (value === "△") return <span className="text-amber-600 font-bold text-lg" title="一部あり">△</span>;
+  if (value === "×") return <span className="text-neutral-300 font-bold text-lg" title="なし">×</span>;
+  if (value === "—") return <span className="text-neutral-300">—</span>;
+  return <span className="text-neutral-800 text-sm font-medium">{value}</span>;
+}
+
+/* ==================================================================
+   ナビゲーション（ページ切り替えは1ファイル内で完結）
+================================================================== */
+function Nav({ page, setPage }) {
+  const [open, setOpen] = useState(false);
+
+  const go = (id) => {
+    setPage(id);
+    setOpen(false);
+  };
+
+  return (
+    <header className="sticky top-0 z-40 bg-white/95 backdrop-blur border-b border-neutral-200">
+      <div className="max-w-6xl mx-auto px-4">
+        <div className="flex items-center justify-between h-16">
+          <button onClick={() => go("home")} className="flex items-baseline gap-2 text-left">
+            <span className="text-lg md:text-xl font-bold text-blue-950">{CONFIG.site.name}</span>
+            <span className="hidden sm:inline text-xs text-neutral-500">{CONFIG.site.nameSub}</span>
+          </button>
+
+          <nav className="hidden lg:flex items-center gap-1">
+            {PAGES.map((p) => (
+              <button
+                key={p.id}
+                onClick={() => go(p.id)}
+                className={`px-3 py-2 text-sm rounded-md transition ${
+                  page === p.id
+                    ? "text-blue-900 font-bold bg-blue-50"
+                    : "text-neutral-600 hover:text-blue-900 hover:bg-neutral-50"
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
+            <div className="ml-2">
+              <ApplyButton size="sm" />
+            </div>
+          </nav>
+
+          <button
+            className="lg:hidden inline-flex items-center gap-2 px-3 py-2 border border-neutral-300 rounded-md text-sm text-neutral-700"
+            onClick={() => setOpen(!open)}
+            aria-expanded={open}
+          >
+            <span className="leading-none">{open ? "✕" : "≡"}</span>
+            メニュー
+          </button>
+        </div>
+
+        {open && (
+          <div className="lg:hidden pb-4">
+            <div className="grid gap-1">
+              {PAGES.map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => go(p.id)}
+                  className={`text-left px-3 py-3 rounded-md text-sm border ${
+                    page === p.id
+                      ? "border-blue-200 bg-blue-50 text-blue-900 font-bold"
+                      : "border-transparent text-neutral-700 hover:bg-neutral-50"
+                  }`}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+            <div className="mt-3">
+              <ApplyButton block />
+            </div>
+          </div>
+        )}
+      </div>
+    </header>
+  );
+}
+
+/* ==================================================================
+   1. トップページ
+================================================================== */
+function Home({ setPage }) {
+  return (
+    <div>
+      {/* ファーストビュー */}
+      <section className="bg-blue-950 text-white">
+        <div className="max-w-6xl mx-auto px-4 py-16 md:py-24 grid md:grid-cols-5 gap-10 items-center">
+          <div className="md:col-span-3">
+            <p className="inline-block px-3 py-1 rounded-full bg-blue-900 text-amber-300 text-xs font-bold tracking-wide mb-5">
+              オンライン開講 / 全国どこからでも受講できます
+            </p>
+            <h1 className="text-3xl md:text-5xl font-bold leading-tight">
+              {CONFIG.site.catch}
+            </h1>
+            <p className="mt-5 text-blue-100 leading-relaxed md:text-lg max-w-xl">
+              {CONFIG.site.lead}
+            </p>
+            <div className="mt-8 flex flex-col sm:flex-row gap-3">
+              <div>
+                <ApplyButton size="lg" />
+                <p className="mt-2 text-xs text-blue-200">{CONFIG.apply.subLabel}</p>
+              </div>
+              <button
+                onClick={() => setPage("price")}
+                className="inline-flex items-center justify-center px-8 py-4 rounded-lg border border-blue-400 text-white font-bold hover:bg-blue-900 transition h-fit"
+              >
+                料金プランを見る
+              </button>
+            </div>
+          </div>
+
+          <div className="md:col-span-2">
+            <div className="bg-white rounded-xl p-6 shadow-lg">
+              <p className="text-sm font-bold text-blue-950 mb-4">開講中の講座</p>
+              <div className="space-y-3">
+                {CONFIG.courses.map((c) => (
+                  <button
+                    key={c.id}
+                    onClick={() => setPage(c.id)}
+                    className="w-full text-left border border-neutral-200 rounded-lg p-4 hover:border-blue-300 hover:bg-blue-50/50 transition"
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-blue-100 text-blue-800">{c.badge}</span>
+                      <span className="text-xs text-neutral-500">{c.spec.回数}</span>
+                    </div>
+                    <p className="font-bold text-blue-950 text-sm leading-snug">{c.title}</p>
+                    <p className="text-xs text-neutral-500 mt-1">{c.spec.開講} ／ {c.spec.曜日}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 実績 */}
+      <section className="bg-blue-900 text-white border-t border-blue-800">
+        <div className="max-w-6xl mx-auto px-4 py-8 grid grid-cols-3 divide-x divide-blue-800">
+          {CONFIG.stats.map((s) => (
+            <div key={s.label} className="text-center px-2">
+              <p className="text-2xl md:text-4xl font-bold">
+                {s.value}
+                <span className="text-sm md:text-base font-medium text-blue-200 ml-1">{s.unit}</span>
+              </p>
+              <p className="text-[11px] md:text-sm text-blue-200 mt-1">{s.label}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* 講座の特徴 */}
+      <section className="max-w-6xl mx-auto px-4 py-16 md:py-20">
+        <SectionTitle
+          eyebrow="FEATURES"
+          title="独学で止まる理由を、先に潰しています"
+          lead="教材が悪いのではなく、進め方が分からないまま時間が過ぎることが、資格学習が続かない原因のほとんどです。次の4点で、その状態を作らないようにしています。"
+        />
+        <div className="grid sm:grid-cols-2 gap-5">
+          {CONFIG.features.map((f, i) => (
+            <div key={f.title} className="border border-neutral-200 rounded-xl p-6 bg-white hover:shadow-md transition">
+              <div className="flex items-start gap-4">
+                <span className="shrink-0 w-9 h-9 rounded-lg bg-blue-950 text-white font-bold flex items-center justify-center text-sm">
+                  {String(i + 1).padStart(2, "0")}
+                </span>
+                <div>
+                  <h3 className="font-bold text-blue-950 text-lg leading-snug">{f.title}</h3>
+                  <p className="mt-2 text-sm text-neutral-600 leading-relaxed">{f.body}</p>
+                  <p className="mt-3 inline-block text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                    {f.point}
+                  </p>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* 受講の流れ */}
+      <section className="bg-neutral-100 border-y border-neutral-200">
+        <div className="max-w-6xl mx-auto px-4 py-16 md:py-20">
+          <SectionTitle
+            eyebrow="FLOW"
+            title="お申込みから受講開始までの流れ"
+            lead="申込後にやることは、お支払いだけです。教材や質問チャットのご案内は、こちらからお送りします。"
+          />
+          <ol className="space-y-3">
+            {CONFIG.flow.map((f) => (
+              <li key={f.step} className="bg-white border border-neutral-200 rounded-xl p-5 flex gap-5 items-start">
+                <span className="shrink-0 text-2xl font-bold text-blue-200 w-10">{f.step}</span>
+                <div className="grow">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <h3 className="font-bold text-blue-950">{f.title}</h3>
+                    <span className="text-[11px] font-bold text-blue-800 bg-blue-50 border border-blue-100 rounded px-2 py-0.5">
+                      {f.days}
+                    </span>
+                  </div>
+                  <p className="mt-1.5 text-sm text-neutral-600 leading-relaxed">{f.body}</p>
+                </div>
+              </li>
+            ))}
+          </ol>
+        </div>
+      </section>
+
+      {/* 料金への導線 */}
+      <section className="max-w-6xl mx-auto px-4 py-16 md:py-20">
+        <SectionTitle
+          eyebrow="PRICE"
+          title="料金は3プラン。違いは「サポートの量」です"
+          lead="教材と録画は、どのプランでも同じものをお渡しします。質問できるか、面談があるか、再受講の保証があるか。差はそこだけです。"
+        />
+        <div className="grid md:grid-cols-3 gap-5">
+          {CONFIG.plans.map((p) => (
+            <div
+              key={p.id}
+              className={`rounded-xl border p-6 flex flex-col ${
+                p.recommended ? "border-blue-900 border-2 bg-white shadow-md" : "border-neutral-200 bg-white"
+              }`}
+            >
+              {p.recommended && (
+                <span className="self-start text-[11px] font-bold text-white bg-blue-900 rounded px-2 py-0.5 mb-3">
+                  受講者の約7割
+                </span>
+              )}
+              <h3 className="font-bold text-blue-950 text-lg">{p.name}</h3>
+              <p className="mt-1 text-xs text-neutral-500">{p.forWhom}</p>
+              <p className="mt-4">
+                <span className="text-3xl font-bold text-blue-950">¥{p.price}</span>
+                <span className="text-xs text-neutral-500 ml-2">{p.priceNote}</span>
+              </p>
+              <p className="mt-3 text-sm text-neutral-600 leading-relaxed grow">{p.summary}</p>
+            </div>
+          ))}
+        </div>
+        <div className="mt-8 text-center">
+          <button
+            onClick={() => setPage("price")}
+            className="inline-flex items-center justify-center px-8 py-4 rounded-lg bg-blue-950 text-white font-bold hover:bg-blue-900 transition"
+          >
+            3プランの違いを比較表で見る →
+          </button>
+        </div>
+      </section>
+
+      {/* 不安の解消 → FAQ・受講者の声への導線 */}
+      <section className="bg-neutral-100 border-t border-neutral-200">
+        <div className="max-w-6xl mx-auto px-4 py-14 grid md:grid-cols-2 gap-5">
+          <button
+            onClick={() => setPage("faq")}
+            className="text-left bg-white border border-neutral-200 rounded-xl p-6 hover:border-blue-300 hover:shadow-md transition"
+          >
+            <p className="text-xs font-bold text-amber-600 tracking-widest mb-2">FAQ</p>
+            <h3 className="font-bold text-blue-950 text-lg">よくある質問</h3>
+            <p className="mt-2 text-sm text-neutral-600 leading-relaxed">
+              「予備知識がない」「毎週は参加できない」「経費で受けたい」。お申込み前にいただく質問を{CONFIG.faq.length}件まとめています。
+            </p>
+            <p className="mt-3 text-sm font-bold text-blue-800">質問を見る →</p>
+          </button>
+          <button
+            onClick={() => setPage("voice")}
+            className="text-left bg-white border border-neutral-200 rounded-xl p-6 hover:border-blue-300 hover:shadow-md transition"
+          >
+            <p className="text-xs font-bold text-amber-600 tracking-widest mb-2">VOICE</p>
+            <h3 className="font-bold text-blue-950 text-lg">受講者の声</h3>
+            <p className="mt-2 text-sm text-neutral-600 leading-relaxed">
+              受講前にどこで止まっていて、受講後に何が変わったか。プランと結果もあわせて掲載しています。
+            </p>
+            <p className="mt-3 text-sm font-bold text-blue-800">体験談を見る →</p>
+          </button>
+        </div>
+      </section>
+
+      <FinalCta />
+    </div>
+  );
+}
+
+/* ==================================================================
+   2. / 3. 講座詳細ページ
+================================================================== */
+function CourseDetail({ course, setPage }) {
+  return (
+    <div>
+      <section className="bg-blue-950 text-white">
+        <div className="max-w-6xl mx-auto px-4 py-12 md:py-16">
+          <div className="flex items-center gap-3 mb-4">
+            <span className="text-xs font-bold px-2.5 py-1 rounded bg-amber-400 text-blue-950">{course.badge}</span>
+            <span className="text-sm text-blue-200">{course.spec.回数} ／ {course.spec.期間}</span>
+          </div>
+          <h1 className="text-2xl md:text-4xl font-bold leading-snug">{course.title}</h1>
+          <p className="mt-4 text-blue-100 leading-relaxed max-w-3xl">{course.lead}</p>
+          <div className="mt-7">
+            <ApplyButton size="lg" />
+          </div>
+        </div>
+      </section>
+
+      {/* 開講情報 */}
+      <section className="bg-white border-b border-neutral-200">
+        <div className="max-w-6xl mx-auto px-4 py-6">
+          <dl className="grid grid-cols-2 md:grid-cols-6 gap-y-4 gap-x-4">
+            {Object.entries(course.spec).map(([k, v]) => (
+              <div key={k}>
+                <dt className="text-[11px] text-neutral-500">{k}</dt>
+                <dd className="text-sm font-bold text-blue-950 mt-0.5">{v}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      </section>
+
+      {/* 対象者・到達目標 */}
+      <section className="max-w-6xl mx-auto px-4 py-14 grid md:grid-cols-2 gap-6">
+        <div className="bg-white border border-neutral-200 rounded-xl p-6">
+          <h2 className="font-bold text-blue-950 text-lg mb-4">こんな方が受講しています</h2>
+          <ul className="space-y-3">
+            {course.target.map((t) => (
+              <li key={t} className="flex gap-3 text-sm text-neutral-700 leading-relaxed">
+                <span className="shrink-0 text-blue-700 font-bold">●</span>
+                <span>{t}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div className="bg-white border border-neutral-200 rounded-xl p-6">
+          <h2 className="font-bold text-blue-950 text-lg mb-4">受講後にできるようになること</h2>
+          <ul className="space-y-3">
+            {course.goals.map((g) => (
+              <li key={g} className="flex gap-3 text-sm text-neutral-700 leading-relaxed">
+                <span className="shrink-0 text-amber-600 font-bold">✓</span>
+                <span>{g}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </section>
+
+      {/* カリキュラム */}
+      <section className="bg-neutral-100 border-y border-neutral-200">
+        <div className="max-w-6xl mx-auto px-4 py-14">
+          <SectionTitle
+            eyebrow="CURRICULUM"
+            title="カリキュラム"
+            lead="回ごとの内容と課題です。開講後の理解度に応じて、配点の大きい分野に時間を寄せる調整を行います。"
+          />
+          <div className="bg-white border border-neutral-200 rounded-xl overflow-hidden">
+            {course.curriculum.map((c, i) => (
+              <div
+                key={c.no}
+                className={`p-5 md:p-6 flex flex-col md:flex-row md:items-start gap-3 md:gap-6 ${
+                  i !== 0 ? "border-t border-neutral-200" : ""
+                }`}
+              >
+                <div className="shrink-0 md:w-24">
+                  <span className="inline-block text-xs font-bold text-white bg-blue-900 rounded px-2.5 py-1">
+                    第{c.no}回
+                  </span>
+                </div>
+                <div className="grow">
+                  <h3 className="font-bold text-blue-950">{c.title}</h3>
+                  <p className="mt-1.5 text-sm text-neutral-600 leading-relaxed">{c.body}</p>
+                </div>
+                <div className="shrink-0 md:w-40 md:text-right">
+                  <p className="text-[11px] text-neutral-500">課題</p>
+                  <p className="text-sm text-neutral-700 font-medium">{c.homework}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* この講座が向かない人 */}
+      <section className="max-w-6xl mx-auto px-4 py-14">
+        <SectionTitle
+          eyebrow="NOT FOR"
+          title="この講座が向かない方"
+          lead="合わない状態で受講しても、時間と受講料が無駄になります。次に当てはまる方には、この講座をおすすめしません。"
+        />
+        <div className="grid md:grid-cols-3 gap-5">
+          {course.notFor.map((n) => (
+            <div key={n.title} className="border border-neutral-300 bg-neutral-50 rounded-xl p-5">
+              <div className="flex items-start gap-2">
+                <span className="shrink-0 text-neutral-400 font-bold text-lg leading-none mt-0.5">×</span>
+                <div>
+                  <h3 className="font-bold text-neutral-800 text-sm leading-snug">{n.title}</h3>
+                  <p className="mt-2 text-sm text-neutral-600 leading-relaxed">{n.body}</p>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="mt-8 bg-blue-50 border border-blue-200 rounded-xl p-5 text-sm text-blue-900 leading-relaxed">
+          判断がつかない場合は、無料の診断テスト（20問・10分）をお送りします。結果をもとに、どちらの講座が適切かをお伝えします。
+          <button onClick={() => setPage("faq")} className="ml-2 font-bold underline underline-offset-2">
+            よくある質問を見る
+          </button>
+        </div>
+      </section>
+
+      {/* もう一方の講座への導線 */}
+      <section className="bg-neutral-100 border-t border-neutral-200">
+        <div className="max-w-6xl mx-auto px-4 py-10">
+          <p className="text-sm text-neutral-600 mb-4">ほかの講座</p>
+          <div className="grid md:grid-cols-2 gap-4">
+            {CONFIG.courses
+              .filter((c) => c.id !== course.id)
+              .map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => setPage(c.id)}
+                  className="text-left bg-white border border-neutral-200 rounded-xl p-5 hover:border-blue-300 hover:shadow-md transition"
+                >
+                  <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-blue-100 text-blue-800">{c.badge}</span>
+                  <p className="mt-2 font-bold text-blue-950">{c.title}</p>
+                  <p className="mt-1 text-sm text-neutral-600">{c.spec.回数} ／ {c.spec.曜日}</p>
+                </button>
+              ))}
+            <button
+              onClick={() => setPage("price")}
+              className="text-left bg-white border border-neutral-200 rounded-xl p-5 hover:border-blue-300 hover:shadow-md transition"
+            >
+              <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-800">料金</span>
+              <p className="mt-2 font-bold text-blue-950">3プランの比較</p>
+              <p className="mt-1 text-sm text-neutral-600">サポートの範囲がプランごとに変わります</p>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <FinalCta />
+    </div>
+  );
+}
+
+/* ==================================================================
+   4. 料金ページ
+================================================================== */
+function Pricing() {
+  const groups = useMemo(() => {
+    const map = new Map();
+    CONFIG.compare.forEach((row) => {
+      if (!map.has(row.group)) map.set(row.group, []);
+      map.get(row.group).push(row);
+    });
+    return Array.from(map.entries());
+  }, []);
+
+  return (
+    <div>
+      <section className="bg-blue-950 text-white">
+        <div className="max-w-6xl mx-auto px-4 py-12 md:py-16">
+          <h1 className="text-2xl md:text-4xl font-bold">料金プラン</h1>
+          <p className="mt-4 text-blue-100 leading-relaxed max-w-3xl">
+            教材・録画・演習課題は3プラン共通です。違うのは「質問できるか」「面談があるか」「不合格時の保証があるか」の3点だけです。
+            価格はどちらの講座でも同じです。
+          </p>
+        </div>
+      </section>
+
+      {/* プランカード */}
+      <section className="max-w-6xl mx-auto px-4 py-12">
+        <div className="grid md:grid-cols-3 gap-5">
+          {CONFIG.plans.map((p) => (
+            <div
+              key={p.id}
+              className={`rounded-xl p-6 flex flex-col bg-white ${
+                p.recommended ? "border-2 border-blue-900 shadow-lg" : "border border-neutral-200"
+              }`}
+            >
+              <div className="h-6">
+                {p.recommended && (
+                  <span className="text-[11px] font-bold text-white bg-blue-900 rounded px-2 py-0.5">
+                    もっとも選ばれています
+                  </span>
+                )}
+              </div>
+              <h2 className="mt-3 font-bold text-blue-950 text-xl">{p.name}</h2>
+              <p className="mt-1 text-xs text-neutral-500">{p.forWhom}</p>
+              <p className="mt-5">
+                <span className="text-4xl font-bold text-blue-950">¥{p.price}</span>
+              </p>
+              <p className="text-xs text-neutral-500 mt-1">{p.priceNote}</p>
+              <p className="mt-4 text-sm text-neutral-600 leading-relaxed grow">{p.summary}</p>
+              <div className="mt-6">
+                <ApplyButton block variant={p.recommended ? "primary" : "outline"} />
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* 比較表 */}
+      <section className="bg-neutral-100 border-y border-neutral-200">
+        <div className="max-w-6xl mx-auto px-4 py-14">
+          <SectionTitle
+            eyebrow="COMPARISON"
+            title="3プランの比較"
+            lead="○ = あり、△ = 一部あり、× = なし。数字や期間が入る項目は、その内容を表示しています。"
+          />
+          <div className="bg-white border border-neutral-200 rounded-xl overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[640px] text-left">
+                <thead>
+                  <tr className="bg-blue-950 text-white">
+                    <th className="p-4 text-sm font-bold w-2/5">項目</th>
+                    {CONFIG.plans.map((p) => (
+                      <th key={p.id} className="p-4 text-center text-sm font-bold">
+                        <span className={p.recommended ? "text-amber-300" : ""}>{p.name}</span>
+                        <span className="block text-[11px] font-normal text-blue-200 mt-0.5">¥{p.price}</span>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {groups.map(([groupName, rows]) => (
+                    <React.Fragment key={groupName}>
+                      <tr className="bg-neutral-100">
+                        <th colSpan={CONFIG.plans.length + 1} className="px-4 py-2 text-xs font-bold text-neutral-600 tracking-wide">
+                          {groupName}
+                        </th>
+                      </tr>
+                      {rows.map((row) => (
+                        <tr key={row.label} className="border-t border-neutral-200">
+                          <th className="p-4 text-sm font-medium text-neutral-800">{row.label}</th>
+                          {row.values.map((v, i) => (
+                            <td
+                              key={i}
+                              className={`p-4 text-center ${CONFIG.plans[i].recommended ? "bg-blue-50/60" : ""}`}
+                            >
+                              <Mark value={v} />
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </React.Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <p className="mt-3 text-xs text-neutral-500">※ 横にスクロールできます。</p>
+        </div>
+      </section>
+
+      {/* 選び方 */}
+      <section className="max-w-6xl mx-auto px-4 py-14">
+        <SectionTitle eyebrow="HOW TO CHOOSE" title="迷ったときの選び方" />
+        <div className="grid md:grid-cols-3 gap-5">
+          {[
+            { plan: "ライト", cond: "過去に独学で資格を取ったことがある", body: "自分で計画を立てて進められる方なら、教材と録画だけで足ります。質問が必要になった時点で、差額でスタンダードへ変更できます。" },
+            { plan: "スタンダード", cond: "資格の勉強がはじめて、または独学で挫折した", body: "止まったときに聞ける相手がいるかどうかで、修了率が大きく変わります。迷ったらこのプランをおすすめします。" },
+            { plan: "サポート", cond: "受験日が決まっている / 会社から期限を切られている", body: "月1回の面談で進捗を管理し、不合格時は無料で再受講できます。期限が決まっている方向けです。" },
+          ].map((c) => (
+            <div key={c.plan} className="border border-neutral-200 rounded-xl p-6 bg-white">
+              <p className="text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 inline-block">
+                {c.plan}
+              </p>
+              <h3 className="mt-3 font-bold text-blue-950 leading-snug">{c.cond}</h3>
+              <p className="mt-2 text-sm text-neutral-600 leading-relaxed">{c.body}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* 注意事項 */}
+      <section className="bg-neutral-100 border-t border-neutral-200">
+        <div className="max-w-6xl mx-auto px-4 py-12">
+          <h2 className="font-bold text-blue-950 mb-4">お支払い・キャンセルについて</h2>
+          <ul className="space-y-2">
+            {CONFIG.priceNotes.map((n) => (
+              <li key={n} className="flex gap-3 text-sm text-neutral-700 leading-relaxed">
+                <span className="shrink-0 text-neutral-400">※</span>
+                <span>{n}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </section>
+
+      <FinalCta />
+    </div>
+  );
+}
+
+/* ==================================================================
+   5. よくある質問（提案として追加したページ）
+================================================================== */
+function Faq() {
+  const cats = useMemo(() => ["すべて", ...Array.from(new Set(CONFIG.faq.map((f) => f.cat)))], []);
+  const [cat, setCat] = useState("すべて");
+  const [openIndex, setOpenIndex] = useState(0);
+
+  const list = useMemo(
+    () => CONFIG.faq.filter((f) => cat === "すべて" || f.cat === cat),
+    [cat]
+  );
+
+  const selectCat = (c) => {
+    setCat(c);
+    setOpenIndex(0);
+  };
+
+  return (
+    <div>
+      <section className="bg-blue-950 text-white">
+        <div className="max-w-6xl mx-auto px-4 py-12 md:py-16">
+          <h1 className="text-2xl md:text-4xl font-bold">よくある質問</h1>
+          <p className="mt-4 text-blue-100 leading-relaxed max-w-3xl">
+            お申込み前にいただくご質問をまとめています。ここにない内容は、事務局（{CONFIG.site.mail}）へお問い合わせください。{CONFIG.site.hours}に対応しています。
+          </p>
+        </div>
+      </section>
+
+      <section className="max-w-4xl mx-auto px-4 py-12">
+        <div className="flex flex-wrap gap-2 mb-8">
+          {cats.map((c) => (
+            <button
+              key={c}
+              onClick={() => selectCat(c)}
+              className={`px-4 py-2 rounded-full text-sm border transition ${
+                cat === c
+                  ? "bg-blue-950 text-white border-blue-950 font-bold"
+                  : "bg-white text-neutral-700 border-neutral-300 hover:border-blue-400"
+              }`}
+            >
+              {c}
+              <span className="ml-2 text-xs opacity-70">
+                {c === "すべて" ? CONFIG.faq.length : CONFIG.faq.filter((f) => f.cat === c).length}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        <div className="space-y-3">
+          {list.map((f, i) => {
+            const open = openIndex === i;
+            return (
+              <div key={f.q} className="bg-white border border-neutral-200 rounded-xl overflow-hidden">
+                <button
+                  onClick={() => setOpenIndex(open ? -1 : i)}
+                  className="w-full text-left p-5 flex items-start gap-4 hover:bg-neutral-50 transition"
+                  aria-expanded={open}
+                >
+                  <span className="shrink-0 w-7 h-7 rounded-md bg-blue-950 text-white text-sm font-bold flex items-center justify-center">
+                    Q
+                  </span>
+                  <span className="grow font-bold text-blue-950 leading-snug">{f.q}</span>
+                  <span className={`shrink-0 text-neutral-400 transition-transform ${open ? "rotate-45" : ""}`}>＋</span>
+                </button>
+                {open && (
+                  <div className="px-5 pb-5 pl-16">
+                    <div className="border-l-2 border-amber-300 pl-4">
+                      <p className="text-sm text-neutral-700 leading-relaxed">{f.a}</p>
+                      <p className="mt-3 text-[11px] text-neutral-400">カテゴリ：{f.cat}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="mt-10 bg-blue-50 border border-blue-200 rounded-xl p-6">
+          <h2 className="font-bold text-blue-950">解決しない場合</h2>
+          <p className="mt-2 text-sm text-blue-900 leading-relaxed">
+            事務局へメールでお問い合わせください（{CONFIG.site.mail}）。{CONFIG.site.hours}、原則1営業日以内に返信します。
+            申込前のご相談だけでも構いません。無理におすすめすることはありません。
+          </p>
+        </div>
+      </section>
+
+      <FinalCta />
+    </div>
+  );
+}
+
+/* ==================================================================
+   6. 受講者の声（提案として追加したページ / 内容はダミー）
+================================================================== */
+function Voices() {
+  return (
+    <div>
+      <section className="bg-blue-950 text-white">
+        <div className="max-w-6xl mx-auto px-4 py-12 md:py-16">
+          <h1 className="text-2xl md:text-4xl font-bold">受講者の声</h1>
+          <p className="mt-4 text-blue-100 leading-relaxed max-w-3xl">
+            受講前にどこで止まっていたのか、受講後に何が変わったのか。受講されたプランと結果もあわせて掲載しています。
+          </p>
+        </div>
+      </section>
+
+      {/* ダミーであることの注記。公開前の差し替え漏れを防ぎます。 */}
+      <div className="bg-amber-50 border-b border-amber-200">
+        <div className="max-w-6xl mx-auto px-4 py-4 flex items-start gap-3">
+          <span className="shrink-0 text-amber-600 font-bold">！</span>
+          <p className="text-sm text-amber-900 leading-relaxed">
+            <span className="font-bold">【デモ用のダミーデータです】</span>{CONFIG.voices.notice}
+          </p>
+        </div>
+      </div>
+
+      <section className="max-w-6xl mx-auto px-4 py-12">
+        <div className="grid md:grid-cols-3 gap-5">
+          {CONFIG.voices.items.map((v) => (
+            <article key={v.name} className="bg-white border border-neutral-200 rounded-xl p-6 flex flex-col">
+              <div className="flex items-center gap-3">
+                {/* 写真枠。実案件では顔写真 or イラストに差し替えます。 */}
+                <div className="w-12 h-12 rounded-full bg-neutral-200 text-neutral-500 text-[10px] flex items-center justify-center text-center leading-tight">
+                  写真
+                </div>
+                <div>
+                  <p className="font-bold text-blue-950">{v.name}</p>
+                  <p className="text-xs text-neutral-500">{v.attr}</p>
+                </div>
+              </div>
+
+              <p className="mt-5 text-sm text-neutral-700 leading-relaxed grow">「{v.body}」</p>
+
+              <dl className="mt-5 pt-5 border-t border-neutral-200 space-y-2 text-xs">
+                <div className="flex gap-2">
+                  <dt className="shrink-0 w-16 text-neutral-500">受講講座</dt>
+                  <dd className="text-neutral-800 font-medium">{v.course}</dd>
+                </div>
+                <div className="flex gap-2">
+                  <dt className="shrink-0 w-16 text-neutral-500">プラン</dt>
+                  <dd className="text-neutral-800 font-medium">{v.plan}</dd>
+                </div>
+                <div className="flex gap-2">
+                  <dt className="shrink-0 w-16 text-neutral-500">結果</dt>
+                  <dd className="text-amber-700 font-bold">{v.result}</dd>
+                </div>
+              </dl>
+            </article>
+          ))}
+        </div>
+
+        <div className="mt-10 bg-neutral-100 border border-neutral-200 rounded-xl p-6">
+          <h2 className="font-bold text-blue-950">掲載についてのお願い（公開前に削除してください）</h2>
+          <ul className="mt-3 space-y-2 text-sm text-neutral-700 leading-relaxed">
+            <li>・掲載する際は、受講者ご本人から書面またはメールで掲載許諾を得てください。</li>
+            <li>・「必ず合格できる」など、結果を保証する表現は避けてください（景品表示法の観点）。</li>
+            <li>・合格率などの数値を出す場合は、母数と算出条件を併記してください。</li>
+          </ul>
+        </div>
+      </section>
+
+      <FinalCta />
+    </div>
+  );
+}
+
+/* ==================================================================
+   共通CTA / フッター
+================================================================== */
+function FinalCta() {
+  return (
+    <section className="bg-blue-950 text-white">
+      <div className="max-w-6xl mx-auto px-4 py-14 text-center">
+        <h2 className="text-2xl md:text-3xl font-bold">まずはお申込みください</h2>
+        <p className="mt-3 text-blue-100 text-sm md:text-base leading-relaxed max-w-2xl mx-auto">
+          {CONFIG.apply.note}
+        </p>
+        <div className="mt-7 flex justify-center">
+          <ApplyButton size="lg" />
+        </div>
+        <p className="mt-4 text-xs text-blue-300">
+          開講日の前日までのキャンセルは全額返金します。ご相談だけでも構いません。
+        </p>
+      </div>
+    </section>
+  );
+}
+
+function Footer({ setPage }) {
+  return (
+    <footer className="bg-neutral-900 text-neutral-300">
+      <div className="max-w-6xl mx-auto px-4 py-12 grid md:grid-cols-3 gap-8">
+        <div>
+          <p className="font-bold text-white">{CONFIG.site.name}</p>
+          <p className="mt-1 text-xs text-neutral-400">{CONFIG.site.nameSub}</p>
+          <p className="mt-4 text-sm leading-relaxed text-neutral-400">
+            {CONFIG.site.org}<br />
+            {CONFIG.site.mail}（{CONFIG.site.hours}）
+          </p>
+        </div>
+        <div>
+          <p className="text-sm font-bold text-white mb-3">ページ</p>
+          <ul className="space-y-2">
+            {PAGES.map((p) => (
+              <li key={p.id}>
+                <button onClick={() => setPage(p.id)} className="text-sm text-neutral-400 hover:text-white transition">
+                  {p.label}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div>
+          <p className="text-sm font-bold text-white mb-3">お申込み</p>
+          <ApplyButton block />
+          <p className="mt-3 text-xs text-neutral-500 leading-relaxed">
+            {/* 申込フォームは別デモ（demos/kouza-moushikomi/）です。本番では公開URLに差し替えます。 */}
+            申込フォームは別ページでご用意しています。
+          </p>
+        </div>
+      </div>
+      <div className="border-t border-neutral-800">
+        <div className="max-w-6xl mx-auto px-4 py-5 text-xs text-neutral-500">
+          このページは制作サンプル（デモ）です。掲載している講座名・料金・実績・受講者コメントはすべて架空のものです。
+        </div>
+      </div>
+    </footer>
+  );
+}
+
+/* ==================================================================
+   アプリ本体
+================================================================== */
+function App() {
+  const [page, setPage] = useState("home");
+
+  // ページを切り替えたら先頭に戻します。
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "auto" });
+  }, [page]);
+
+  const course = CONFIG.courses.find((c) => c.id === page);
+
+  return (
+    <div className="min-h-screen bg-neutral-50 text-neutral-900 antialiased">
+      <Nav page={page} setPage={setPage} />
+      <main>
+        {page === "home" && <Home setPage={setPage} />}
+        {course && <CourseDetail course={course} setPage={setPage} />}
+        {page === "price" && <Pricing />}
+        {page === "faq" && <Faq />}
+        {page === "voice" && <Voices />}
+      </main>
+      <Footer setPage={setPage} />
+
+      {/* スマートフォン用の固定CTA。申込への導線を常に画面内に残します。 */}
+      <div className="lg:hidden sticky bottom-0 z-30 bg-white/95 backdrop-blur border-t border-neutral-200 p-3">
+        <ApplyButton block />
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>

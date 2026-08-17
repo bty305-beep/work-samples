@@ -9,12 +9,766 @@
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <script src="https://cdn.tailwindcss.com"></script>
+<style>
+/* ==================================================================
+   意匠は索引ページ（リポジトリ直下の index.html）と共通です。
+   :root のトークンは索引ページからそのまま持ってきています。
+   このファイルで新しい色・書体・寸法のトークンは作っていません。
+================================================================== */
+:root {
+  --c-base:         #ffffff;
+  --c-paper:        #f5f1e8;
+  --c-ink:          #1b1c1e;
+  --c-ink-2:        #4c4f54;
+  --c-ink-3:        #7d8087;
+  --c-rule:         #ddd7c8;
+  --c-rule-strong:  #b3ab98;
+  --c-accent:       #2d4257;
+  --c-accent-tint:  #eef1f3;
+  --c-caution:      #9c463b;
+  --c-caution-tint: #f3e9e6;
+  --font-mincho: "Hiragino Mincho ProN","Yu Mincho","YuMincho","MS PMincho","Noto Serif JP",serif;
+  --font-gothic: "Hiragino Kaku Gothic ProN","Hiragino Sans","Yu Gothic","YuGothic",Meiryo,"Noto Sans JP",sans-serif;
+  --fs-note:  13px;  --fs-body: 15px;  --fs-sub: 18px;  --fs-head: 24px;  --fs-title: 33px;
+  --lh-body: 1.9;  --lh-head: 1.45;  --ls-body: 0.04em;  --ls-head: 0.06em;
+  --sp-1: 4px;  --sp-2: 8px;  --sp-3: 16px;  --sp-4: 32px;  --sp-5: 64px;
+  --rule-1: 1px;  --rule-2: 2px;
+}
+
+html { -webkit-text-size-adjust: 100%; }
+
+/* Tailwind の preflight は実行時に head の末尾へ挿入されるため、
+   body と a はセレクタの詳細度を上げて上書きされないようにしています。 */
+html body {
+  margin: 0;
+  background: var(--c-base);
+  color: var(--c-ink);
+  font-family: var(--font-gothic);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  letter-spacing: var(--ls-body);
+  text-align: left;
+}
+
+*, *::before, *::after { border-radius: 0; box-shadow: none; }
+
+body a {
+  color: var(--c-accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+body a:hover { text-decoration-thickness: 2px; }
+
+:focus-visible { outline: var(--rule-2) solid var(--c-accent); outline-offset: 2px; }
+
+/* ------------------------------------------------------------------
+   版面
+------------------------------------------------------------------ */
+.p-topbar { border-top: 3px solid var(--c-accent); }
+
+.p-sheet {
+  max-width: 940px;
+  margin: 0 auto;
+  padding: 0 var(--sp-3);
+}
+
+.p-main { padding-top: var(--sp-4); padding-bottom: var(--sp-5); }
+
+/* ------------------------------------------------------------------
+   ヘッダー
+------------------------------------------------------------------ */
+.p-masthead { padding-top: var(--sp-4); padding-bottom: var(--sp-4); }
+
+.p-masthead__kicker {
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-head);
+  color: var(--c-ink-3);
+  margin: 0 0 var(--sp-2);
+}
+
+.p-masthead__title {
+  font-family: var(--font-mincho);
+  font-size: var(--fs-title);
+  line-height: var(--lh-head);
+  letter-spacing: var(--ls-head);
+  font-weight: 600;
+  color: var(--c-ink);
+  margin: 0;
+  padding-bottom: var(--sp-3);
+  border-bottom: var(--rule-2) solid var(--c-accent);
+}
+
+.p-masthead__lead {
+  margin: var(--sp-3) 0 0;
+  max-width: 40em;
+  color: var(--c-ink-2);
+}
+
+.p-masthead__meta {
+  margin: var(--sp-3) 0 0;
+  font-size: var(--fs-note);
+  color: var(--c-ink-3);
+}
+
+.p-masthead__meta a { margin-left: var(--sp-2); }
+
+/* ------------------------------------------------------------------
+   注記帯
+------------------------------------------------------------------ */
+.p-notice {
+  margin-top: var(--sp-4);
+  background: var(--c-caution-tint);
+  border-left: 3px solid var(--c-caution);
+  padding: var(--sp-3);
+}
+
+.p-notice__title {
+  margin: 0 0 var(--sp-1);
+  font-size: var(--fs-note);
+  font-weight: 700;
+  letter-spacing: var(--ls-head);
+  color: var(--c-caution);
+}
+
+.p-notice__body {
+  margin: 0;
+  font-size: var(--fs-note);
+  line-height: 1.8;
+  color: var(--c-ink-2);
+}
+
+/* 「このデモについて」の展開部 */
+.p-about {
+  margin-top: var(--sp-3);
+  background: var(--c-paper);
+  border-top: var(--rule-2) solid var(--c-rule-strong);
+  padding: var(--sp-3);
+}
+
+.p-about p { margin: 0 0 var(--sp-2); font-size: var(--fs-note); line-height: 1.85; color: var(--c-ink-2); }
+.p-about p:last-child { margin-bottom: 0; }
+.p-about strong { color: var(--c-ink); font-weight: 700; }
+
+.p-about__list { margin: 0; padding: 0; list-style: none; border-top: var(--rule-1) solid var(--c-rule); }
+.p-about__list li {
+  padding: var(--sp-2) 0;
+  border-bottom: var(--rule-1) solid var(--c-rule);
+  font-size: var(--fs-note);
+  line-height: 1.8;
+  color: var(--c-ink-2);
+}
+
+/* ------------------------------------------------------------------
+   節見出し
+------------------------------------------------------------------ */
+.p-heading {
+  margin: 0 0 var(--sp-3);
+  padding-bottom: var(--sp-2);
+  border-bottom: var(--rule-2) solid var(--c-rule-strong);
+}
+
+.p-heading__no {
+  display: block;
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-head);
+  color: var(--c-accent);
+  margin-bottom: var(--sp-1);
+}
+
+.p-heading__text {
+  font-family: var(--font-mincho);
+  font-size: var(--fs-head);
+  line-height: var(--lh-head);
+  letter-spacing: var(--ls-head);
+  font-weight: 600;
+  margin: 0;
+}
+
+.p-lead {
+  margin: 0 0 var(--sp-4);
+  max-width: 42em;
+  color: var(--c-ink-2);
+}
+
+/* ------------------------------------------------------------------
+   操作（業種切替・ボタン）
+------------------------------------------------------------------ */
+.p-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-2);
+  padding-bottom: var(--sp-3);
+  font-size: var(--fs-note);
+  color: var(--c-ink-3);
+}
+
+.p-toolbar__label { letter-spacing: var(--ls-head); }
+
+.p-btn {
+  font-family: var(--font-gothic);
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-body);
+  color: var(--c-accent);
+  background: var(--c-accent-tint);
+  border: var(--rule-1) solid var(--c-rule-strong);
+  padding: var(--sp-1) var(--sp-2);
+  cursor: pointer;
+}
+
+.p-btn:hover { background: var(--c-base); }
+.p-btn:disabled { color: var(--c-ink-3); background: var(--c-base); border-color: var(--c-rule); cursor: not-allowed; }
+
+.p-btn--main {
+  font-size: var(--fs-body);
+  font-weight: 700;
+  background: var(--c-base);
+  border: var(--rule-2) solid var(--c-accent);
+  padding: var(--sp-2) var(--sp-3);
+}
+
+.p-btn--main:hover { background: var(--c-accent-tint); }
+.p-btn--main:disabled { border-color: var(--c-rule-strong); }
+
+.p-btn--caution { color: var(--c-caution); background: var(--c-caution-tint); border-color: var(--c-caution); }
+.p-btn--caution:hover { background: var(--c-base); }
+
+.p-btn--link {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  color: var(--c-accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  font-family: var(--font-gothic);
+  font-size: var(--fs-note);
+}
+
+/* 業種の切替 */
+.p-choice {
+  font-family: var(--font-gothic);
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-body);
+  color: var(--c-ink-2);
+  background: var(--c-base);
+  border: var(--rule-1) solid var(--c-rule-strong);
+  padding: var(--sp-1) var(--sp-2);
+  cursor: pointer;
+}
+
+.p-choice:hover { background: var(--c-accent-tint); }
+
+.p-choice[aria-pressed="true"] {
+  color: var(--c-accent);
+  font-weight: 700;
+  background: var(--c-accent-tint);
+  border-color: var(--c-accent);
+}
+
+/* ------------------------------------------------------------------
+   タブ（4画面）
+------------------------------------------------------------------ */
+.p-tabs {
+  display: flex;
+  overflow-x: auto;
+  border-top: var(--rule-1) solid var(--c-rule);
+  border-bottom: var(--rule-2) solid var(--c-rule-strong);
+}
+
+.p-tab {
+  flex: 0 0 auto;
+  display: block;
+  white-space: nowrap;
+  padding: var(--sp-2) var(--sp-3);
+  margin-bottom: -2px;
+  font-size: var(--fs-note);
+  color: var(--c-ink-2);
+  border-bottom: 3px solid transparent;
+}
+
+body a.p-tab { text-decoration: none; }
+body a.p-tab:hover { background: var(--c-accent-tint); }
+
+body a.p-tab[aria-current="page"] {
+  color: var(--c-accent);
+  font-weight: 700;
+  border-bottom-color: var(--c-accent);
+}
+
+.p-tab__no { font-family: var(--font-mincho); margin-right: var(--sp-1); }
+
+/* ------------------------------------------------------------------
+   区画（罫線で区切る）
+------------------------------------------------------------------ */
+.p-block { margin: 0 0 var(--sp-4); }
+
+.p-block__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  border-top: var(--rule-2) solid var(--c-accent);
+  padding: var(--sp-2) 0;
+}
+
+.p-block__label {
+  margin: 0;
+  font-size: var(--fs-note);
+  font-weight: 700;
+  letter-spacing: var(--ls-head);
+  color: var(--c-accent);
+}
+
+.p-block__caption { margin: 0; font-size: var(--fs-note); color: var(--c-ink-3); }
+
+.p-note {
+  margin: var(--sp-2) 0 0;
+  font-size: var(--fs-note);
+  line-height: 1.8;
+  color: var(--c-ink-2);
+}
+
+.p-note--sub { color: var(--c-ink-3); }
+
+.p-caution {
+  margin: var(--sp-3) 0;
+  background: var(--c-caution-tint);
+  border-left: 3px solid var(--c-caution);
+  padding: var(--sp-2) var(--sp-3);
+  font-size: var(--fs-note);
+  line-height: 1.8;
+  color: var(--c-ink-2);
+}
+
+.p-caution strong { color: var(--c-caution); font-weight: 700; }
+
+.p-cols { display: grid; gap: var(--sp-4); }
+.p-cols--2 { grid-template-columns: 1fr 1fr; }
+.p-cols--admin { grid-template-columns: 250px minmax(0, 1fr); gap: var(--sp-4); }
+
+/* ------------------------------------------------------------------
+   数字（索引ページの p-figure に合わせています）
+------------------------------------------------------------------ */
+.p-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-top: var(--rule-2) solid var(--c-accent);
+  border-bottom: var(--rule-1) solid var(--c-rule-strong);
+}
+
+.p-stats--4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+.p-stats > div {
+  padding: var(--sp-2) var(--sp-3) var(--sp-3) 0;
+  border-left: var(--rule-1) solid var(--c-rule);
+  padding-left: var(--sp-3);
+}
+
+.p-stats > div:first-child { border-left: 0; padding-left: 0; }
+
+.p-stat__label {
+  margin: 0 0 var(--sp-1);
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-head);
+  color: var(--c-ink-2);
+}
+
+.p-stat__num {
+  margin: 0;
+  font-size: var(--fs-head);
+  line-height: 1.3;
+  font-weight: 700;
+  color: var(--c-accent);
+  letter-spacing: 0.01em;
+  font-feature-settings: "tnum" 1;
+}
+
+.p-stat__unit { font-size: var(--fs-note); font-weight: 500; margin-left: 2px; }
+.p-stat__note { margin: var(--sp-1) 0 0; font-size: var(--fs-note); line-height: 1.7; color: var(--c-ink-3); }
+
+/* ------------------------------------------------------------------
+   表（索引ページの一覧と同じ罫線の取り方）
+------------------------------------------------------------------ */
+.p-table {
+  width: 100%;
+  border-collapse: collapse;
+  border-top: var(--rule-2) solid var(--c-rule-strong);
+  border-bottom: var(--rule-2) solid var(--c-rule-strong);
+  font-size: var(--fs-note);
+}
+
+.p-table th, .p-table td {
+  padding: var(--sp-2);
+  border-bottom: var(--rule-1) solid var(--c-rule);
+  text-align: left;
+  vertical-align: top;
+  line-height: 1.75;
+}
+
+.p-table thead th {
+  background: var(--c-paper);
+  font-weight: 700;
+  color: var(--c-ink-2);
+  letter-spacing: var(--ls-head);
+  white-space: nowrap;
+}
+
+.p-table tbody tr:last-child td { border-bottom: 0; }
+
+.p-table .is-num {
+  text-align: right;
+  white-space: nowrap;
+  font-feature-settings: "tnum" 1;
+}
+
+.p-table__name { display: block; font-size: var(--fs-body); color: var(--c-ink); line-height: 1.6; }
+.p-table__note { display: block; margin-top: 2px; font-size: var(--fs-note); color: var(--c-ink-3); line-height: 1.7; }
+.p-table__total { font-weight: 700; color: var(--c-ink); }
+.p-table__before { color: var(--c-ink-3); }
+.p-table__after { font-weight: 700; color: var(--c-accent); }
+
+/* 横棒（区分内の相対比較） */
+.p-bar {
+  display: block;
+  height: 6px;
+  margin-top: var(--sp-1);
+  background: var(--c-paper);
+  border: var(--rule-1) solid var(--c-rule);
+}
+
+.p-bar__fill { display: block; height: 100%; }
+
+/* 分類の札 */
+.p-kind {
+  display: inline-block;
+  white-space: nowrap;
+  font-size: var(--fs-note);
+  line-height: 1.6;
+  padding: 0 var(--sp-1);
+  border: var(--rule-1) solid currentColor;
+}
+
+.p-kind--auto  { color: var(--c-accent); }
+.p-kind--semi  { color: var(--c-ink-2); }
+.p-kind--human { color: var(--c-ink-3); }
+
+.p-kinds { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-3); margin-bottom: var(--sp-4); }
+.p-kinds > div { border-top: var(--rule-1) solid var(--c-rule-strong); padding-top: var(--sp-2); }
+
+/* ------------------------------------------------------------------
+   定義の並び（入口・調査データなど）
+------------------------------------------------------------------ */
+.p-defs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: var(--rule-1) solid var(--c-rule-strong); }
+
+.p-defs > div {
+  padding: var(--sp-2) var(--sp-3) var(--sp-3) 0;
+  border-bottom: var(--rule-1) solid var(--c-rule);
+}
+
+.p-defs__t { margin: 0; font-size: var(--fs-body); color: var(--c-ink); }
+.p-defs__d { margin: var(--sp-1) 0 0; font-size: var(--fs-note); line-height: 1.7; color: var(--c-ink-3); }
+
+.p-rows { margin: 0; padding: 0; list-style: none; border-top: var(--rule-1) solid var(--c-rule); }
+
+.p-rows li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-2) 0;
+  border-bottom: var(--rule-1) solid var(--c-rule);
+  font-size: var(--fs-note);
+  color: var(--c-ink-2);
+}
+
+.p-rows__v { flex: 0 0 auto; font-weight: 700; color: var(--c-accent); font-feature-settings: "tnum" 1; }
+
+.p-steps { margin: 0; padding: 0; list-style: none; border-top: var(--rule-1) solid var(--c-rule); }
+
+.p-steps li {
+  display: flex;
+  gap: var(--sp-3);
+  padding: var(--sp-2) 0;
+  border-bottom: var(--rule-1) solid var(--c-rule);
+  font-size: var(--fs-note);
+  line-height: 1.8;
+  color: var(--c-ink-2);
+}
+
+.p-steps__no { flex: 0 0 auto; width: 2em; font-family: var(--font-mincho); color: var(--c-accent); }
+
+/* ------------------------------------------------------------------
+   受付フォーム
+------------------------------------------------------------------ */
+.p-form { border-top: var(--rule-2) solid var(--c-accent); padding-top: var(--sp-3); }
+
+.p-field { margin-bottom: var(--sp-3); }
+
+.p-field__label {
+  display: block;
+  margin-bottom: var(--sp-1);
+  font-size: var(--fs-note);
+  font-weight: 700;
+  letter-spacing: var(--ls-head);
+  color: var(--c-ink-2);
+}
+
+.p-field__req { margin-left: var(--sp-2); font-weight: 400; color: var(--c-caution); }
+
+.p-input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  font-family: var(--font-gothic);
+  font-size: var(--fs-body);
+  line-height: 1.7;
+  letter-spacing: var(--ls-body);
+  color: var(--c-ink);
+  background: var(--c-base);
+  border: var(--rule-1) solid var(--c-rule-strong);
+  padding: var(--sp-1) var(--sp-2);
+}
+
+.p-input:focus { border-color: var(--c-accent); outline: var(--rule-2) solid var(--c-accent); outline-offset: 0; }
+
+.p-field__err { margin: var(--sp-1) 0 0; font-size: var(--fs-note); color: var(--c-caution); }
+
+.p-range {
+  width: 100%;
+  max-width: 320px;
+  accent-color: var(--c-accent);
+  cursor: pointer;
+}
+
+.p-wage { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3); padding: var(--sp-3) 0 0; }
+.p-wage__label { font-size: var(--fs-note); font-weight: 700; letter-spacing: var(--ls-head); color: var(--c-ink-2); }
+.p-wage__value { font-size: var(--fs-body); font-weight: 700; color: var(--c-accent); font-feature-settings: "tnum" 1; }
+
+/* ------------------------------------------------------------------
+   判定と自動返信
+------------------------------------------------------------------ */
+.p-verdict { border-left: 3px solid var(--c-accent); background: var(--c-accent-tint); padding: var(--sp-3); margin-bottom: var(--sp-3); }
+.p-verdict--urgent { border-left-color: var(--c-caution); background: var(--c-caution-tint); }
+
+.p-verdict__title { margin: 0 0 var(--sp-2); font-size: var(--fs-note); font-weight: 700; letter-spacing: var(--ls-head); color: var(--c-accent); }
+.p-verdict--urgent .p-verdict__title { color: var(--c-caution); }
+.p-verdict__body { margin: 0; font-size: var(--fs-note); line-height: 1.8; color: var(--c-ink-2); }
+
+.p-tags { display: flex; flex-wrap: wrap; gap: var(--sp-1); margin: var(--sp-2) 0 0; padding: 0; list-style: none; }
+
+.p-tags li {
+  font-size: var(--fs-note);
+  line-height: 1.7;
+  padding: 0 var(--sp-1);
+  border: var(--rule-1) solid var(--c-rule-strong);
+  color: var(--c-ink-2);
+  background: var(--c-base);
+}
+
+.p-tags--caution li { border-color: var(--c-caution); color: var(--c-caution); background: var(--c-caution-tint); }
+
+.p-mail {
+  background: var(--c-paper);
+  border-top: var(--rule-2) solid var(--c-rule-strong);
+  border-bottom: var(--rule-1) solid var(--c-rule-strong);
+  padding: var(--sp-3);
+}
+
+.p-mail__meta { margin: 0 0 var(--sp-2); font-size: var(--fs-note); color: var(--c-ink-3); }
+.p-mail__subject { margin: 0 0 var(--sp-2); font-family: var(--font-mincho); font-size: var(--fs-sub); line-height: var(--lh-head); font-weight: 600; }
+.p-mail p { margin: 0 0 var(--sp-2); font-size: var(--fs-note); line-height: 1.85; color: var(--c-ink); }
+
+.p-mail__label { margin: var(--sp-3) 0 var(--sp-1); font-size: var(--fs-note); font-weight: 700; letter-spacing: var(--ls-head); color: var(--c-accent); }
+
+.p-mail dl { margin: 0; border-top: var(--rule-1) solid var(--c-rule-strong); }
+.p-mail dl > div { display: flex; gap: var(--sp-3); padding: var(--sp-1) 0; border-bottom: var(--rule-1) solid var(--c-rule); }
+.p-mail dt { flex: 0 0 auto; width: 7em; font-size: var(--fs-note); color: var(--c-ink-3); }
+.p-mail dd { flex: 1 1 auto; min-width: 0; margin: 0; font-size: var(--fs-note); color: var(--c-ink); white-space: pre-wrap; word-break: break-word; }
+
+.p-empty { border-top: var(--rule-1) solid var(--c-rule-strong); border-bottom: var(--rule-1) solid var(--c-rule-strong); padding: var(--sp-3) 0; }
+.p-empty p { margin: 0 0 var(--sp-2); font-size: var(--fs-note); line-height: 1.8; color: var(--c-ink-2); }
+.p-empty p:last-child { margin-bottom: 0; }
+
+/* ------------------------------------------------------------------
+   管理画面
+------------------------------------------------------------------ */
+.p-cases {
+  border-top: var(--rule-2) solid var(--c-rule-strong);
+  border-bottom: var(--rule-2) solid var(--c-rule-strong);
+  max-height: 520px;
+  overflow-y: auto;
+}
+
+.p-case {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  text-align: left;
+  font-family: inherit;
+  color: inherit;
+  background: var(--c-base);
+  border: 0;
+  border-bottom: var(--rule-1) solid var(--c-rule);
+  border-left: 3px solid transparent;
+  padding: var(--sp-2);
+  cursor: pointer;
+}
+
+.p-case:hover { background: var(--c-accent-tint); }
+.p-case[aria-current="true"] { background: var(--c-accent-tint); border-left-color: var(--c-accent); }
+
+.p-case__name { display: block; font-family: var(--font-mincho); font-size: var(--fs-sub); line-height: var(--lh-head); font-weight: 600; }
+.p-case__meta { display: block; margin-top: var(--sp-1); font-size: var(--fs-note); color: var(--c-ink-3); line-height: 1.7; }
+.p-case__stage { color: var(--c-accent); }
+
+.p-mark {
+  display: inline-block;
+  font-size: var(--fs-note);
+  line-height: 1.6;
+  padding: 0 var(--sp-1);
+  border: var(--rule-1) solid var(--c-rule-strong);
+  color: var(--c-ink-2);
+  background: var(--c-base);
+}
+
+.p-mark--urgent { border-color: var(--c-caution); color: var(--c-caution); background: var(--c-caution-tint); }
+.p-mark--auto { border-color: var(--c-accent); color: var(--c-accent); background: var(--c-accent-tint); }
+
+.p-detail__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  border-top: var(--rule-2) solid var(--c-accent);
+  border-bottom: var(--rule-1) solid var(--c-rule-strong);
+  padding: var(--sp-2) 0;
+}
+
+.p-detail__name { margin: 0; font-family: var(--font-mincho); font-size: var(--fs-head); line-height: var(--lh-head); font-weight: 600; }
+.p-detail__meta { margin: var(--sp-1) 0 0; font-size: var(--fs-note); color: var(--c-ink-3); }
+.p-detail__count { margin: 0; font-size: var(--fs-note); color: var(--c-ink-2); }
+.p-detail__count strong { font-size: var(--fs-sub); color: var(--c-accent); font-feature-settings: "tnum" 1; }
+
+.p-summary { margin: 0 0 var(--sp-3); }
+.p-summary > div { display: flex; gap: var(--sp-3); padding: var(--sp-1) 0; border-bottom: var(--rule-1) solid var(--c-rule); font-size: var(--fs-note); }
+.p-summary dt { flex: 0 0 auto; width: 7em; color: var(--c-ink-3); }
+.p-summary dd { flex: 1 1 auto; min-width: 0; margin: 0; color: var(--c-ink); }
+
+.p-body {
+  margin: 0 0 var(--sp-3);
+  background: var(--c-paper);
+  padding: var(--sp-2) var(--sp-3);
+  font-size: var(--fs-note);
+  line-height: 1.8;
+  color: var(--c-ink-2);
+  white-space: pre-wrap;
+}
+
+/* 工程 */
+.p-flow { display: flex; overflow-x: auto; border-bottom: var(--rule-1) solid var(--c-rule-strong); }
+
+.p-flow__item {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  padding: var(--sp-1) var(--sp-2);
+  margin-bottom: -1px;
+  font-size: var(--fs-note);
+  color: var(--c-ink-3);
+  border-bottom: 3px solid transparent;
+}
+
+.p-flow__item.is-done { color: var(--c-ink-2); border-bottom-color: var(--c-rule-strong); }
+.p-flow__item.is-now { color: var(--c-accent); font-weight: 700; border-bottom-color: var(--c-accent); }
+
+.p-advance { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3); margin-top: var(--sp-3); }
+
+/* 対応履歴 */
+.p-hist { margin: 0; padding: 0; list-style: none; border-top: var(--rule-1) solid var(--c-rule-strong); }
+
+.p-hist li {
+  display: flex;
+  gap: var(--sp-2);
+  padding: var(--sp-2) 0;
+  border-bottom: var(--rule-1) solid var(--c-rule);
+  font-size: var(--fs-note);
+  line-height: 1.75;
+}
+
+.p-hist__t { flex: 0 0 auto; width: 5.4em; color: var(--c-ink-3); font-feature-settings: "tnum" 1; }
+.p-hist__kind { flex: 0 0 auto; align-self: flex-start; }
+.p-hist__text { flex: 1 1 auto; min-width: 0; color: var(--c-ink); }
+
+.p-memo { display: flex; flex-wrap: wrap; gap: var(--sp-2); align-items: flex-start; margin-top: var(--sp-3); }
+.p-memo .p-input { flex: 1 1 240px; width: auto; }
+
+/* 削減の内訳 */
+.p-split { display: flex; height: 14px; border: var(--rule-1) solid var(--c-rule-strong); margin-top: var(--sp-3); }
+.p-split__keep { background: var(--c-rule-strong); }
+.p-split__cut { background: var(--c-accent); }
+
+/* ------------------------------------------------------------------
+   奥付
+------------------------------------------------------------------ */
+.p-colophon {
+  margin-top: var(--sp-4);
+  padding-top: var(--sp-3);
+  padding-bottom: var(--sp-5);
+  border-top: var(--rule-2) solid var(--c-rule-strong);
+  font-size: var(--fs-note);
+  line-height: 1.8;
+  color: var(--c-ink-3);
+}
+
+.p-colophon p { margin: 0 0 var(--sp-2); }
+.p-colophon p:last-child { margin-bottom: 0; }
+
+/* ------------------------------------------------------------------
+   スマートフォン
+------------------------------------------------------------------ */
+@media (max-width: 720px) {
+  .p-cols--2, .p-cols--admin { grid-template-columns: 1fr; }
+  .p-kinds { grid-template-columns: 1fr; gap: var(--sp-2); }
+  .p-defs { grid-template-columns: 1fr 1fr; }
+  .p-stats, .p-stats--4 { grid-template-columns: 1fr 1fr; }
+}
+
+@media (max-width: 640px) {
+  :root {
+    --fs-title: 26px;
+    --fs-head: 20px;
+    --fs-sub: 17px;
+    --sp-5: 48px;
+  }
+
+  .p-defs { grid-template-columns: 1fr; }
+  .p-stats, .p-stats--4 { grid-template-columns: 1fr; }
+  .p-stats > div { border-left: 0; padding-left: 0; border-top: var(--rule-1) solid var(--c-rule); }
+  .p-stats > div:first-child { border-top: 0; }
+
+  /* 表は1行1ブロックに組み替えます */
+  .p-table, .p-table tbody, .p-table tr, .p-table td { display: block; width: 100%; }
+  .p-table thead { display: none; }
+  .p-table tr { padding: var(--sp-2) 0; border-bottom: var(--rule-1) solid var(--c-rule); }
+  .p-table tbody tr:last-child { border-bottom: 0; }
+  .p-table td { border-bottom: 0; padding: 0 var(--sp-2); }
+  .p-table td.is-num { text-align: left; }
+  .p-table td[data-label]::before { content: attr(data-label) "　"; color: var(--c-ink-3); }
+
+  .p-mail dt, .p-summary dt { width: 6em; }
+  .p-hist li { flex-wrap: wrap; }
+  .p-hist__text { flex: 1 1 100%; }
+}
+</style>
 </head>
 <body>
 <div id="root"></div>
 <script>Babel.registerPreset("react-classic", { presets: [[Babel.availablePresets["react"], { runtime: "classic" }]] });</script>
 <script type="text/babel" data-presets="react-classic">
-const { useState } = React;
+const { useState, useEffect } = React;
 
 /* ==================================================================
    このデモについて
@@ -27,37 +781,20 @@ const { useState } = React;
 
    構成の考え方
 
-   下の CONFIG（配色・共通設定）と INDUSTRIES（業種定義）を
+   下の CONFIG（共通設定）と INDUSTRIES（業種定義）を
    差し替えるだけで、別業種のデモになります。
    画面側のコードは、業種の中身を一切知りません。
+
+   配色・書体は、索引ページ（リポジトリ直下の index.html）と同じ
+   CSS変数を使っています。このファイル側では色を持ちません。
 ================================================================== */
 
 /* ------------------------------------------------------------------
-   1. 共通設定。配色と分類の削減率はここだけで決まります。
+   1. 共通設定。分類の削減率はここだけで決まります。
 ------------------------------------------------------------------ */
 const CONFIG = {
   siteTitle: "受付一元化＋進捗自動連絡",
   siteSubtitle: "業務棚卸しから始める、中小企業のAI・自動化導入",
-  theme: {
-    bg: "#f7f3f5",
-    surface: "#ffffff",
-    ink: "#2b1f27",
-    sub: "#5c4b55",
-    muted: "#8d7d86",
-    line: "#e7dce2",
-    lineStrong: "#d3c3cc",
-    primary: "#6b2350",       // 主色（すもも色）
-    primaryDark: "#4a1536",
-    primaryLight: "#f4e9ef",
-    accent: "#bf5730",        // 副色（テラコッタ）
-    accentDark: "#8f3d1e",
-    accentLight: "#fbeee7",
-    human: "#6f6068",         // 「人がやるべき」の色
-    alert: "#a92323",
-    alertLight: "#fbeaea",
-    ok: "#3f6b4f",
-    okLight: "#eaf2ec",
-  },
   // 分類ごとの削減率。デモ用の仮置きの数字です。
   kinds: {
     auto:  { label: "自動化できる", cut: 0.8, hint: "人の判断が要らない。仕組みに任せられる" },
@@ -468,51 +1205,50 @@ const seedCases = (indKey) =>
     history: s.history.map((h) => ({ ...h })),
   }));
 
+// 分類ごとの罫線・棒の色。索引ページのトークンだけで濃淡を作っています。
+const kindColor = (kind) =>
+  kind === "auto" ? "var(--c-accent)" : kind === "semi" ? "var(--c-ink-2)" : "var(--c-rule-strong)";
+
 /* ------------------------------------------------------------------
    5. 小さな表示部品
 ------------------------------------------------------------------ */
-function Card({ children, className = "" }) {
+function Heading({ no, title, desc }) {
   return (
-    <div className={`rounded-xl border border-[var(--c-line)] bg-[var(--c-surface)] ${className}`}>
+    <React.Fragment>
+      <div className="p-heading">
+        <span className="p-heading__no">{no}</span>
+        <h2 className="p-heading__text">{title}</h2>
+      </div>
+      <p className="p-lead">{desc}</p>
+    </React.Fragment>
+  );
+}
+
+function Block({ label, caption, children }) {
+  return (
+    <div className="p-block">
+      <div className="p-block__head">
+        <p className="p-block__label">{label}</p>
+        {caption ? <p className="p-block__caption">{caption}</p> : null}
+      </div>
       {children}
     </div>
   );
 }
 
-function SectionTitle({ n, title, desc }) {
-  return (
-    <div className="mb-4">
-      <div className="flex items-baseline gap-2">
-        <span className="rounded bg-[var(--c-primary)] px-2 py-0.5 text-xs font-bold text-white">{n}</span>
-        <h2 className="text-lg font-bold tracking-tight text-[var(--c-ink)] sm:text-xl">{title}</h2>
-      </div>
-      <p className="mt-2 text-sm leading-relaxed text-[var(--c-sub)]">{desc}</p>
-    </div>
-  );
+function KindTag({ kind }) {
+  return <span className={`p-kind p-kind--${kind}`}>{CONFIG.kinds[kind].label}</span>;
 }
 
-function KindTag({ kind }) {
-  const cls =
-    kind === "auto"
-      ? "bg-[var(--c-primary)] text-white border-[var(--c-primary)]"
-      : kind === "semi"
-      ? "bg-[var(--c-accent-l)] text-[var(--c-accent-d)] border-[var(--c-accent)]"
-      : "bg-white text-[var(--c-human)] border-[var(--c-human)]";
+function Bar({ ratio, kind }) {
   return (
-    <span className={`inline-block whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-bold ${cls}`}>
-      {CONFIG.kinds[kind].label}
+    <span className="p-bar">
+      <span
+        className="p-bar__fill"
+        style={{ width: `${Math.max(2, ratio * 100)}%`, backgroundColor: kindColor(kind) }}
+      />
     </span>
   );
-}
-
-function Note({ children, tone = "plain" }) {
-  const cls =
-    tone === "alert"
-      ? "border-[var(--c-alert)] bg-[var(--c-alert-l)] text-[var(--c-alert)]"
-      : tone === "ok"
-      ? "border-[var(--c-ok)] bg-[var(--c-ok-l)] text-[var(--c-ok)]"
-      : "border-[var(--c-line-s)] bg-[var(--c-primary-l)] text-[var(--c-sub)]";
-  return <div className={`rounded-lg border px-3 py-2.5 text-xs leading-relaxed sm:text-[13px] ${cls}`}>{children}</div>;
 }
 
 /* ==================================================================
@@ -529,202 +1265,167 @@ function InventoryTab({ ind, wage, setWage }) {
   const officeMax = Math.max.apply(null, office.map((r) => r.total));
   const coreMax = Math.max.apply(null, core.map((r) => r.total));
 
-  const barColor = (kind) =>
-    kind === "auto" ? "var(--c-primary)" : kind === "semi" ? "var(--c-accent)" : "var(--c-human)";
-
-  const Table = ({ list, max, label, caption }) => (
-    <div className="mb-6">
-      <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="text-sm font-bold text-[var(--c-ink)]">{label}</h3>
-        <p className="text-[11px] text-[var(--c-muted)]">{caption}</p>
-      </div>
-      <div className="overflow-hidden rounded-lg border border-[var(--c-line)]">
-        <div className="hidden border-b border-[var(--c-line)] bg-[var(--c-primary-l)] px-3 py-2 text-[11px] font-bold text-[var(--c-sub)] sm:grid sm:grid-cols-[minmax(0,1fr)_72px_72px_92px_112px] sm:gap-2">
-          <span>工程</span>
-          <span className="text-right">1件あたり</span>
-          <span className="text-right">月間件数</span>
-          <span className="text-right">月の合計</span>
-          <span>分類</span>
-        </div>
-        {list.map((r, i) => (
-          <div key={r.name} className={`px-3 py-3 ${i % 2 ? "bg-[var(--c-bg)]" : "bg-[var(--c-surface)]"}`}>
-            <div className="sm:grid sm:grid-cols-[minmax(0,1fr)_72px_72px_92px_112px] sm:items-center sm:gap-2">
-              <div className="min-w-0">
-                <p className="text-[13px] font-semibold leading-snug text-[var(--c-ink)]">{r.name}</p>
-                <p className="mt-0.5 text-[11px] leading-snug text-[var(--c-muted)]">{r.note}</p>
-              </div>
-              <div className="mt-2 flex items-center gap-3 text-[12px] tabular-nums text-[var(--c-sub)] sm:mt-0 sm:contents">
-                <span className="sm:text-right">
-                  <span className="text-[10px] text-[var(--c-muted)] sm:hidden">1件 </span>
-                  {r.min}分
-                </span>
-                <span className="sm:text-right">
-                  <span className="text-[10px] text-[var(--c-muted)] sm:hidden">月 </span>
-                  {fmtNum(r.cnt)}件
-                </span>
-                <span className="font-bold text-[var(--c-ink)] sm:text-right">{fmtH(r.total)}時間</span>
-              </div>
-              <div className="mt-2 sm:mt-0">
-                <KindTag kind={r.kind} />
-              </div>
-            </div>
-            {/* 横棒グラフ（CSSの幅指定） */}
-            <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-[var(--c-line)]">
-              <div
-                className="h-full rounded-full"
-                style={{ width: `${Math.max(2, (r.total / max) * 100)}%`, backgroundColor: barColor(r.kind) }}
-              />
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
+  const TaskTable = ({ list, max, label, caption }) => (
+    <Block label={label} caption={caption}>
+      <table className="p-table">
+        <thead>
+          <tr>
+            <th scope="col">工程</th>
+            <th scope="col" className="is-num">1件あたり</th>
+            <th scope="col" className="is-num">月間件数</th>
+            <th scope="col" className="is-num">月の合計</th>
+            <th scope="col">分類</th>
+          </tr>
+        </thead>
+        <tbody>
+          {list.map((r) => (
+            <tr key={r.name}>
+              <td>
+                <span className="p-table__name">{r.name}</span>
+                <span className="p-table__note">{r.note}</span>
+                <Bar ratio={r.total / max} kind={r.kind} />
+              </td>
+              <td className="is-num" data-label="1件あたり">{r.min}分</td>
+              <td className="is-num" data-label="月間件数">{fmtNum(r.cnt)}件</td>
+              <td className="is-num" data-label="月の合計">
+                <span className="p-table__total">{fmtH(r.total)}時間</span>
+              </td>
+              <td data-label="分類"><KindTag kind={r.kind} /></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </Block>
   );
 
   return (
     <div>
-      <SectionTitle
-        n="①"
+      <Heading
+        no="①"
         title="業務棚卸し"
         desc="ツールを選ぶ前に、いまどの作業に何時間かかっているかを一覧にします。AI導入の失敗は「棚卸しをせずにツールだけ入れた」ケースに集中しています。先に時間の大きい工程を特定し、そのうえで自動化の可否を1件ずつ判断します。"
       />
 
       {/* 背景 */}
-      <div className="mb-6 grid gap-3 sm:grid-cols-2">
-        <Card className="p-4">
-          <p className="text-xs font-bold text-[var(--c-primary)]">なぜ棚卸しから始めるか</p>
-          <div className="mt-3 space-y-2">
+      <div className="p-cols p-cols--2">
+        <Block label="なぜ棚卸しから始めるか">
+          <ul className="p-rows">
             {FACTS.adoption.map((f) => (
-              <div key={f.label} className="flex items-baseline justify-between gap-3 border-b border-dashed border-[var(--c-line)] pb-2 last:border-0">
-                <span className="text-[12px] leading-snug text-[var(--c-sub)]">{f.label}</span>
-                <span className="shrink-0 text-base font-bold tabular-nums text-[var(--c-ink)]">{f.value}</span>
-              </div>
+              <li key={f.label}>
+                <span>{f.label}</span>
+                <span className="p-rows__v">{f.value}</span>
+              </li>
             ))}
-          </div>
-          <p className="mt-3 text-[11px] leading-relaxed text-[var(--c-muted)]">
+          </ul>
+          <p className="p-note">
             出典：{FACTS.adoptionSource}。導入が進まない理由の上位2つは、ツールの性能ではなく
             「どこに使うか分からない」「進める人がいない」でした。棚卸しは、この2つに直接答えるための作業です。
           </p>
-        </Card>
+        </Block>
 
-        <Card className="p-4">
-          <p className="text-xs font-bold text-[var(--c-primary)]">人が張り付いている作業</p>
-          <div className="mt-3 space-y-2.5">
+        <Block label="人が張り付いている作業">
+          <ul className="p-rows">
             {FACTS.jobs.map((f) => (
-              <div key={f.label}>
-                <div className="flex items-baseline justify-between gap-3">
-                  <span className="text-[12px] text-[var(--c-sub)]">{f.label}</span>
-                  <span className="text-sm font-bold tabular-nums text-[var(--c-ink)]">{fmtNum(f.value)}万件</span>
-                </div>
-                <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-[var(--c-line)]">
-                  <div
-                    className="h-full rounded-full bg-[var(--c-accent)]"
-                    style={{ width: `${(f.value / FACTS.jobs[0].value) * 100}%` }}
-                  />
-                </div>
-              </div>
+              <li key={f.label}>
+                <span style={{ flex: "1 1 auto", minWidth: 0 }}>
+                  {f.label}
+                  <Bar ratio={f.value / FACTS.jobs[0].value} kind="auto" />
+                </span>
+                <span className="p-rows__v">{fmtNum(f.value)}万件</span>
+              </li>
             ))}
-          </div>
-          <p className="mt-3 text-[11px] leading-relaxed text-[var(--c-muted)]">
+          </ul>
+          <p className="p-note">
             {FACTS.jobsSource}。求人票にこれだけ並んでいるということは、それだけの人数がこの作業に充てられているということです。
             この3つは、下の表の上位とほぼ重なります。
           </p>
-        </Card>
+        </Block>
       </div>
 
       {/* サマリ */}
-      <Card className="mb-6 overflow-hidden">
-        <div className="border-b border-[var(--c-line)] bg-[var(--c-primary)] px-4 py-3">
-          <p className="text-sm font-bold text-white">{ind.label}での集計（デモ用の想定値）</p>
-        </div>
-        <div className="grid divide-y divide-[var(--c-line)] sm:grid-cols-3 sm:divide-x sm:divide-y-0">
-          <div className="p-4">
-            <p className="text-[11px] font-bold text-[var(--c-muted)]">受付・事務まわりの合計</p>
-            <p className="mt-1 text-2xl font-bold tabular-nums text-[var(--c-ink)]">
+      <Block label={`${ind.label}での集計`} caption="デモ用の想定値">
+        <div className="p-stats">
+          <div>
+            <p className="p-stat__label">受付・事務まわりの合計</p>
+            <p className="p-stat__num">
               {fmtH(officeTotal)}
-              <span className="ml-1 text-sm font-normal">時間 / 月</span>
+              <span className="p-stat__unit">時間 / 月</span>
             </p>
-            <p className="mt-1 text-[11px] text-[var(--c-muted)]">自動化を検討する対象</p>
+            <p className="p-stat__note">自動化を検討する対象</p>
           </div>
-          <div className="p-4">
-            <p className="text-[11px] font-bold text-[var(--c-accent-d)]">このうち削減できる見込み</p>
-            <p className="mt-1 text-2xl font-bold tabular-nums text-[var(--c-accent-d)]">
+          <div>
+            <p className="p-stat__label">このうち削減できる見込み</p>
+            <p className="p-stat__num">
               {fmtH(saved)}
-              <span className="ml-1 text-sm font-normal">時間 / 月</span>
+              <span className="p-stat__unit">時間 / 月</span>
             </p>
-            <p className="mt-1 text-[11px] text-[var(--c-muted)]">
+            <p className="p-stat__note">
               対象業務の {Math.round((saved / officeTotal) * 100)}%（年 {fmtH(saved * 12)}時間）
             </p>
           </div>
-          <div className="p-4">
-            <p className="text-[11px] font-bold text-[var(--c-muted)]">人件費換算</p>
-            <p className="mt-1 text-2xl font-bold tabular-nums text-[var(--c-ink)]">
-              {fmtYen(hoursOf(saved) * wage)}
-              <span className="ml-1 text-sm font-normal">/ 月</span>
-            </p>
-            <p className="mt-1 text-[11px] text-[var(--c-muted)]">年 {fmtYen(hoursOf(saved) * wage * 12)}</p>
+          <div>
+            <p className="p-stat__label">人件費換算</p>
+            <p className="p-stat__num">{fmtYen(hoursOf(saved) * wage)}<span className="p-stat__unit">/ 月</span></p>
+            <p className="p-stat__note">年 {fmtYen(hoursOf(saved) * wage * 12)}</p>
           </div>
         </div>
-        <div className="border-t border-[var(--c-line)] bg-[var(--c-bg)] px-4 py-3">
-          <label className="flex flex-wrap items-center gap-3">
-            <span className="text-xs font-bold text-[var(--c-sub)]">時給（人件費換算に使用）</span>
-            <input
-              type="range"
-              min={CONFIG.wageMin}
-              max={CONFIG.wageMax}
-              step={100}
-              value={wage}
-              onChange={(e) => setWage(Number(e.target.value))}
-              className="h-1.5 w-full min-w-[180px] max-w-xs flex-1 cursor-pointer appearance-none rounded-full bg-[var(--c-line-s)] accent-[var(--c-primary)]"
-            />
-            <span className="rounded bg-[var(--c-primary)] px-2 py-1 text-xs font-bold tabular-nums text-white">
-              {fmtYen(wage)} / 時
-            </span>
-          </label>
-          <p className="mt-2 text-[11px] leading-relaxed text-[var(--c-muted)]">
-            削減率は分類ごとの仮置きです。自動化できる = {CONFIG.kinds.auto.cut * 100}%減、半自動化 = {CONFIG.kinds.semi.cut * 100}%減、
-            人がやるべき = 0%。実際の案件では、この率を工程ごとの実測値に置き換えます。
-          </p>
+
+        <div className="p-wage">
+          <label className="p-wage__label" htmlFor="wage">時給（人件費換算に使用）</label>
+          <input
+            id="wage"
+            type="range"
+            className="p-range"
+            min={CONFIG.wageMin}
+            max={CONFIG.wageMax}
+            step={100}
+            value={wage}
+            onChange={(e) => setWage(Number(e.target.value))}
+          />
+          <span className="p-wage__value">{fmtYen(wage)} / 時</span>
         </div>
-      </Card>
+
+        <p className="p-note">
+          削減率は分類ごとの仮置きです。自動化できる＝{CONFIG.kinds.auto.cut * 100}%減、半自動化＝{CONFIG.kinds.semi.cut * 100}%減、
+          人がやるべき＝0%。実際の案件では、この率を工程ごとの実測値に置き換えます。
+        </p>
+      </Block>
 
       {/* 分類の凡例 */}
-      <div className="mb-5 grid gap-2 sm:grid-cols-3">
+      <div className="p-kinds">
         {Object.keys(CONFIG.kinds).map((k) => (
-          <div key={k} className="rounded-lg border border-[var(--c-line)] bg-[var(--c-surface)] p-3">
+          <div key={k}>
             <KindTag kind={k} />
-            <p className="mt-2 text-[11px] leading-relaxed text-[var(--c-sub)]">{CONFIG.kinds[k].hint}</p>
+            <p className="p-note">{CONFIG.kinds[k].hint}</p>
           </div>
         ))}
       </div>
 
-      <Table
+      <TaskTable
         list={office.slice().sort((a, b) => b.total - a.total)}
         max={officeMax}
         label="受付・事務まわり（自動化の検討対象）"
-        caption="バーはこの区分内での相対比較"
+        caption="棒はこの区分内での相対比較"
       />
 
-      <div className="mb-3">
-        <Note tone="alert">
-          <span className="font-bold">下の{core.length}工程は、はじめから自動化の対象外にしています。</span>
-          {ind.coreWord}のような中核業務は「人がやるべき」に分類し、上の削減見込みには一切含めていません。
-          事務作業を減らすのは、この中核業務に時間を戻すためです。逆にすると、品質が落ちて売上が下がります。
-        </Note>
+      <div className="p-caution">
+        <strong>下の{core.length}工程は、はじめから自動化の対象外にしています。</strong>
+        {ind.coreWord}のような中核業務は「人がやるべき」に分類し、上の削減見込みには一切含めていません。
+        事務作業を減らすのは、この中核業務に時間を戻すためです。逆にすると、品質が落ちて売上が下がります。
       </div>
 
-      <Table
+      <TaskTable
         list={core.slice().sort((a, b) => b.total - a.total)}
         max={coreMax}
         label={`中核業務（自動化の対象外・別掲）　合計 ${fmtH(coreTotal)}時間 / 月`}
-        caption="バーはこの区分内での相対比較"
+        caption="棒はこの区分内での相対比較"
       />
 
-      <Note>
+      <p className="p-note">
         棚卸しは、この画面に載せている{ind.tasks.length}工程では足りません。実際の導入では30〜50工程まで洗い出します。
         件数と所要時間は、担当者への聞き取りと、可能なものは実測（通話履歴・送信履歴・タイムスタンプ）で埋めます。
         この画面の数値は、すべてデモ用の想定値です。
-      </Note>
+      </p>
     </div>
   );
 }
@@ -781,224 +1482,174 @@ function IntakeTab({ ind, indKey, onSubmit }) {
 
   return (
     <div>
-      <SectionTitle
-        n="②"
+      <Heading
+        no="②"
         title="受付（お客さま側の画面）"
         desc={`電話・${ind.channels[1].label}・LINE・${ind.channels[3].label}のどこから来ても、同じ台帳の1行になります。受付と同時に自動返信が出るため、一次返信が担当者の在席状況に左右されません。`}
       />
 
-      {/* チャネル図 */}
-      <Card className="mb-6 p-4">
-        <p className="text-xs font-bold text-[var(--c-primary)]">4つの入口 → 1つの台帳</p>
-        <div className="mt-3 grid gap-2 sm:grid-cols-4">
+      {/* チャネル */}
+      <Block label="4つの入口から、1つの台帳へ">
+        <div className="p-defs">
           {ind.channels.map((c) => (
-            <div key={c.key} className="rounded-lg border border-[var(--c-line)] bg-[var(--c-bg)] p-3">
-              <p className="text-[13px] font-bold text-[var(--c-ink)]">{c.label}</p>
-              <p className="mt-1 text-[11px] leading-snug text-[var(--c-muted)]">{c.note}</p>
+            <div key={c.key}>
+              <p className="p-defs__t">{c.label}</p>
+              <p className="p-defs__d">{c.note}</p>
             </div>
           ))}
         </div>
-        <div className="mt-3 flex items-center gap-2">
-          <div className="h-px flex-1 bg-[var(--c-line-s)]" />
-          <span className="text-xs text-[var(--c-muted)]">↓ すべて同じ形で入る</span>
-          <div className="h-px flex-1 bg-[var(--c-line-s)]" />
-        </div>
-        <div className="mt-3 rounded-lg border border-[var(--c-primary)] bg-[var(--c-primary-l)] px-3 py-2.5">
-          <p className="text-[13px] font-bold text-[var(--c-primary-d)]">受付台帳（③の管理画面）</p>
-          <p className="mt-1 text-[11px] leading-relaxed text-[var(--c-sub)]">
-            入口ごとにノート・Excel・トーク画面と保管場所が分かれていると、同じ{ind.customerWord}の予定が二重に入ります。
-            台帳を1つにするだけで、重複と「どこに書いたか分からない」が同時になくなります。
-          </p>
-        </div>
-      </Card>
+        <p className="p-note">
+          入口ごとにノート・Excel・トーク画面と保管場所が分かれていると、同じ{ind.customerWord}の予定が二重に入ります。
+          台帳を1つにするだけで、重複と「どこに書いたか分からない」が同時になくなります。集約先が、③の管理画面の受付台帳です。
+        </p>
+      </Block>
 
-      <div className="grid gap-5 lg:grid-cols-2">
+      <div className="p-cols p-cols--2">
         {/* フォーム */}
-        <Card className="overflow-hidden">
-          <div className="border-b border-[var(--c-line)] bg-[var(--c-primary)] px-4 py-3">
-            <p className="text-sm font-bold text-white">{ind.orgName}　お問い合わせフォーム</p>
-            <p className="mt-1 text-[11px] leading-relaxed text-white/80">{ind.form.lead}</p>
-          </div>
-          <div className="border-b border-[var(--c-line)] bg-[var(--c-bg)] px-4 py-2.5">
-            <p className="mb-2 text-[11px] font-bold text-[var(--c-sub)]">入力例で試す</p>
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => fillSample("normal")}
-                className="rounded-full border border-[var(--c-line-s)] bg-white px-3 py-1.5 text-[11px] font-bold text-[var(--c-sub)] hover:border-[var(--c-primary)] hover:text-[var(--c-primary)]"
-              >
-                通常のご相談
-              </button>
-              <button
-                type="button"
-                onClick={() => fillSample("urgent")}
-                className="rounded-full border border-[var(--c-alert)] bg-[var(--c-alert-l)] px-3 py-1.5 text-[11px] font-bold text-[var(--c-alert)] hover:opacity-80"
-              >
-                緊急のご相談
-              </button>
+        <div>
+          <Block label={`${ind.orgName}　お問い合わせフォーム`}>
+            <p className="p-note">{ind.form.lead}</p>
+
+            <div className="p-toolbar" style={{ paddingTop: "var(--sp-3)" }}>
+              <span className="p-toolbar__label">入力例で試す</span>
+              <button type="button" className="p-btn" onClick={() => fillSample("normal")}>通常のご相談</button>
+              <button type="button" className="p-btn p-btn--caution" onClick={() => fillSample("urgent")}>緊急のご相談</button>
             </div>
-          </div>
 
-          <form onSubmit={submit} className="space-y-3.5 p-4" noValidate>
-            {ind.form.fields.map((f) => (
-              <div key={f.key}>
-                <label className="mb-1 flex items-center gap-2 text-[12px] font-bold text-[var(--c-sub)]">
-                  {f.label}
-                  {f.required && (
-                    <span className="rounded bg-[var(--c-accent)] px-1.5 py-px text-[10px] font-bold text-white">必須</span>
+            <form onSubmit={submit} className="p-form" noValidate>
+              {ind.form.fields.map((f) => (
+                <div className="p-field" key={f.key}>
+                  <label className="p-field__label" htmlFor={`f-${f.key}`}>
+                    {f.label}
+                    {f.required ? <span className="p-field__req">必須</span> : null}
+                  </label>
+                  {f.type === "select" ? (
+                    <select
+                      id={`f-${f.key}`}
+                      className="p-input"
+                      value={values[f.key]}
+                      onChange={(e) => set(f.key, e.target.value)}
+                    >
+                      {f.options.map((o) => (
+                        <option key={o} value={o}>{o}</option>
+                      ))}
+                    </select>
+                  ) : f.type === "textarea" ? (
+                    <textarea
+                      id={`f-${f.key}`}
+                      className="p-input"
+                      rows={4}
+                      value={values[f.key]}
+                      placeholder={f.placeholder}
+                      onChange={(e) => set(f.key, e.target.value)}
+                    />
+                  ) : (
+                    <input
+                      id={`f-${f.key}`}
+                      className="p-input"
+                      type="text"
+                      value={values[f.key]}
+                      placeholder={f.placeholder}
+                      onChange={(e) => set(f.key, e.target.value)}
+                    />
                   )}
-                </label>
-                {f.type === "select" ? (
-                  <select
-                    value={values[f.key]}
-                    onChange={(e) => set(f.key, e.target.value)}
-                    className="w-full rounded-lg border border-[var(--c-line-s)] bg-white px-3 py-2 text-sm text-[var(--c-ink)] focus:border-[var(--c-primary)] focus:outline-none"
-                  >
-                    {f.options.map((o) => (
-                      <option key={o} value={o}>{o}</option>
-                    ))}
-                  </select>
-                ) : f.type === "textarea" ? (
-                  <textarea
-                    rows={4}
-                    value={values[f.key]}
-                    placeholder={f.placeholder}
-                    onChange={(e) => set(f.key, e.target.value)}
-                    className="w-full rounded-lg border border-[var(--c-line-s)] bg-white px-3 py-2 text-sm leading-relaxed text-[var(--c-ink)] focus:border-[var(--c-primary)] focus:outline-none"
-                  />
-                ) : (
-                  <input
-                    type="text"
-                    value={values[f.key]}
-                    placeholder={f.placeholder}
-                    onChange={(e) => set(f.key, e.target.value)}
-                    className="w-full rounded-lg border border-[var(--c-line-s)] bg-white px-3 py-2 text-sm text-[var(--c-ink)] focus:border-[var(--c-primary)] focus:outline-none"
-                  />
-                )}
-                {errors[f.key] && <p className="mt-1 text-[11px] font-bold text-[var(--c-alert)]">{errors[f.key]}</p>}
-              </div>
-            ))}
+                  {errors[f.key] ? <p className="p-field__err">{errors[f.key]}</p> : null}
+                </div>
+              ))}
 
-            <button
-              type="submit"
-              className="w-full rounded-lg bg-[var(--c-primary)] px-4 py-3 text-sm font-bold text-white hover:bg-[var(--c-primary-d)]"
-            >
-              この内容で送信する
-            </button>
+              <button type="submit" className="p-btn p-btn--main">この内容で送信する</button>
 
-            <p className="text-[11px] leading-relaxed text-[var(--c-muted)]">
-              これはデモです。入力内容はどこにも保存・送信されません。ブラウザのメモリ上にだけ置き、
-              ページを再読み込みすると消えます（localStorage・Cookie・外部送信のいずれも使っていません）。
-            </p>
-          </form>
-        </Card>
+              <p className="p-note p-note--sub">
+                これはデモです。入力内容はどこにも保存・送信されません。ブラウザのメモリ上にだけ置き、
+                ページを再読み込みすると消えます（localStorage・Cookie・外部送信のいずれも使っていません）。
+              </p>
+            </form>
+          </Block>
+        </div>
 
         {/* 自動返信 */}
-        <div className="space-y-4">
+        <div>
           {!result ? (
-            <Card className="flex h-full min-h-[280px] flex-col items-center justify-center p-8 text-center">
-              <p className="text-sm font-bold text-[var(--c-muted)]">送信すると、ここに自動返信の文面が出ます</p>
-              <p className="mt-2 max-w-sm text-[12px] leading-relaxed text-[var(--c-muted)]">
-                本文に緊急語が含まれていた場合は「緊急」と判定し、判定の根拠になった語をそのまま表示します。
-                左の「緊急のご相談」ボタンで試せます。
-              </p>
-            </Card>
+            <Block label="自動返信">
+              <div className="p-empty">
+                <p>送信すると、ここに自動返信の文面が出ます。</p>
+                <p>
+                  本文に緊急語が含まれていた場合は「緊急」と判定し、判定の根拠になった語をそのまま表示します。
+                  左の「緊急のご相談」で試せます。
+                </p>
+              </div>
+            </Block>
           ) : (
-            <React.Fragment>
+            <Block label="自動返信" caption={`${result.at} 送信・担当者の操作なし`}>
               {/* 判定 */}
-              <Card className="overflow-hidden">
-                <div className="px-4 py-2.5" style={{ backgroundColor: result.urgent ? "var(--c-alert)" : "var(--c-ok)" }}>
-                  <p className="text-sm font-bold text-white">
-                    {result.urgent ? "緊急と判定しました" : "通常の受付として登録しました"}
-                  </p>
-                </div>
-                <div className="p-4">
-                  {result.urgent ? (
-                    <React.Fragment>
-                      <p className="text-[13px] leading-relaxed text-[var(--c-ink)]">
-                        本文に次の語が含まれていたため、緊急と判定しました。
-                      </p>
-                      <div className="mt-2 flex flex-wrap gap-1.5">
-                        {result.hits.map((w) => (
-                          <span
-                            key={w}
-                            className="rounded border border-[var(--c-alert)] bg-[var(--c-alert-l)] px-2 py-0.5 text-xs font-bold text-[var(--c-alert)]"
-                          >
-                            {w}
-                          </span>
-                        ))}
-                      </div>
-                      <p className="mt-3 text-[12px] leading-relaxed text-[var(--c-sub)]">
-                        判定と同時に、担当者へ通知しました。③の受付一覧でも「緊急」の印がつきます。
-                      </p>
-                    </React.Fragment>
-                  ) : (
-                    <p className="text-[13px] leading-relaxed text-[var(--c-ink)]">
-                      本文に緊急語は含まれていませんでした。通常の順番で対応します。
+              <div className={result.urgent ? "p-verdict p-verdict--urgent" : "p-verdict"}>
+                <p className="p-verdict__title">
+                  {result.urgent ? "緊急と判定しました" : "通常の受付として登録しました"}
+                </p>
+                {result.urgent ? (
+                  <React.Fragment>
+                    <p className="p-verdict__body">本文に次の語が含まれていたため、緊急と判定しました。</p>
+                    <ul className="p-tags p-tags--caution">
+                      {result.hits.map((w) => (
+                        <li key={w}>{w}</li>
+                      ))}
+                    </ul>
+                    <p className="p-verdict__body" style={{ marginTop: "var(--sp-2)" }}>
+                      判定と同時に、担当者へ通知しました。③の受付一覧でも「緊急」の印がつきます。
                     </p>
-                  )}
+                  </React.Fragment>
+                ) : (
+                  <p className="p-verdict__body">本文に緊急語は含まれていませんでした。通常の順番で対応します。</p>
+                )}
 
-                  <button
-                    type="button"
-                    onClick={() => setShowWords((v) => !v)}
-                    className="mt-3 text-[11px] font-bold text-[var(--c-primary)] underline"
-                  >
+                <p style={{ margin: "var(--sp-2) 0 0" }}>
+                  <button type="button" className="p-btn--link" onClick={() => setShowWords((v) => !v)}>
                     {showWords ? "判定に使う語の一覧を閉じる" : `判定に使う語の一覧を見る（${ind.urgentWords.length}語）`}
                   </button>
-                  {showWords && (
-                    <div className="mt-2 rounded-lg border border-[var(--c-line)] bg-[var(--c-bg)] p-3">
-                      <div className="flex flex-wrap gap-1.5">
-                        {ind.urgentWords.map((w) => (
-                          <span key={w} className="rounded bg-white px-2 py-0.5 text-[11px] text-[var(--c-sub)] ring-1 ring-[var(--c-line)]">
-                            {w}
-                          </span>
-                        ))}
-                      </div>
-                      <p className="mt-2 text-[11px] leading-relaxed text-[var(--c-muted)]">
-                        語句一致による判定です。判定基準を画面から確認でき、業種ごとに追加・削除できることを優先しました。
-                        本番では、ここに文脈の判定を足したうえで、判定に使った語は同じように表示し続けます
-                        （なぜ緊急になったのか説明できない状態を作らないためです）。
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </Card>
+                </p>
+                {showWords ? (
+                  <React.Fragment>
+                    <ul className="p-tags">
+                      {ind.urgentWords.map((w) => (
+                        <li key={w}>{w}</li>
+                      ))}
+                    </ul>
+                    <p className="p-note p-note--sub">
+                      語句一致による判定です。判定基準を画面から確認でき、業種ごとに追加・削除できることを優先しました。
+                      本番では、ここに文脈の判定を足したうえで、判定に使った語は同じように表示し続けます
+                      （なぜ緊急になったのか説明できない状態を作らないためです）。
+                    </p>
+                  </React.Fragment>
+                ) : null}
+              </div>
 
               {/* 自動返信の文面 */}
-              <Card className="overflow-hidden">
-                <div className="border-b border-[var(--c-line)] bg-[var(--c-bg)] px-4 py-2.5">
-                  <p className="text-xs font-bold text-[var(--c-sub)]">自動返信（{result.at} 送信・担当者の操作なし）</p>
-                </div>
-                <div className="space-y-3 p-4 text-[13px] leading-relaxed text-[var(--c-ink)]">
-                  <p className="font-bold">【自動返信】お問い合わせを受け付けました（受付番号 {result.no}）</p>
-                  <p>{result.values.name} 様</p>
-                  <p>このたびはご連絡ありがとうございます。以下の内容で受け付けました。</p>
-                  <p>{result.urgent ? ind.reply.urgentLead : ind.reply.normalLead}</p>
-                  <div className="rounded-lg border border-[var(--c-line)] bg-[var(--c-bg)] p-3">
-                    <p className="mb-2 text-[11px] font-bold text-[var(--c-muted)]">■ 受付内容</p>
-                    <dl className="space-y-1.5">
-                      {ind.form.fields.map((f) => (
-                        <div key={f.key} className="grid grid-cols-[92px_minmax(0,1fr)] gap-2">
-                          <dt className="text-[11px] text-[var(--c-muted)]">{f.label}</dt>
-                          <dd className="whitespace-pre-wrap break-words text-[12px] text-[var(--c-ink)]">
-                            {result.values[f.key]}
-                          </dd>
-                        </div>
-                      ))}
-                    </dl>
-                  </div>
-                  <div>
-                    <p className="mb-1 text-[11px] font-bold text-[var(--c-muted)]">■ 今後の流れ</p>
-                    <p className="text-[12px] text-[var(--c-sub)]">{ind.stages.join(" → ")}</p>
-                  </div>
-                  <p className="text-[12px] leading-relaxed text-[var(--c-sub)]">{ind.reply.closing}</p>
-                </div>
-              </Card>
+              <div className="p-mail">
+                <p className="p-mail__meta">自動返信（{result.at} 送信）</p>
+                <p className="p-mail__subject">【自動返信】お問い合わせを受け付けました（受付番号 {result.no}）</p>
+                <p>{result.values.name} 様</p>
+                <p>このたびはご連絡ありがとうございます。以下の内容で受け付けました。</p>
+                <p>{result.urgent ? ind.reply.urgentLead : ind.reply.normalLead}</p>
 
-              <Note tone="ok">
+                <p className="p-mail__label">受付内容</p>
+                <dl>
+                  {ind.form.fields.map((f) => (
+                    <div key={f.key}>
+                      <dt>{f.label}</dt>
+                      <dd>{result.values[f.key]}</dd>
+                    </div>
+                  ))}
+                </dl>
+
+                <p className="p-mail__label">今後の流れ</p>
+                <p>{ind.stages.join(" → ")}</p>
+                <p>{ind.reply.closing}</p>
+              </div>
+
+              <p className="p-note">
                 この受付は、③の管理画面の一覧に「{result.no}」として追加されています。タブを切り替えて確認できます。
-              </Note>
-            </React.Fragment>
+              </p>
+            </Block>
           )}
         </div>
       </div>
@@ -1009,42 +1660,19 @@ function IntakeTab({ ind, indKey, onSubmit }) {
 /* ==================================================================
    画面③ 管理画面（社内側）
 ================================================================== */
-function ChannelBadge({ ind, k }) {
+function channelLabel(ind, k) {
   const c = ind.channels.filter((x) => x.key === k)[0] || ind.channels[0];
-  return (
-    <span className="rounded border border-[var(--c-line-s)] bg-[var(--c-bg)] px-1.5 py-px text-[10px] font-bold text-[var(--c-sub)]">
-      {c.label}
-    </span>
-  );
+  return c.label;
 }
 
-function Stepper({ stages, current }) {
+function Flow({ stages, current }) {
   return (
-    <div className="-mx-1 overflow-x-auto pb-1">
-      <div className="flex min-w-max items-center gap-1 px-1">
-        {stages.map((s, i) => {
-          const done = i < current;
-          const now = i === current;
-          const style = now
-            ? { backgroundColor: "var(--c-primary)", borderColor: "var(--c-primary)", color: "#fff" }
-            : done
-            ? { backgroundColor: "var(--c-primary-l)", borderColor: "var(--c-primary)", color: "var(--c-primary-d)" }
-            : { backgroundColor: "#fff", borderColor: "var(--c-line)", color: "var(--c-muted)" };
-          return (
-            <React.Fragment key={s}>
-              {i > 0 && (
-                <div
-                  className="h-0.5 w-4 shrink-0 sm:w-6"
-                  style={{ backgroundColor: i <= current ? "var(--c-primary)" : "var(--c-line)" }}
-                />
-              )}
-              <div className="shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-bold" style={style}>
-                {done ? "✓ " : ""}{s}
-              </div>
-            </React.Fragment>
-          );
-        })}
-      </div>
+    <div className="p-flow">
+      {stages.map((s, i) => (
+        <span key={s} className={`p-flow__item ${i < current ? "is-done" : ""} ${i === current ? "is-now" : ""}`}>
+          {s}
+        </span>
+      ))}
     </div>
   );
 }
@@ -1057,185 +1685,133 @@ function AdminTab({ ind, cases, selectedId, setSelectedId, advance, addStaffNote
 
   return (
     <div>
-      <SectionTitle
-        n="③"
+      <Heading
+        no="③"
         title="管理画面（社内側）"
-        desc="左が受付一覧、右が選択した1件です。「工程を進める」を押すと、その時点で自動連絡が送られ、対応履歴に1行残ります。履歴の各行には「自動」「担当」のラベルを付け、担当者が動かなくても送られた連絡がどれかを見て分かるようにしています。"
+        desc="左が受付一覧、右が選択した1件です。「工程を進める」を押すと、その時点で自動連絡が送られ、対応履歴に1行残ります。履歴の各行には「自動」「担当」の別を付け、担当者が動かなくても送られた連絡がどれかを見て分かるようにしています。"
       />
 
-      <div className="grid gap-4 lg:grid-cols-[300px_minmax(0,1fr)]">
+      <div className="p-cols p-cols--admin">
         {/* 一覧 */}
-        <Card className="self-start overflow-hidden">
-          <div className="border-b border-[var(--c-line)] bg-[var(--c-bg)] px-3 py-2.5">
-            <p className="text-xs font-bold text-[var(--c-sub)]">受付一覧（{cases.length}件）</p>
-            <p className="mt-0.5 text-[10px] text-[var(--c-muted)]">入口が違っても同じ一覧に並びます</p>
-          </div>
-          <div className="max-h-[460px] divide-y divide-[var(--c-line)] overflow-y-auto">
-            {cases.map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                onClick={() => setSelectedId(c.id)}
-                className="block w-full px-3 py-2.5 text-left"
-                style={sel && c.id === sel.id ? { backgroundColor: "var(--c-primary-l)" } : undefined}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="truncate text-[13px] font-bold text-[var(--c-ink)]">{c.name}</span>
-                  {c.urgent && (
-                    <span className="shrink-0 rounded bg-[var(--c-alert)] px-1.5 py-px text-[10px] font-bold text-white">緊急</span>
-                  )}
-                </div>
-                <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                  <ChannelBadge ind={ind} k={c.channel} />
-                  <span className="text-[10px] tabular-nums text-[var(--c-muted)]">{c.no}</span>
-                  <span className="text-[10px] text-[var(--c-muted)]">{c.at}</span>
-                </div>
-                <div className="mt-1.5 flex items-center gap-2">
-                  <span
-                    className="rounded-full px-2 py-px text-[10px] font-bold"
-                    style={{
-                      backgroundColor: c.stage >= last ? "var(--c-ok-l)" : "var(--c-accent-l)",
-                      color: c.stage >= last ? "var(--c-ok)" : "var(--c-accent-d)",
-                    }}
-                  >
-                    {ind.stages[c.stage]}
+        <div>
+          <Block label={`受付一覧（${cases.length}件）`} caption="入口が違っても同じ一覧">
+            <div className="p-cases">
+              {cases.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  className="p-case"
+                  aria-current={sel && c.id === sel.id ? "true" : "false"}
+                  onClick={() => setSelectedId(c.id)}
+                >
+                  <span className="p-case__name">
+                    {c.name}
+                    {c.urgent ? <span className="p-mark p-mark--urgent" style={{ marginLeft: "var(--sp-2)" }}>緊急</span> : null}
                   </span>
-                  <span className="text-[10px] tabular-nums text-[var(--c-muted)]">
-                    {c.stage + 1} / {ind.stages.length}
+                  <span className="p-case__meta">
+                    {channelLabel(ind, c.channel)}　{c.no}　{c.at}
                   </span>
-                </div>
-              </button>
-            ))}
-          </div>
-        </Card>
+                  <span className="p-case__meta">
+                    <span className="p-case__stage">{ind.stages[c.stage]}</span>
+                    　{c.stage + 1} / {ind.stages.length}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </Block>
+        </div>
 
         {/* 詳細 */}
-        {sel && (
-          <div className="space-y-4">
-            <Card className="overflow-hidden">
-              <div className="border-b border-[var(--c-line)] px-4 py-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-base font-bold text-[var(--c-ink)]">{sel.name}</h3>
-                      {sel.urgent && (
-                        <span className="rounded bg-[var(--c-alert)] px-1.5 py-0.5 text-[10px] font-bold text-white">緊急</span>
-                      )}
-                    </div>
-                    <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-[var(--c-muted)]">
-                      <ChannelBadge ind={ind} k={sel.channel} />
-                      <span className="tabular-nums">{sel.no}</span>
-                      <span>受付 {sel.at}</span>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-[10px] font-bold text-[var(--c-muted)]">自動連絡</p>
-                    <p className="text-lg font-bold tabular-nums text-[var(--c-primary)]">
-                      {autoCount}
-                      <span className="text-xs font-normal">件</span>
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="border-b border-[var(--c-line)] px-4 py-3">
-                <dl className="grid gap-x-4 gap-y-1.5 sm:grid-cols-2">
-                  {sel.summary.map((kv) => (
-                    <div key={kv[0]} className="flex gap-2">
-                      <dt className="w-24 shrink-0 text-[11px] text-[var(--c-muted)]">{kv[0]}</dt>
-                      <dd className="min-w-0 break-words text-[12px] font-semibold text-[var(--c-ink)]">{kv[1]}</dd>
-                    </div>
-                  ))}
-                </dl>
-                <p className="mt-2 whitespace-pre-wrap rounded-lg bg-[var(--c-bg)] p-2.5 text-[12px] leading-relaxed text-[var(--c-sub)]">
-                  {sel.body}
+        {sel ? (
+          <div>
+            <div className="p-detail__head">
+              <div>
+                <h3 className="p-detail__name">
+                  {sel.name}
+                  {sel.urgent ? <span className="p-mark p-mark--urgent" style={{ marginLeft: "var(--sp-2)" }}>緊急</span> : null}
+                </h3>
+                <p className="p-detail__meta">
+                  {channelLabel(ind, sel.channel)}　{sel.no}　受付 {sel.at}
                 </p>
               </div>
+              <p className="p-detail__count">自動連絡 <strong>{autoCount}</strong> 件</p>
+            </div>
 
-              {/* 工程 */}
-              <div className="px-4 py-3">
-                <p className="mb-2 text-[11px] font-bold text-[var(--c-muted)]">工程</p>
-                <Stepper stages={ind.stages} current={sel.stage} />
-                <div className="mt-3 flex flex-wrap items-center gap-3">
-                  <button
-                    type="button"
-                    disabled={sel.stage >= last}
-                    onClick={() => advance(sel.id)}
-                    className="rounded-lg bg-[var(--c-primary)] px-4 py-2.5 text-sm font-bold text-white hover:bg-[var(--c-primary-d)] disabled:cursor-not-allowed disabled:bg-[var(--c-line-s)] disabled:text-[var(--c-muted)]"
-                  >
-                    {sel.stage >= last ? "最終工程です" : `工程を進める → ${ind.stages[sel.stage + 1]}`}
-                  </button>
-                  <p className="text-[11px] leading-snug text-[var(--c-muted)]">
-                    押した時点で{ind.customerWord}へ自動連絡が送られ、履歴に1行増えます
-                  </p>
+            <dl className="p-summary">
+              {sel.summary.map((kv) => (
+                <div key={kv[0]}>
+                  <dt>{kv[0]}</dt>
+                  <dd>{kv[1]}</dd>
                 </div>
+              ))}
+            </dl>
+
+            <p className="p-body">{sel.body}</p>
+
+            <Block label="工程">
+              <Flow stages={ind.stages} current={sel.stage} />
+              <div className="p-advance">
+                <button
+                  type="button"
+                  className="p-btn p-btn--main"
+                  disabled={sel.stage >= last}
+                  onClick={() => advance(sel.id)}
+                >
+                  {sel.stage >= last ? "最終工程です" : `工程を進める（次：${ind.stages[sel.stage + 1]}）`}
+                </button>
+                <span className="p-block__caption">
+                  押した時点で{ind.customerWord}へ自動連絡が送られ、履歴に1行増えます
+                </span>
               </div>
-            </Card>
+            </Block>
 
             {/* 履歴 */}
-            <Card className="overflow-hidden">
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--c-line)] bg-[var(--c-bg)] px-4 py-2.5">
-                <p className="text-xs font-bold text-[var(--c-sub)]">対応履歴</p>
-                <div className="flex flex-wrap items-center gap-3 text-[10px] text-[var(--c-muted)]">
-                  <span className="flex items-center gap-1">
-                    <span className="rounded bg-[var(--c-primary)] px-1.5 py-px font-bold text-white">自動</span>
-                    担当者の操作なしに送信
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <span className="rounded border border-[var(--c-human)] bg-white px-1.5 py-px font-bold text-[var(--c-human)]">担当</span>
-                    人が対応
-                  </span>
-                </div>
-              </div>
-              <ol className="divide-y divide-[var(--c-line)]">
+            <Block label="対応履歴" caption="自動＝担当者の操作なしに送信／担当＝人が対応">
+              <ol className="p-hist">
                 {sel.history.map((h, i) => (
-                  <li key={i} className="flex gap-3 px-4 py-2.5">
-                    <span className="w-16 shrink-0 pt-0.5 text-[11px] tabular-nums text-[var(--c-muted)]">{h.t}</span>
-                    <span
-                      className={`h-fit shrink-0 rounded px-1.5 py-px text-[10px] font-bold ${
-                        h.kind === "auto"
-                          ? "bg-[var(--c-primary)] text-white"
-                          : "border border-[var(--c-human)] bg-white text-[var(--c-human)]"
-                      }`}
-                    >
+                  <li key={i}>
+                    <span className="p-hist__t">{h.t}</span>
+                    <span className={h.kind === "auto" ? "p-mark p-mark--auto p-hist__kind" : "p-mark p-hist__kind"}>
                       {h.kind === "auto" ? "自動" : "担当"}
                     </span>
-                    <span className="text-[12px] leading-relaxed text-[var(--c-ink)]">{h.text}</span>
+                    <span className="p-hist__text">{h.text}</span>
                   </li>
                 ))}
               </ol>
-              <div className="border-t border-[var(--c-line)] bg-[var(--c-bg)] px-4 py-3">
-                <p className="mb-1.5 text-[11px] font-bold text-[var(--c-sub)]">担当者メモを追加（「担当」として記録されます）</p>
-                <div className="flex flex-wrap gap-2">
-                  <input
-                    type="text"
-                    value={memo}
-                    onChange={(e) => setMemo(e.target.value)}
-                    placeholder="例：電話で日程を再調整。8/22 14:00で仮押さえ"
-                    className="min-w-[200px] flex-1 rounded-lg border border-[var(--c-line-s)] bg-white px-3 py-2 text-[13px] text-[var(--c-ink)] focus:border-[var(--c-primary)] focus:outline-none"
-                  />
-                  <button
-                    type="button"
-                    disabled={!memo.trim()}
-                    onClick={() => {
-                      addStaffNote(sel.id, memo.trim());
-                      setMemo("");
-                    }}
-                    className="rounded-lg border border-[var(--c-human)] bg-white px-4 py-2 text-[13px] font-bold text-[var(--c-human)] hover:bg-[var(--c-bg)] disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    追加
-                  </button>
-                </div>
-              </div>
-            </Card>
 
-            <Note>
+              <div className="p-memo">
+                <label className="p-field__label" htmlFor="memo" style={{ flex: "1 1 100%" }}>
+                  担当者メモを追加（「担当」として記録されます）
+                </label>
+                <input
+                  id="memo"
+                  type="text"
+                  className="p-input"
+                  value={memo}
+                  onChange={(e) => setMemo(e.target.value)}
+                  placeholder="例：電話で日程を再調整。8/22 14:00で仮押さえ"
+                />
+                <button
+                  type="button"
+                  className="p-btn"
+                  disabled={!memo.trim()}
+                  onClick={() => {
+                    addStaffNote(sel.id, memo.trim());
+                    setMemo("");
+                  }}
+                >
+                  追加
+                </button>
+              </div>
+            </Block>
+
+            <p className="p-note">
               自動と担当を分けて記録する理由は2つあります。1つは、{ind.customerWord}に何が届いているかを担当者が把握できること。
               もう1つは、「連絡していないのに連絡したことになっている」状態を作らないことです。
-              自動送信のラベルが付いた行は、送信時刻と文面がそのまま残ります。
-            </Note>
+              自動送信の行は、送信時刻と文面がそのまま残ります。
+            </p>
           </div>
-        )}
+        ) : null}
       </div>
     </div>
   );
@@ -1248,152 +1824,118 @@ function ResultsTab({ ind, wage }) {
   const rows = ind.tasks.filter((t) => t.group === "office").map((t) => ({ ...t, total: t.min * t.cnt }));
   const officeTotal = rows.reduce((s, r) => s + r.total, 0);
   const saved = rows.reduce((s, r) => s + r.total * CONFIG.kinds[r.kind].cut, 0);
+  const cutPct = Math.round((saved / officeTotal) * 100);
 
   return (
     <div>
-      <SectionTitle
-        n="④"
+      <Heading
+        no="④"
         title="導入後の数字"
         desc="①の棚卸しで決めた対象に、②③の仕組みを入れた場合の比較です。すべてデモ用の想定値で、実在の企業の実績ではありません。実際の案件では、導入前に同じ4項目を1か月測ってから着手します。測っていない項目は、あとから効果を説明できないためです。"
       />
 
-      {/* 4指標 */}
-      <div className="mb-6 grid gap-3 sm:grid-cols-2">
-        {ind.metrics.map((m) => (
-          <Card key={m.label} className="overflow-hidden">
-            <div className="border-b border-[var(--c-line)] bg-[var(--c-bg)] px-4 py-2.5">
-              <p className="text-[13px] font-bold text-[var(--c-ink)]">{m.label}</p>
-            </div>
-            <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-4 py-4">
-              <div className="text-center">
-                <p className="text-[10px] font-bold text-[var(--c-muted)]">導入前</p>
-                <p className="mt-1 text-base font-bold tabular-nums text-[var(--c-muted)] line-through decoration-1 sm:text-lg">
-                  {m.before}
-                </p>
-              </div>
-              <div className="text-lg text-[var(--c-line-s)]">→</div>
-              <div className="text-center">
-                <p className="text-[10px] font-bold text-[var(--c-accent-d)]">導入後</p>
-                <p className="mt-1 text-lg font-bold tabular-nums text-[var(--c-accent-d)] sm:text-xl">{m.after}</p>
-              </div>
-            </div>
-            <p className="border-t border-[var(--c-line)] px-4 py-2.5 text-[11px] leading-relaxed text-[var(--c-muted)]">
-              {m.note}
-            </p>
-          </Card>
-        ))}
-      </div>
+      <Block label="4つの指標" caption="デモ用の想定値">
+        <table className="p-table">
+          <thead>
+            <tr>
+              <th scope="col">指標</th>
+              <th scope="col" className="is-num">導入前</th>
+              <th scope="col" className="is-num">導入後</th>
+            </tr>
+          </thead>
+          <tbody>
+            {ind.metrics.map((m) => (
+              <tr key={m.label}>
+                <td>
+                  <span className="p-table__name">{m.label}</span>
+                  <span className="p-table__note">{m.note}</span>
+                </td>
+                <td className="is-num" data-label="導入前"><span className="p-table__before">{m.before}</span></td>
+                <td className="is-num" data-label="導入後"><span className="p-table__after">{m.after}</span></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </Block>
 
-      {/* 時間と人件費 */}
-      <Card className="mb-6 overflow-hidden">
-        <div className="border-b border-[var(--c-line)] bg-[var(--c-primary)] px-4 py-3">
-          <p className="text-sm font-bold text-white">削減時間の合計と人件費換算</p>
-          <p className="mt-0.5 text-[11px] text-white/80">①の棚卸しの分類と削減率から計算。時給は①のスライダーと連動します</p>
-        </div>
-        <div className="grid divide-y divide-[var(--c-line)] sm:grid-cols-4 sm:divide-x sm:divide-y-0">
-          <div className="p-4">
-            <p className="text-[11px] font-bold text-[var(--c-muted)]">対象業務（導入前）</p>
-            <p className="mt-1 text-xl font-bold tabular-nums text-[var(--c-ink)]">
-              {fmtH(officeTotal)}
-              <span className="ml-1 text-xs font-normal">時間/月</span>
-            </p>
+      <Block label="削減時間の合計と人件費換算" caption="時給は①のスライダーと連動">
+        <div className="p-stats p-stats--4">
+          <div>
+            <p className="p-stat__label">対象業務（導入前）</p>
+            <p className="p-stat__num">{fmtH(officeTotal)}<span className="p-stat__unit">時間 / 月</span></p>
           </div>
-          <div className="p-4">
-            <p className="text-[11px] font-bold text-[var(--c-muted)]">残る時間（導入後）</p>
-            <p className="mt-1 text-xl font-bold tabular-nums text-[var(--c-ink)]">
-              {fmtH(officeTotal - saved)}
-              <span className="ml-1 text-xs font-normal">時間/月</span>
-            </p>
+          <div>
+            <p className="p-stat__label">残る時間（導入後）</p>
+            <p className="p-stat__num">{fmtH(officeTotal - saved)}<span className="p-stat__unit">時間 / 月</span></p>
           </div>
-          <div className="p-4">
-            <p className="text-[11px] font-bold text-[var(--c-accent-d)]">削減時間</p>
-            <p className="mt-1 text-xl font-bold tabular-nums text-[var(--c-accent-d)]">
-              {fmtH(saved)}
-              <span className="ml-1 text-xs font-normal">時間/月</span>
-            </p>
-            <p className="mt-0.5 text-[10px] text-[var(--c-muted)]">年 {fmtH(saved * 12)}時間</p>
+          <div>
+            <p className="p-stat__label">削減時間</p>
+            <p className="p-stat__num">{fmtH(saved)}<span className="p-stat__unit">時間 / 月</span></p>
+            <p className="p-stat__note">年 {fmtH(saved * 12)}時間</p>
           </div>
-          <div className="p-4">
-            <p className="text-[11px] font-bold text-[var(--c-muted)]">人件費換算（{fmtYen(wage)}/時）</p>
-            <p className="mt-1 text-xl font-bold tabular-nums text-[var(--c-ink)]">
-              {fmtYen(hoursOf(saved) * wage)}
-              <span className="ml-1 text-xs font-normal">/月</span>
-            </p>
-            <p className="mt-0.5 text-[10px] text-[var(--c-muted)]">年 {fmtYen(hoursOf(saved) * wage * 12)}</p>
+          <div>
+            <p className="p-stat__label">人件費換算（{fmtYen(wage)}/時）</p>
+            <p className="p-stat__num">{fmtYen(hoursOf(saved) * wage)}<span className="p-stat__unit">/ 月</span></p>
+            <p className="p-stat__note">年 {fmtYen(hoursOf(saved) * wage * 12)}</p>
           </div>
         </div>
-        <div className="border-t border-[var(--c-line)] px-4 py-3">
-          <div className="mb-2 flex h-6 w-full overflow-hidden rounded-md">
-            <div
-              className="flex items-center justify-center text-[10px] font-bold text-white"
-              style={{ width: `${((officeTotal - saved) / officeTotal) * 100}%`, backgroundColor: "var(--c-human)" }}
-            >
-              残る
-            </div>
-            <div
-              className="flex items-center justify-center text-[10px] font-bold text-white"
-              style={{ width: `${(saved / officeTotal) * 100}%`, backgroundColor: "var(--c-accent)" }}
-            >
-              削減 {Math.round((saved / officeTotal) * 100)}%
-            </div>
-          </div>
-          <p className="text-[11px] leading-relaxed text-[var(--c-muted)]">
-            {ind.coreWord}などの中核業務は、この計算に含めていません（①で「人がやるべき」に分類し、自動化の対象外にしています）。
-            削減した時間は人員削減ではなく、中核業務と、いま後回しになっている{ind.customerWord}対応に充てる前提で計算しています。
-          </p>
-        </div>
-      </Card>
 
-      {/* なぜ効くのか */}
-      <div className="grid gap-3 lg:grid-cols-2">
-        <Card className="p-4">
-          <p className="text-xs font-bold text-[var(--c-primary)]">低評価の口コミに出ていた2つの言葉</p>
-          <div className="mt-3 space-y-2">
-            <div className="rounded-lg border border-[var(--c-alert)] bg-[var(--c-alert-l)] px-3 py-2.5">
-              <p className="text-[13px] font-bold text-[var(--c-alert)]">「連絡が来ない」</p>
-              <p className="mt-1 text-[11px] leading-relaxed text-[var(--c-sub)]">
-                → 工程が進むたびに自動連絡（③の履歴の「自動」の行）
-              </p>
-            </div>
-            <div className="rounded-lg border border-[var(--c-alert)] bg-[var(--c-alert-l)] px-3 py-2.5">
-              <p className="text-[13px] font-bold text-[var(--c-alert)]">「ネット予約と窓口予約が重複した」</p>
-              <p className="mt-1 text-[11px] leading-relaxed text-[var(--c-sub)]">
-                → 4つの入口を1つの台帳に集約（②のチャネル図）
-              </p>
-            </div>
-          </div>
-          <p className="mt-3 text-[11px] leading-relaxed text-[var(--c-muted)]">
+        <div className="p-split">
+          <span className="p-split__keep" style={{ width: `${((officeTotal - saved) / officeTotal) * 100}%` }} />
+          <span className="p-split__cut" style={{ width: `${(saved / officeTotal) * 100}%` }} />
+        </div>
+        <p className="p-note p-note--sub">
+          左が残る時間 {fmtH(officeTotal - saved)}時間 / 月、右が削減する時間 {fmtH(saved)}時間 / 月（対象業務の {cutPct}%）。
+        </p>
+        <p className="p-note">
+          {ind.coreWord}などの中核業務は、この計算に含めていません（①で「人がやるべき」に分類し、自動化の対象外にしています）。
+          削減した時間は人員削減ではなく、中核業務と、いま後回しになっている{ind.customerWord}対応に充てる前提で計算しています。
+        </p>
+      </Block>
+
+      <div className="p-cols p-cols--2">
+        <Block label="低評価の口コミに出ていた2つの言葉">
+          <ul className="p-rows">
+            <li>
+              <span>「連絡が来ない」</span>
+              <span className="p-rows__v">③の自動連絡</span>
+            </li>
+            <li>
+              <span>「ネット予約と窓口予約が重複した」</span>
+              <span className="p-rows__v">②の受付一元化</span>
+            </li>
+          </ul>
+          <p className="p-note">
             {FACTS.reviewSource}では、低評価の最大の要因はこの2つでした。
             どちらも技術的に難しい問題ではなく、{ind.customerWord}が催促するまで情報が出てこない状態が失注につながっています。
             ②と③は、その2つだけを狙って作っています。
           </p>
-        </Card>
+        </Block>
 
-        <Card className="p-4">
-          <p className="text-xs font-bold text-[var(--c-primary)]">この数字の出し方</p>
-          <ul className="mt-3 space-y-2 text-[12px] leading-relaxed text-[var(--c-sub)]">
-            <li className="flex gap-2">
-              <span className="font-bold text-[var(--c-accent)]">1.</span>
+        <Block label="この数字の出し方">
+          <ol className="p-steps">
+            <li>
+              <span className="p-steps__no">一</span>
               <span>導入前に①の棚卸しを行い、工程ごとの所要時間と月間件数を確定させる（実際は30〜50工程）</span>
             </li>
-            <li className="flex gap-2">
-              <span className="font-bold text-[var(--c-accent)]">2.</span>
+            <li>
+              <span className="p-steps__no">二</span>
               <span>上の4項目を、着手前に1か月そのまま測る。測っていない項目は効果を説明できない</span>
             </li>
-            <li className="flex gap-2">
-              <span className="font-bold text-[var(--c-accent)]">3.</span>
+            <li>
+              <span className="p-steps__no">三</span>
               <span>「自動化できる」工程から順に入れ、1か月ごとに同じ4項目を測り直す</span>
             </li>
-            <li className="flex gap-2">
-              <span className="font-bold text-[var(--c-accent)]">4.</span>
+            <li>
+              <span className="p-steps__no">四</span>
               <span>中核業務は対象外のまま維持する。ここを削ると、短期の時間削減と引き換えに売上が落ちる</span>
             </li>
-          </ul>
-          <p className="mt-3 text-[11px] leading-relaxed text-[var(--c-muted)]">
+          </ol>
+          <p className="p-note">
             この画面の数値はすべてデモ用の想定値です。実際の削減幅は、現状の運用と件数によって変わります。
             棚卸しの結果によっては「いまは自動化しないほうがよい」という結論もあり得ます。
           </p>
-        </Card>
+        </Block>
       </div>
     </div>
   );
@@ -1401,20 +1943,43 @@ function ResultsTab({ ind, wage }) {
 
 /* ==================================================================
    アプリ本体
+
+   タブは URL のハッシュと対応します。
+   #tanaoroshi / #uketsuke / #kanri / #suuji で直接開けます。
 ================================================================== */
 const TABS = [
-  { key: "inv",    label: "① 業務棚卸し" },
-  { key: "intake", label: "② 受付" },
-  { key: "admin",  label: "③ 管理画面" },
-  { key: "result", label: "④ 導入後の数字" },
+  { key: "tanaoroshi", no: "①", label: "業務棚卸し" },
+  { key: "uketsuke",   no: "②", label: "受付" },
+  { key: "kanri",      no: "③", label: "管理画面" },
+  { key: "suuji",      no: "④", label: "導入後の数字" },
 ];
+
+const tabFromHash = () => {
+  const k = String(window.location.hash || "").replace(/^#/, "");
+  return TABS.filter((t) => t.key === k).length ? k : TABS[0].key;
+};
 
 function App() {
   const indKeys = Object.keys(INDUSTRIES);
   const [indKey, setIndKey] = useState(indKeys[0]);
-  const [tab, setTab] = useState("inv");
+  const [tab, setTab] = useState(tabFromHash);
   const [wage, setWage] = useState(CONFIG.defaultWage);
   const [showAbout, setShowAbout] = useState(false);
+
+  // 戻る・進む、および索引ページからの #付きリンクに追従します
+  useEffect(() => {
+    const onHash = () => setTab(tabFromHash());
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+
+  const goTab = (e, key) => {
+    e.preventDefault();
+    if (String(window.location.hash).replace(/^#/, "") !== key) {
+      window.location.hash = key;   // hashchange 経由で setTab されます
+    }
+    setTab(key);
+  };
 
   // 業種ごとに受付台帳を持ちます（切り替えても、それぞれの進み具合は保たれます）
   const [ledger, setLedger] = useState(() => {
@@ -1428,19 +1993,6 @@ function App() {
   const ind = INDUSTRIES[indKey];
   const cases = ledger[indKey];
   const selId = cases.filter((c) => c.id === selectedId).length ? selectedId : (cases[0] && cases[0].id);
-
-  const t = CONFIG.theme;
-  const cssVars = `
-:root{
-  --c-bg:${t.bg}; --c-surface:${t.surface}; --c-ink:${t.ink}; --c-sub:${t.sub};
-  --c-muted:${t.muted}; --c-line:${t.line}; --c-line-s:${t.lineStrong};
-  --c-primary:${t.primary}; --c-primary-d:${t.primaryDark}; --c-primary-l:${t.primaryLight};
-  --c-accent:${t.accent}; --c-accent-d:${t.accentDark}; --c-accent-l:${t.accentLight};
-  --c-human:${t.human}; --c-alert:${t.alert}; --c-alert-l:${t.alertLight};
-  --c-ok:${t.ok}; --c-ok-l:${t.okLight};
-}
-body{ background:${t.bg}; color:${t.ink}; -webkit-text-size-adjust:100%; }
-`;
 
   const advance = (id) => {
     setLedger((prev) => {
@@ -1498,134 +2050,124 @@ body{ background:${t.bg}; color:${t.ink}; -webkit-text-size-adjust:100%; }
   };
 
   return (
-    <div className="min-h-screen">
-      <style>{cssVars}</style>
+    <React.Fragment>
+      <div className="p-topbar" />
 
-      {/* ヘッダー */}
-      <header className="border-b border-[var(--c-line)] bg-[var(--c-surface)]">
-        <div className="mx-auto max-w-6xl px-4 py-4">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h1 className="text-lg font-bold tracking-tight text-[var(--c-ink)] sm:text-xl">
-                {CONFIG.siteTitle}
-                <span className="ml-2 rounded bg-[var(--c-accent)] px-1.5 py-0.5 align-middle text-[10px] font-bold text-white">
-                  デモ
-                </span>
-              </h1>
-              <p className="mt-1 text-[12px] text-[var(--c-sub)]">{CONFIG.siteSubtitle}</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowAbout((v) => !v)}
-              className="rounded-lg border border-[var(--c-line-s)] px-3 py-1.5 text-[11px] font-bold text-[var(--c-sub)] hover:border-[var(--c-primary)] hover:text-[var(--c-primary)]"
-            >
-              {showAbout ? "閉じる" : "このデモについて"}
-            </button>
+      <div className="p-sheet">
+        {/* ---------------- ヘッダー ---------------- */}
+        <header className="p-masthead">
+          <p className="p-masthead__kicker">中小企業向け　業務改善・自動化サンプル集　デモ</p>
+          <h1 className="p-masthead__title">{CONFIG.siteTitle}</h1>
+          <p className="p-masthead__lead">
+            {CONFIG.siteSubtitle}。電話・{ind.channels[1].label}・LINE・{ind.channels[3].label}の受付を1つの台帳にまとめ、
+            工程が進むたびに自動で連絡する仕組みです。4つの画面と3業種を切り替えて動かせます。
+          </p>
+          <p className="p-masthead__meta">
+            画面：業務棚卸し／受付／管理画面／導入後の数字　業種：{indKeys.map((k) => INDUSTRIES[k].label).join("／")}
+            <a href="../../index.html">業務の悩み 索引へ戻る</a>
+          </p>
+
+          <div className="p-notice">
+            <p className="p-notice__title">数値の扱いについて</p>
+            <p className="p-notice__body">
+              この画面に表示される所要時間・件数・導入後の数字は、すべて動作確認のためのデモ用の想定値です。
+              実在する企業の実績値ではありません。受付フォームに入力した内容は、どこにも保存・送信されません
+              （localStorage・Cookie・外部通信のいずれも使っていません）。
+            </p>
           </div>
 
-          {showAbout && (
-            <div className="mt-3 rounded-lg border border-[var(--c-line)] bg-[var(--c-bg)] p-4">
-              <p className="text-[12px] leading-relaxed text-[var(--c-sub)]">
+          <p style={{ margin: "var(--sp-3) 0 0" }}>
+            <button type="button" className="p-btn" onClick={() => setShowAbout((v) => !v)}>
+              {showAbout ? "このデモについて 閉じる" : "このデモについて"}
+            </button>
+          </p>
+
+          {showAbout ? (
+            <div className="p-about">
+              <p>
                 中小企業のAI導入率は{FACTS.adoption[0].value}にとどまり、最大の障壁は「具体的な活用場面が不明」
                 {FACTS.adoption[1].value}、「導入を推進する人材がいない」{FACTS.adoption[2].value}でした（{FACTS.adoptionSource}）。
                 このデモは、その2つに対する具体的な答えを1つ示すものです。順番は固定で、
-                <span className="font-bold text-[var(--c-ink)]">①業務棚卸し → ②受付の一元化 → ③進捗の自動連絡 → ④測り直し</span>。
+                <strong>①業務棚卸し → ②受付の一元化 → ③進捗の自動連絡 → ④測り直し</strong>。
                 ツールを先に入れて失敗する事例は、①を飛ばしたケースに集中しています。
               </p>
-              <ul className="mt-3 space-y-1 text-[11px] leading-relaxed text-[var(--c-muted)]">
-                <li>・所要時間・件数・導入後の数字は、すべてデモ用の想定値です。実在の企業の実績ではありません。</li>
-                <li>・受付フォームの入力内容は、どこにも保存・送信されません。リロードすると消えます。</li>
-                <li>・localStorage・Cookie・外部への通信は使っていません。1ファイルのHTMLで完結しています。</li>
+              <ul className="p-about__list">
+                <li>所要時間・件数・導入後の数字は、すべてデモ用の想定値です。実在の企業の実績ではありません。</li>
+                <li>受付フォームの入力内容は、どこにも保存・送信されません。リロードすると消えます。</li>
+                <li>localStorage・Cookie・外部への通信は使っていません。1ファイルのHTMLで完結しています。</li>
               </ul>
             </div>
+          ) : null}
+        </header>
+
+        {/* ---------------- 業種切替 ---------------- */}
+        <div className="p-toolbar">
+          <span className="p-toolbar__label">業種</span>
+          {indKeys.map((k) => (
+            <button
+              key={k}
+              type="button"
+              className="p-choice"
+              aria-pressed={k === indKey}
+              onClick={() => setIndKey(k)}
+            >
+              {INDUSTRIES[k].label}
+            </button>
+          ))}
+        </div>
+        <p className="p-note p-note--sub" style={{ margin: "0 0 var(--sp-4)" }}>
+          切り替えると、工程名・所要時間・月間件数・受付項目・ステージ名・緊急語が変わります。
+          画面の構造とコードは完全に同じです。変えているのは、ファイル冒頭の INDUSTRIES の1オブジェクトだけです。
+        </p>
+
+        {/* ---------------- タブ ---------------- */}
+        <nav className="p-tabs" aria-label="画面の切り替え">
+          {TABS.map((tb) => (
+            <a
+              key={tb.key}
+              className="p-tab"
+              href={`#${tb.key}`}
+              aria-current={tab === tb.key ? "page" : undefined}
+              onClick={(e) => goTab(e, tb.key)}
+            >
+              <span className="p-tab__no">{tb.no}</span>{tb.label}
+            </a>
+          ))}
+        </nav>
+
+        {/* ---------------- 本体 ---------------- */}
+        <main className="p-main">
+          {tab === "tanaoroshi" && <InventoryTab ind={ind} wage={wage} setWage={setWage} />}
+          {tab === "uketsuke" && <IntakeTab ind={ind} indKey={indKey} onSubmit={handleIntake} />}
+          {tab === "kanri" && (
+            <AdminTab
+              ind={ind}
+              cases={cases}
+              selectedId={selId}
+              setSelectedId={setSelectedId}
+              advance={advance}
+              addStaffNote={addStaffNote}
+            />
           )}
-        </div>
+          {tab === "suuji" && <ResultsTab ind={ind} wage={wage} />}
+        </main>
 
-        {/* 業種切替 */}
-        <div className="border-t border-[var(--c-line)] bg-[var(--c-bg)]">
-          <div className="mx-auto max-w-6xl px-4 py-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[11px] font-bold text-[var(--c-muted)]">業種</span>
-              {indKeys.map((k) => (
-                <button
-                  key={k}
-                  type="button"
-                  onClick={() => setIndKey(k)}
-                  className="rounded-full border px-3 py-1.5 text-[12px] font-bold"
-                  style={
-                    k === indKey
-                      ? { backgroundColor: "var(--c-primary)", borderColor: "var(--c-primary)", color: "#fff" }
-                      : { backgroundColor: "#fff", borderColor: "var(--c-line-s)", color: "var(--c-sub)" }
-                  }
-                >
-                  {INDUSTRIES[k].label}
-                </button>
-              ))}
-            </div>
-            <p className="mt-2 text-[11px] leading-relaxed text-[var(--c-muted)]">
-              切り替えると、工程名・所要時間・月間件数・受付項目・ステージ名・緊急語が変わります。
-              <span className="font-bold text-[var(--c-sub)]">画面の構造とコードは完全に同じです。</span>
-              変えているのは、ファイル冒頭の <code className="rounded bg-white px-1 py-px text-[10px] ring-1 ring-[var(--c-line)]">INDUSTRIES</code> の1オブジェクトだけです。
-            </p>
-          </div>
-        </div>
-
-        {/* タブ */}
-        <div className="border-t border-[var(--c-line)] bg-[var(--c-surface)]">
-          <div className="mx-auto max-w-6xl px-2">
-            <div className="flex overflow-x-auto">
-              {TABS.map((tb) => (
-                <button
-                  key={tb.key}
-                  type="button"
-                  onClick={() => setTab(tb.key)}
-                  className="shrink-0 whitespace-nowrap px-3 py-3 text-[12px] font-bold sm:px-4 sm:text-[13px]"
-                  style={
-                    tab === tb.key
-                      ? { color: "var(--c-primary)", borderBottom: "3px solid var(--c-primary)" }
-                      : { color: "var(--c-muted)", borderBottom: "3px solid transparent" }
-                  }
-                >
-                  {tb.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      </header>
-
-      <main className="mx-auto max-w-6xl px-4 py-6">
-        {tab === "inv" && <InventoryTab ind={ind} wage={wage} setWage={setWage} />}
-        {tab === "intake" && <IntakeTab ind={ind} indKey={indKey} onSubmit={handleIntake} />}
-        {tab === "admin" && (
-          <AdminTab
-            ind={ind}
-            cases={cases}
-            selectedId={selId}
-            setSelectedId={setSelectedId}
-            advance={advance}
-            addStaffNote={addStaffNote}
-          />
-        )}
-        {tab === "result" && <ResultsTab ind={ind} wage={wage} />}
-      </main>
-
-      <footer className="mt-6 border-t border-[var(--c-line)] bg-[var(--c-surface)]">
-        <div className="mx-auto max-w-6xl px-4 py-5">
-          <p className="text-[11px] leading-relaxed text-[var(--c-muted)]">
-            所要時間・件数・導入後の数字は、すべてデモ用の想定値です。実在の企業の実績を示すものではありません。
+        {/* ---------------- 奥付 ---------------- */}
+        <footer className="p-colophon">
+          <p>
+            所要時間・件数・導入後の数字は、すべてデモ用の想定値です。実在する企業の実績を示すものではありません。
             受付フォームに入力した内容は、どこにも保存・送信されません（localStorage・Cookie・外部通信のいずれも使用していません）。
             ページを再読み込みすると、すべて初期状態に戻ります。
           </p>
-          <p className="mt-2 text-[11px] leading-relaxed text-[var(--c-muted)]">
-            引用した調査：{FACTS.adoptionSource}／{FACTS.jobsSource}／{FACTS.reviewSource}。
+          <p>引用した調査：{FACTS.adoptionSource}／{FACTS.jobsSource}／{FACTS.reviewSource}。</p>
+          <p>
+            各画面には、URLのハッシュで直接開けます。
+            #tanaoroshi（業務棚卸し）／#uketsuke（受付）／#kanri（管理画面）／#suuji（導入後の数字）。
           </p>
-          <p className="mt-2 text-[10px] text-[var(--c-muted)]">
-            React + Tailwind CSS の1ファイル構成（CDN読み込み・ビルド不要）
-          </p>
-        </div>
-      </footer>
-    </div>
+          <p>React ＋ Tailwind CSS の1ファイル構成（CDN読み込み・ビルド不要）。意匠は索引ページと共通です。</p>
+        </footer>
+      </div>
+    </React.Fragment>
   );
 }
 

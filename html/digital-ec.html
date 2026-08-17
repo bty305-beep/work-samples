@@ -3,24 +3,729 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>デジタル商品EC デモ | 決済と自動配信、注文管理</title>
-<meta name="description" content="ダウンロード商品と個別対応商品を1つの注文管理で扱うデジタル商品ECのデモ。有効期限つきリンクを自動発行。">
+<title>デジタル商品EC デモ | 自動配信と個別対応を1つの注文管理で扱う</title>
+<meta name="description" content="決済と同時にダウンロードリンクを自動発行する商品と、購入後に人が動く商品を、1つの注文管理で扱うデモです。有効期限と回数制限の考え方も画面上で確認できます。掲載データはすべてデモ用の想定値です。">
 <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <script src="https://cdn.tailwindcss.com"></script>
+<style>
+/* ------------------------------------------------------------------
+   :root のトークンは索引ページ（リポジトリ直下の index.html）から
+   そのまま持ってきています。ここで新しい色や寸法は作っていません。
+------------------------------------------------------------------ */
+:root {
+  --c-base:         #ffffff;
+  --c-paper:        #f5f1e8;
+  --c-ink:          #1b1c1e;
+  --c-ink-2:        #4c4f54;
+  --c-ink-3:        #7d8087;
+  --c-rule:         #ddd7c8;
+  --c-rule-strong:  #b3ab98;
+  --c-accent:       #2d4257;
+  --c-accent-tint:  #eef1f3;
+  --c-caution:      #9c463b;
+  --c-caution-tint: #f3e9e6;
+  --font-mincho: "Hiragino Mincho ProN","Yu Mincho","YuMincho","MS PMincho","Noto Serif JP",serif;
+  --font-gothic: "Hiragino Kaku Gothic ProN","Hiragino Sans","Yu Gothic","YuGothic",Meiryo,"Noto Sans JP",sans-serif;
+  --fs-note:  13px;  --fs-body: 15px;  --fs-sub: 18px;  --fs-head: 24px;  --fs-title: 33px;
+  --lh-body: 1.9;  --lh-head: 1.45;  --ls-body: 0.04em;  --ls-head: 0.06em;
+  --sp-1: 4px;  --sp-2: 8px;  --sp-3: 16px;  --sp-4: 32px;  --sp-5: 64px;
+  --rule-1: 1px;  --rule-2: 2px;
+}
+
+html { -webkit-text-size-adjust: 100%; }
+
+/* Tailwind の preflight は実行時に head の末尾へ挿入されるため、
+   body と a はセレクタの詳細度を上げて上書きされないようにしています。 */
+html body {
+  margin: 0;
+  background: var(--c-base);
+  color: var(--c-ink);
+  font-family: var(--font-gothic);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  letter-spacing: var(--ls-body);
+  text-align: left;
+}
+
+*, *::before, *::after { border-radius: 0; box-shadow: none; }
+
+body a {
+  color: var(--c-accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+body a:hover { text-decoration-thickness: 2px; }
+
+:focus-visible { outline: var(--rule-2) solid var(--c-accent); outline-offset: 2px; }
+
+/* ------------------------------------------------------------------
+   版面
+------------------------------------------------------------------ */
+.p-topbar { border-top: 3px solid var(--c-accent); }
+
+.p-sheet {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 0 var(--sp-3);
+}
+
+.p-section { padding-top: var(--sp-5); }
+.p-section:last-of-type { padding-bottom: var(--sp-5); }
+
+/* ------------------------------------------------------------------
+   ヘッダー
+------------------------------------------------------------------ */
+.p-masthead { padding-top: var(--sp-4); padding-bottom: var(--sp-4); }
+
+.p-masthead__kicker {
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-head);
+  color: var(--c-ink-3);
+  margin: 0 0 var(--sp-2);
+}
+
+.p-masthead__title {
+  font-family: var(--font-mincho);
+  font-size: var(--fs-title);
+  line-height: var(--lh-head);
+  letter-spacing: var(--ls-head);
+  font-weight: 600;
+  color: var(--c-ink);
+  margin: 0;
+  padding-bottom: var(--sp-3);
+  border-bottom: var(--rule-2) solid var(--c-accent);
+}
+
+.p-masthead__lead {
+  margin: var(--sp-3) 0 0;
+  max-width: 42em;
+  color: var(--c-ink-2);
+}
+
+.p-masthead__meta {
+  margin: var(--sp-3) 0 0;
+  font-size: var(--fs-note);
+  color: var(--c-ink-3);
+}
+
+.p-masthead__meta a { margin-left: var(--sp-2); }
+
+/* ------------------------------------------------------------------
+   注記帯
+------------------------------------------------------------------ */
+.p-notice {
+  margin-top: var(--sp-4);
+  background: var(--c-caution-tint);
+  border-left: 3px solid var(--c-caution);
+  padding: var(--sp-3);
+}
+
+.p-notice__title {
+  margin: 0 0 var(--sp-1);
+  font-size: var(--fs-note);
+  font-weight: 700;
+  letter-spacing: var(--ls-head);
+  color: var(--c-caution);
+}
+
+.p-notice__body {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-note);
+  line-height: 1.8;
+  color: var(--c-ink-2);
+}
+
+.p-notice__body:last-child { margin-bottom: 0; }
+
+/* ------------------------------------------------------------------
+   節見出し
+------------------------------------------------------------------ */
+.p-heading {
+  margin: 0 0 var(--sp-3);
+  padding-bottom: var(--sp-2);
+  border-bottom: var(--rule-2) solid var(--c-rule-strong);
+}
+
+.p-heading__no {
+  display: block;
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-head);
+  color: var(--c-accent);
+  margin-bottom: var(--sp-1);
+}
+
+.p-heading__text {
+  font-family: var(--font-mincho);
+  font-size: var(--fs-head);
+  line-height: var(--lh-head);
+  letter-spacing: var(--ls-head);
+  font-weight: 600;
+  margin: 0;
+}
+
+.p-lead {
+  margin: 0 0 var(--sp-3);
+  max-width: 44em;
+  color: var(--c-ink-2);
+}
+
+.p-note {
+  margin: var(--sp-2) 0 0;
+  font-size: var(--fs-note);
+  line-height: 1.8;
+  color: var(--c-ink-3);
+}
+
+/* ------------------------------------------------------------------
+   要約
+------------------------------------------------------------------ */
+.p-scope {
+  border-left: 3px solid var(--c-accent);
+  background: var(--c-accent-tint);
+  padding: var(--sp-3);
+  margin-bottom: var(--sp-3);
+}
+
+.p-scope p { margin: 0; }
+.p-scope__sub { margin-top: var(--sp-1) !important; font-size: var(--fs-note); color: var(--c-ink-2); }
+.p-scope strong { font-weight: 700; color: var(--c-accent); }
+
+/* ------------------------------------------------------------------
+   画面の切り替え（罫線で下線を引くだけの札）
+------------------------------------------------------------------ */
+.p-tabs {
+  display: flex;
+  overflow-x: auto;
+  border-top: var(--rule-1) solid var(--c-rule);
+  border-bottom: var(--rule-2) solid var(--c-rule-strong);
+}
+
+.p-tab {
+  flex: 0 0 auto;
+  font-family: var(--font-gothic);
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-body);
+  white-space: nowrap;
+  padding: var(--sp-2) var(--sp-3);
+  margin-bottom: -2px;
+  color: var(--c-ink-2);
+  background: transparent;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  cursor: pointer;
+}
+
+.p-tab:hover { background: var(--c-accent-tint); }
+
+.p-tab[aria-current="page"] {
+  color: var(--c-accent);
+  font-weight: 700;
+  border-bottom-color: var(--c-accent);
+}
+
+/* ------------------------------------------------------------------
+   ボタン
+------------------------------------------------------------------ */
+.p-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.p-actions__spacer { flex: 1 1 auto; }
+
+.p-btn {
+  font-family: var(--font-gothic);
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-body);
+  color: var(--c-accent);
+  background: var(--c-accent-tint);
+  border: var(--rule-1) solid var(--c-rule-strong);
+  padding: var(--sp-1) var(--sp-2);
+  cursor: pointer;
+}
+
+.p-btn:hover { background: var(--c-base); }
+.p-btn:disabled { color: var(--c-ink-3); background: var(--c-base); border-color: var(--c-rule); cursor: not-allowed; }
+
+.p-btn--main {
+  font-size: var(--fs-body);
+  font-weight: 700;
+  background: var(--c-base);
+  border: var(--rule-2) solid var(--c-accent);
+  padding: var(--sp-2) var(--sp-3);
+}
+
+.p-btn--main:hover { background: var(--c-accent-tint); }
+.p-btn--main:disabled { border-color: var(--c-rule); }
+
+.p-btn--quiet { color: var(--c-ink-2); background: var(--c-base); }
+
+.p-choice {
+  font-family: var(--font-gothic);
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-body);
+  color: var(--c-ink-2);
+  background: var(--c-base);
+  border: var(--rule-1) solid var(--c-rule-strong);
+  padding: var(--sp-1) var(--sp-2);
+  cursor: pointer;
+}
+
+.p-choice:hover { background: var(--c-accent-tint); }
+
+.p-choice[aria-pressed="true"] {
+  color: var(--c-accent);
+  font-weight: 700;
+  background: var(--c-accent-tint);
+  border-color: var(--c-accent);
+}
+
+.p-choice__n { margin-left: var(--sp-1); font-feature-settings: "tnum" 1; }
+
+/* ------------------------------------------------------------------
+   商品
+------------------------------------------------------------------ */
+.p-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--sp-3);
+}
+
+.p-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border-top: var(--rule-2) solid var(--c-accent);
+  border-bottom: var(--rule-1) solid var(--c-rule-strong);
+  padding-bottom: var(--sp-3);
+}
+
+.p-card--manual { border-top-color: var(--c-rule-strong); }
+
+.p-card__head { padding: var(--sp-2) 0 var(--sp-2); }
+
+.p-card__name {
+  margin: var(--sp-2) 0 0;
+  font-family: var(--font-mincho);
+  font-size: var(--fs-sub);
+  line-height: var(--lh-head);
+  letter-spacing: var(--ls-head);
+  font-weight: 600;
+}
+
+.p-card__sum {
+  margin: var(--sp-2) 0 0;
+  flex: 1 1 auto;
+  font-size: var(--fs-note);
+  line-height: 1.85;
+  color: var(--c-ink-2);
+}
+
+.p-card__file {
+  margin: var(--sp-2) 0 0;
+  font-family: "SFMono-Regular", Consolas, "Courier New", monospace;
+  font-size: var(--fs-note);
+  color: var(--c-ink-3);
+}
+
+.p-card__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
+  padding-top: var(--sp-2);
+  border-top: var(--rule-1) solid var(--c-rule);
+}
+
+.p-card__price {
+  flex: 1 1 auto;
+  font-size: var(--fs-sub);
+  font-weight: 700;
+  color: var(--c-accent);
+  font-feature-settings: "tnum" 1;
+}
+
+/* ------------------------------------------------------------------
+   購入完了
+------------------------------------------------------------------ */
+.p-done {
+  border-top: var(--rule-2) solid var(--c-accent);
+  border-bottom: var(--rule-1) solid var(--c-rule-strong);
+  padding: var(--sp-2) 0 var(--sp-3);
+  margin-bottom: var(--sp-4);
+}
+
+.p-done__label {
+  margin: 0 0 var(--sp-1);
+  font-size: var(--fs-note);
+  font-weight: 700;
+  letter-spacing: var(--ls-head);
+  color: var(--c-accent);
+}
+
+.p-done__name {
+  margin: 0;
+  font-family: var(--font-mincho);
+  font-size: var(--fs-head);
+  line-height: var(--lh-head);
+  letter-spacing: var(--ls-head);
+  font-weight: 600;
+}
+
+.p-done__meta {
+  margin: var(--sp-2) 0 0;
+  font-size: var(--fs-note);
+  color: var(--c-ink-3);
+  font-feature-settings: "tnum" 1;
+}
+
+.p-deliver {
+  border-top: var(--rule-2) solid var(--c-accent);
+  border-bottom: var(--rule-2) solid var(--c-rule-strong);
+  padding: var(--sp-3) 0;
+}
+
+.p-deliver--manual { border-top-color: var(--c-rule-strong); }
+
+.p-deliver__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-2);
+  padding-bottom: var(--sp-3);
+  border-bottom: var(--rule-1) solid var(--c-rule);
+}
+
+.p-deliver__title {
+  margin: 0;
+  font-size: var(--fs-note);
+  font-weight: 700;
+  letter-spacing: var(--ls-head);
+  color: var(--c-accent);
+}
+
+.p-deliver__file {
+  font-family: "SFMono-Regular", Consolas, "Courier New", monospace;
+  font-size: var(--fs-note);
+  color: var(--c-ink-3);
+}
+
+.p-deliver__body { padding-top: var(--sp-3); }
+.p-deliver__body p { margin: 0; }
+.p-deliver__body p + p { margin-top: var(--sp-2); }
+
+.p-kv {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--sp-3);
+  margin: var(--sp-3) 0 0;
+  padding-top: var(--sp-3);
+  border-top: var(--rule-1) solid var(--c-rule);
+}
+
+.p-kv > div { min-width: 0; }
+
+.p-kv dt {
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-head);
+  color: var(--c-ink-2);
+}
+
+.p-kv dd {
+  margin: var(--sp-1) 0 0;
+  font-weight: 700;
+  color: var(--c-ink);
+  font-feature-settings: "tnum" 1;
+}
+
+.p-kv dd.is-link {
+  font-family: "SFMono-Regular", Consolas, "Courier New", monospace;
+  font-size: var(--fs-note);
+  font-weight: 400;
+  color: var(--c-ink-2);
+  overflow-wrap: anywhere;
+}
+
+.p-kv dd.is-out { color: var(--c-caution); }
+
+/* ------------------------------------------------------------------
+   集計
+------------------------------------------------------------------ */
+.p-tiles {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-4);
+}
+
+.p-tile {
+  border-top: var(--rule-2) solid var(--c-accent);
+  border-bottom: var(--rule-1) solid var(--c-rule-strong);
+  padding: var(--sp-2) 0 var(--sp-3);
+  min-width: 0;
+}
+
+.p-tile--alert { border-top-color: var(--c-caution); }
+
+.p-tile__label {
+  margin: 0 0 var(--sp-1);
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-head);
+  color: var(--c-ink-2);
+}
+
+.p-tile__num {
+  margin: 0;
+  font-size: var(--fs-title);
+  line-height: 1.25;
+  font-weight: 700;
+  color: var(--c-accent);
+  font-feature-settings: "tnum" 1;
+}
+
+.p-tile--alert .p-tile__num { color: var(--c-caution); }
+.p-tile__unit { font-size: var(--fs-sub); font-weight: 500; margin-left: 2px; }
+
+.p-tile__sub {
+  margin: var(--sp-1) 0 0;
+  font-size: var(--fs-note);
+  line-height: 1.7;
+  color: var(--c-ink-3);
+}
+
+/* ------------------------------------------------------------------
+   表
+------------------------------------------------------------------ */
+.p-scroll {
+  overflow-x: auto;
+  border-top: var(--rule-2) solid var(--c-rule-strong);
+  border-bottom: var(--rule-2) solid var(--c-rule-strong);
+}
+
+.p-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-note);
+  line-height: 1.75;
+}
+
+.p-table--orders { min-width: 860px; }
+.p-table--compare { min-width: 620px; }
+
+.p-table th, .p-table td {
+  padding: var(--sp-2);
+  border-bottom: var(--rule-1) solid var(--c-rule);
+  text-align: left;
+  vertical-align: top;
+}
+
+.p-table thead th {
+  background: var(--c-paper);
+  border-bottom: var(--rule-1) solid var(--c-rule-strong);
+  font-weight: 700;
+  color: var(--c-ink-2);
+  letter-spacing: var(--ls-head);
+  white-space: nowrap;
+}
+
+.p-table tbody tr:last-child td { border-bottom: 0; }
+.p-table tbody tr:hover td { background: var(--c-accent-tint); }
+
+.p-table .is-num { text-align: right; white-space: nowrap; font-feature-settings: "tnum" 1; }
+.p-table .is-mono { font-family: "SFMono-Regular", Consolas, "Courier New", monospace; white-space: nowrap; color: var(--c-ink-2); }
+.p-table .is-name { font-weight: 700; color: var(--c-ink); min-width: 12em; }
+.p-table .is-plain { color: var(--c-ink-2); }
+.p-table .is-act { text-align: right; white-space: nowrap; }
+.p-table tr.is-pending td { background: var(--c-caution-tint); }
+.p-table tr.is-pending:hover td { background: var(--c-caution-tint); }
+
+/* 札 */
+.p-mark {
+  display: inline-block;
+  white-space: nowrap;
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-head);
+  padding: 0 var(--sp-2);
+  border: var(--rule-1) solid var(--c-rule-strong);
+  background: var(--c-base);
+  color: var(--c-ink-2);
+}
+
+.p-mark--strong { background: var(--c-accent-tint); border-color: var(--c-accent); color: var(--c-accent); font-weight: 700; }
+.p-mark--watch { background: var(--c-paper); color: var(--c-ink); font-weight: 700; }
+.p-mark--alert { background: var(--c-caution-tint); border-color: var(--c-caution); color: var(--c-caution); font-weight: 700; }
+.p-mark--muted { border-color: var(--c-rule); color: var(--c-ink-3); }
+
+.p-empty {
+  padding: var(--sp-4) var(--sp-2);
+  border-top: var(--rule-2) solid var(--c-rule-strong);
+  border-bottom: var(--rule-2) solid var(--c-rule-strong);
+  color: var(--c-ink-2);
+}
+
+.p-empty p { margin: 0; }
+
+/* ------------------------------------------------------------------
+   入力（お支払い）
+------------------------------------------------------------------ */
+.p-form {
+  border-top: var(--rule-2) solid var(--c-accent);
+  border-bottom: var(--rule-2) solid var(--c-rule-strong);
+  padding-bottom: var(--sp-3);
+}
+
+.p-form__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-2);
+  padding: var(--sp-2) 0 var(--sp-3);
+  border-bottom: var(--rule-1) solid var(--c-rule);
+}
+
+.p-form__title {
+  margin: 0;
+  font-family: var(--font-mincho);
+  font-size: var(--fs-sub);
+  line-height: var(--lh-head);
+  letter-spacing: var(--ls-head);
+  font-weight: 600;
+}
+
+.p-form__price {
+  font-size: var(--fs-sub);
+  font-weight: 700;
+  color: var(--c-accent);
+  font-feature-settings: "tnum" 1;
+}
+
+.p-form__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-3);
+  padding-top: var(--sp-3);
+}
+
+.p-field { min-width: 0; }
+
+.p-field__label {
+  display: block;
+  margin-bottom: var(--sp-1);
+  font-size: var(--fs-note);
+  font-weight: 700;
+  letter-spacing: var(--ls-head);
+  color: var(--c-ink-2);
+}
+
+.p-field__req { margin-left: var(--sp-2); font-weight: 400; color: var(--c-caution); }
+
+.p-input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  font-family: var(--font-gothic);
+  font-size: var(--fs-body);
+  line-height: 1.7;
+  letter-spacing: var(--ls-body);
+  color: var(--c-ink);
+  background: var(--c-base);
+  border: var(--rule-1) solid var(--c-rule-strong);
+  padding: var(--sp-1) var(--sp-2);
+}
+
+.p-input--mono { font-family: "SFMono-Regular", Consolas, "Courier New", monospace; }
+.p-input:focus { border-color: var(--c-accent); }
+.p-input.is-error { border-color: var(--c-caution); border-width: var(--rule-2); }
+
+.p-field__note { margin: var(--sp-1) 0 0; font-size: var(--fs-note); line-height: 1.8; color: var(--c-ink-3); }
+.p-field__err { margin: var(--sp-1) 0 0; font-size: var(--fs-note); color: var(--c-caution); }
+
+.p-form__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  padding-top: var(--sp-3);
+}
+
+/* ------------------------------------------------------------------
+   説明
+------------------------------------------------------------------ */
+.p-def { margin: 0 0 var(--sp-4); }
+
+.p-def__label {
+  margin: 0 0 var(--sp-1);
+  font-size: var(--fs-note);
+  font-weight: 700;
+  letter-spacing: var(--ls-head);
+  color: var(--c-accent);
+}
+
+.p-def__body { margin: 0; color: var(--c-ink); max-width: 44em; }
+
+.p-def__body code {
+  font-family: "SFMono-Regular", Consolas, "Courier New", monospace;
+  font-size: var(--fs-note);
+  background: var(--c-paper);
+  padding: 0 var(--sp-1);
+}
+
+.p-colophon {
+  margin-top: var(--sp-4);
+  padding-top: var(--sp-3);
+  border-top: var(--rule-2) solid var(--c-rule-strong);
+  font-size: var(--fs-note);
+  color: var(--c-ink-3);
+}
+
+.p-colophon p { margin: 0 0 var(--sp-1); }
+.p-colophon p:last-child { margin-bottom: 0; }
+
+/* ------------------------------------------------------------------
+   スマートフォン
+------------------------------------------------------------------ */
+@media (max-width: 900px) {
+  .p-cards { grid-template-columns: 1fr 1fr; }
+  .p-tiles { grid-template-columns: 1fr 1fr; }
+}
+
+@media (max-width: 640px) {
+  :root {
+    --fs-title: 26px;
+    --fs-head: 20px;
+    --fs-sub: 17px;
+    --sp-5: 48px;
+  }
+
+  .p-sheet { padding: 0 var(--sp-2); }
+  .p-cards { grid-template-columns: 1fr; }
+  .p-tiles { grid-template-columns: 1fr; }
+  .p-kv { grid-template-columns: 1fr; }
+  .p-form__grid { grid-template-columns: 1fr; }
+  .p-tile__num { font-size: 28px; }
+}
+</style>
 </head>
 <body>
 <div id="root"></div>
 <script>Babel.registerPreset("react-classic", { presets: [[Babel.availablePresets["react"], { runtime: "classic" }]] });</script>
 <script type="text/babel" data-presets="react-classic">
-const { useState, useMemo } = React;
+const { useState, useMemo, useRef, useEffect } = React;
 
-/* ------------------------------------------------------------------
+/* ==================================================================
    商品定義。実案件では管理画面から登録し、DBに持たせます。
    delivery: "auto"   … 決済完了と同時にダウンロードリンクを自動発行
              "manual" … 購入時に管理画面へ通知し、店主が個別に手配
------------------------------------------------------------------- */
+
+   画面のコードは商品名も配信方式も直接持っていません。すべて下の
+   PRODUCTS を見て、一覧・購入後の画面・注文一覧を組み立てています。
+================================================================== */
 const SHOP = {
   name: "Studio Kanade",
   tagline: "制作に使える素材とテンプレートを配布しています",
@@ -56,6 +761,23 @@ const PRODUCTS = [
     summary: "ヒアリングのうえ制作します。ご購入後、担当より2営業日以内にご連絡します。",
   },
 ];
+
+/* 配信方式の呼び名と説明。札の濃淡もここで決めています。
+   臙脂は「人がまだ動いていない」注意の用途にだけ使います。 */
+const DELIVERY = {
+  auto: {
+    label: "購入後すぐダウンロード",
+    short: "自動配信",
+    tone: "strong",
+    desc: "決済が終わった時点で、期限つきのダウンロードリンクを自動で発行します。人は動きません。",
+  },
+  manual: {
+    label: "購入後に個別ご連絡",
+    short: "個別対応",
+    tone: "watch",
+    desc: "自動配信はせず、管理画面に「未対応」として通知します。担当者が内容を確認して動きます。",
+  },
+};
 
 const SEED_ORDERS = [
   {
@@ -99,17 +821,26 @@ const stamp = (d) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ` +
   `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 
+const productOf = (id) => PRODUCTS.find((p) => p.id === id);
+const markClass = (tone) => (tone && tone !== "plain" ? `p-mark p-mark--${tone}` : "p-mark");
+
 function App() {
   const [view, setView] = useState("store");
   const [orders, setOrders] = useState(SEED_ORDERS);
   const [checkout, setCheckout] = useState(null);
   const [receipt, setReceipt] = useState(null);
+  const payRef = useRef(null);
+
+  // 決済欄は一覧の上に開くため、開いた位置まで送ります
+  useEffect(() => {
+    if (checkout && payRef.current) payRef.current.scrollIntoView({ block: "start" });
+  }, [checkout]);
 
   const placeOrder = (product, email) => {
     const paid = now();
     const expires = new Date(paid.getTime() + SHOP.downloadHours * 3600 * 1000);
     const order = {
-      id: `ORD-${1044 + orders.length - SEED_ORDERS.length + SEED_ORDERS.length}`,
+      id: `ORD-${1044 + orders.length - SEED_ORDERS.length}`,
       productId: product.id,
       email,
       amount: product.price,
@@ -130,100 +861,276 @@ function App() {
   const markHandled = (id) =>
     setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, handled: true } : o)));
 
+  const pending = orders.filter((o) => o.handled === false).length;
+  const autoCount = orders.filter((o) => productOf(o.productId).delivery === "auto").length;
+
   return (
-    <div className="min-h-screen bg-white text-zinc-900">
-      <header className="border-b border-zinc-200">
-        <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-4 px-4 py-4">
-          <div>
-            <p className="text-base font-semibold tracking-tight">{SHOP.name}</p>
-            <p className="text-xs text-zinc-500">{SHOP.tagline}</p>
+    <React.Fragment>
+      <div className="p-topbar" />
+
+      <div className="p-sheet">
+        {/* ---------------- ヘッダー ---------------- */}
+        <header className="p-masthead">
+          <p className="p-masthead__kicker">中小企業向け　業務改善・自動化サンプル　デジタル商品の販売</p>
+          <h1 className="p-masthead__title">デジタル商品EC デモ</h1>
+          <p className="p-masthead__lead">
+            {SHOP.name}（{SHOP.tagline}）を題材にした、デジタル商品を売るためのECの見本です。
+            扱っているのは、<strong>決済と同時に自動で渡せる商品</strong>と、
+            <strong>購入後に人が動く商品</strong>の2種類。
+            性質がまるで違うこの2つを、店の側では1つの注文管理で扱えるようにしています。
+            買う側の画面と、店の側の画面を切り替えて動かせます。
+          </p>
+          <p className="p-masthead__meta">
+            画面：ストア／管理画面
+            {"　"}配信方式：{Object.keys(DELIVERY).map((k) => DELIVERY[k].short).join("／")}
+            {"　"}リンクの条件：{SHOP.downloadHours}時間・{SHOP.downloadLimit}回まで
+            <a href="../index.html">業務の悩み 索引へ戻る</a>
+          </p>
+
+          <div className="p-notice">
+            <p className="p-notice__title">数値の扱いについて</p>
+            <p className="p-notice__body">
+              この画面に表示される店名・商品・価格・注文・購入者のメールアドレスは、
+              すべて動作確認のために用意したデモ用の想定値です。実在する店舗・人物・取引とは関係ありません。
+            </p>
+            <p className="p-notice__body">
+              決済はブラウザの中で再現しているだけで、実際の支払いは発生しません。カード番号は任意の数字で進みます。
+              ファイルのダウンロードも行いません。入力した内容はどこにも保存・送信されません
+              （localStorage・Cookie・外部通信のいずれも使っていません）。ページを開き直すと最初の状態に戻ります。
+            </p>
           </div>
-          <div className="ml-auto flex rounded border border-zinc-300 text-xs">
-            <button
-              onClick={() => { setView("store"); setReceipt(null); }}
-              className={`px-3 py-1.5 ${view === "store" ? "bg-indigo-950 text-white" : "text-zinc-600"}`}
-            >
-              ストア
-            </button>
-            <button
-              onClick={() => setView("admin")}
-              className={`px-3 py-1.5 ${view === "admin" ? "bg-indigo-950 text-white" : "text-zinc-600"}`}
-            >
-              管理画面
-            </button>
-          </div>
+        </header>
+
+        {/* ---------------- 要約 ---------------- */}
+        <div className="p-scope">
+          <p>
+            いま<strong>{orders.length}件</strong>の注文があり、そのうち
+            <strong>{autoCount}件</strong>は人が一切動かずに渡し終えています。
+            人の手が要るのは<strong>{pending}件</strong>です。
+          </p>
+          <p className="p-scope__sub">
+            自動で渡せるものを自動にしておくと、深夜でも休日でも売れて、そのまま届きます。
+            人が動くのは、動く必要のある注文だけになります。
+          </p>
         </div>
-      </header>
 
-      {view === "store" ? (
-        receipt ? (
-          <Receipt
-            order={receipt}
-            product={PRODUCTS.find((p) => p.id === receipt.productId)}
-            onDownload={countDownload}
-            onBack={() => setReceipt(null)}
-          />
+        {/* ---------------- 画面の切り替え ---------------- */}
+        <nav className="p-tabs" aria-label="画面の切り替え">
+          <button
+            type="button"
+            className="p-tab"
+            aria-current={view === "store" ? "page" : undefined}
+            onClick={() => { setView("store"); setReceipt(null); }}
+          >
+            ストア（買う側）
+          </button>
+          <button
+            type="button"
+            className="p-tab"
+            aria-current={view === "admin" ? "page" : undefined}
+            onClick={() => setView("admin")}
+          >
+            管理画面（店の側）
+          </button>
+        </nav>
+
+        {/* ---------------- 本体 ---------------- */}
+        {view === "store" ? (
+          receipt ? (
+            <Receipt
+              order={receipt}
+              product={productOf(receipt.productId)}
+              orders={orders}
+              onDownload={countDownload}
+              onBack={() => setReceipt(null)}
+            />
+          ) : (
+            <React.Fragment>
+              {checkout ? (
+                <section className="p-section" ref={payRef}>
+                  <div className="p-heading">
+                    <span className="p-heading__no">一</span>
+                    <h2 className="p-heading__text">お支払い</h2>
+                  </div>
+                  <Checkout
+                    key={checkout.id}
+                    product={checkout}
+                    onCancel={() => setCheckout(null)}
+                    onPay={placeOrder}
+                  />
+                </section>
+              ) : null}
+              <Store onBuy={setCheckout} step={checkout ? "二" : "一"} />
+            </React.Fragment>
+          )
         ) : (
-          <Store onBuy={setCheckout} />
-        )
-      ) : (
-        <Admin orders={orders} onHandled={markHandled} />
-      )}
+          <Admin orders={orders} onHandled={markHandled} />
+        )}
 
-      {checkout && (
-        <Checkout product={checkout} onCancel={() => setCheckout(null)} onPay={placeOrder} />
-      )}
+        {/* ---------------- 実装と運用について ---------------- */}
+        <section className="p-section">
+          <div className="p-heading">
+            <span className="p-heading__no">実装と運用について</span>
+            <h2 className="p-heading__text">自動で渡せるものは、自動で渡す</h2>
+          </div>
 
-      <p className="mx-auto max-w-5xl px-4 pb-10 text-xs leading-relaxed text-zinc-400">
-        このデモでは決済処理をブラウザ内で再現しています。実案件ではStripeのCheckoutを使い、
-        決済完了の通知をサーバーで受け取ってから配信用リンクを発行します。
-        リンクの有効期限と回数制限もサーバー側で判定するため、URLを共有されても期限切れ後は開けません。
-      </p>
-    </div>
-  );
-}
+          <div className="p-def">
+            <p className="p-def__label">性質の違う2つを、1つの注文管理で扱います</p>
+            <p className="p-def__body">
+              自動配信と個別対応は、届け方がまるで違います。
+              それでも注文としては同じ台帳に並べます。売上も件数も1か所で数えたいからです。
+              違うのは配信の段取りだけなので、注文の側は共通のまま、
+              商品の <code>delivery</code> の値で渡し方が分かれる形にしています。
+            </p>
+          </div>
 
-/* -------------------------------- ストア -------------------------------- */
+          <div className="p-def">
+            <p className="p-def__label">決済の完了はサーバーで受け取ります</p>
+            <p className="p-def__body">
+              このデモでは決済処理をブラウザ内で再現しています。
+              実案件ではStripeのCheckoutを使い、決済完了の通知をサーバーで受け取ってから配信用リンクを発行します。
+              画面側で「支払えた」と判断してリンクを出すと、決済せずにリンクを得る余地が残るためです。
+            </p>
+          </div>
 
-function Store({ onBuy }) {
-  return (
-    <main className="mx-auto max-w-5xl px-4 py-10">
-      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-        {PRODUCTS.map((p) => (
-          <article key={p.id} className="flex flex-col rounded border border-zinc-200 p-5">
-            <span
-              className={`inline-flex w-fit rounded px-2 py-0.5 text-xs ring-1 ${
-                p.delivery === "auto"
-                  ? "bg-indigo-50 text-indigo-800 ring-indigo-200"
-                  : "bg-amber-50 text-amber-800 ring-amber-200"
-              }`}
-            >
-              {p.delivery === "auto" ? "購入後すぐダウンロード" : "購入後に個別ご連絡"}
-            </span>
-            <h2 className="mt-3 text-base font-semibold leading-snug">{p.name}</h2>
-            <p className="mt-2 flex-1 text-sm leading-relaxed text-zinc-600">{p.summary}</p>
-            {p.file && (
-              <p className="mt-3 font-mono text-xs text-zinc-400">
-                {p.file}／{p.size}
-              </p>
-            )}
-            <div className="mt-4 flex items-center justify-between">
-              <span className="text-lg font-semibold tabular-nums">{yen(p.price)}</span>
-              <button
-                onClick={() => onBuy(p)}
-                className="rounded bg-indigo-950 px-4 py-2 text-sm text-white hover:bg-indigo-800"
-              >
-                購入する
-              </button>
-            </div>
-          </article>
-        ))}
+          <div className="p-def">
+            <p className="p-def__label">期限と回数の判定もサーバー側です</p>
+            <p className="p-def__body">
+              リンクの有効期限（{SHOP.downloadHours}時間）と回数制限（{SHOP.downloadLimit}回）は、
+              サーバー側で判定します。URLを共有されても期限切れ後は開けません。
+              期限や回数を使い切ったお客さまには、{SHOP.supportEmail} から再発行する運用を前提にしています。
+              買った人が困らないことと、無制限に配られないことは両立します。
+            </p>
+          </div>
+
+          <div className="p-def">
+            <p className="p-def__label">未対応が埋もれないようにします</p>
+            <p className="p-def__body">
+              個別対応の商品は、売れた瞬間に管理画面へ「未対応」として出ます。
+              件数を上部に出し、行にも印を付け、その条件だけで絞り込めるようにしています。
+              自動で片づく注文に紛れて、人が動くべき注文を見落とさないためです。
+            </p>
+          </div>
+
+          <div className="p-def">
+            <p className="p-def__label">この画面と納品物の違い</p>
+            <p className="p-def__body">
+              この画面はブラウザの中だけで動いており、決済も、メール送信も、ファイルの配信も行っていません。
+              サンプルデータを埋め込んで、操作したときの動きだけをお見せしています。
+              ページを開き直すと最初の状態に戻ります。
+            </p>
+          </div>
+
+          <div className="p-colophon">
+            <p>掲載しているデータは、すべてデモ用の想定値です。実在する店舗・人物・取引とは関係ありません。</p>
+            <p>React ＋ Tailwind CSS の1ファイル構成（CDN読み込み・ビルド不要）。意匠は索引ページと共通です。</p>
+            <p>
+              ほかのサンプルは
+              <a href="../index.html">業務の悩み 索引</a>
+              から見られます。
+            </p>
+          </div>
+        </section>
       </div>
-    </main>
+    </React.Fragment>
   );
 }
 
-/* ------------------------------- 決済画面 ------------------------------- */
+/* ==================================================================
+   ストア（買う側）
+================================================================== */
+
+function Store({ onBuy, step }) {
+  return (
+    <React.Fragment>
+      <section className="p-section">
+        <div className="p-heading">
+          <span className="p-heading__no">{step}</span>
+          <h2 className="p-heading__text">取り扱っている商品</h2>
+        </div>
+
+        <p className="p-lead">
+          札に「{DELIVERY.auto.label}」と付いているものは、支払いが終わった時点でリンクが出ます。
+          「{DELIVERY.manual.label}」のものは、担当者から連絡が来るまで待つ形です。
+          買う前にどちらなのかが分かるようにしています。
+        </p>
+
+        <div className="p-cards">
+          {PRODUCTS.map((p) => {
+            const d = DELIVERY[p.delivery];
+            return (
+              <article key={p.id} className={`p-card${p.delivery === "manual" ? " p-card--manual" : ""}`}>
+                <div className="p-card__head">
+                  <span className={markClass(d.tone)}>{d.label}</span>
+                  <h3 className="p-card__name">{p.name}</h3>
+                </div>
+                <p className="p-card__sum">{p.summary}</p>
+                {p.file ? <p className="p-card__file">{p.file}／{p.size}</p> : null}
+                <div className="p-card__foot">
+                  <span className="p-card__price">{yen(p.price)}</span>
+                  <button type="button" className="p-btn p-btn--main" onClick={() => onBuy(p)}>
+                    購入する
+                  </button>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="p-section">
+        <div className="p-heading">
+          <span className="p-heading__no">{step === "一" ? "二" : "三"}</span>
+          <h2 className="p-heading__text">2つの配信方式のちがい</h2>
+        </div>
+
+        <p className="p-lead">
+          同じ店で売っていても、渡し方は別です。買う側にも店の側にも、何が起きるかを先に示しておきます。
+        </p>
+
+        <div className="p-scroll">
+          <table className="p-table p-table--compare">
+            <thead>
+              <tr>
+                <th>配信方式</th>
+                <th>決済が終わった直後</th>
+                <th>店の側で起きること</th>
+                <th className="is-num">この店の商品数</th>
+              </tr>
+            </thead>
+            <tbody>
+              {Object.keys(DELIVERY).map((k) => (
+                <tr key={k}>
+                  <td className="is-name">
+                    <span className={markClass(DELIVERY[k].tone)}>{DELIVERY[k].short}</span>
+                  </td>
+                  <td className="is-plain">
+                    {k === "auto"
+                      ? `期限つきのリンクをその場で発行。${SHOP.downloadHours}時間・${SHOP.downloadLimit}回まで有効です。`
+                      : "リンクは発行しません。担当者から連絡する旨をお伝えします。"}
+                  </td>
+                  <td className="is-plain">{DELIVERY[k].desc}</td>
+                  <td className="is-num">
+                    {PRODUCTS.filter((p) => p.delivery === k).length}点
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <p className="p-note">
+          期限や回数を使い切った場合は、{SHOP.supportEmail} への連絡で再発行します。
+          買った人が受け取れなくなる状態は作りません。
+        </p>
+      </section>
+    </React.Fragment>
+  );
+}
+
+/* ==================================================================
+   お支払い。覆いかぶさる窓は使わず、一覧の上に開きます。
+================================================================== */
 
 function Checkout({ product, onCancel, onPay }) {
   const [email, setEmail] = useState("");
@@ -241,152 +1148,169 @@ function Checkout({ product, onCancel, onPay }) {
     setTimeout(() => onPay(product, email.trim()), 700);
   };
 
+  const d = DELIVERY[product.delivery];
+
   return (
-    <div className="fixed inset-0 z-30 flex items-end justify-center bg-zinc-900/50 sm:items-center">
-      <div className="w-full max-w-md rounded-t-lg bg-white sm:rounded-lg">
-        <div className="flex items-center justify-between border-b border-zinc-200 px-5 py-4">
-          <h2 className="text-sm font-semibold">お支払い</h2>
-          <button onClick={onCancel} className="text-sm text-zinc-500 hover:text-zinc-900">閉じる</button>
+    <div className="p-form">
+      <div className="p-form__head">
+        <h3 className="p-form__title">{product.name}</h3>
+        <span className={markClass(d.tone)}>{d.label}</span>
+        <span className="p-actions__spacer" />
+        <span className="p-form__price">{yen(product.price)}</span>
+      </div>
+
+      <div className="p-form__grid">
+        <div className="p-field">
+          <label className="p-field__label" htmlFor="pay-email">
+            メールアドレス<span className="p-field__req">必須</span>
+          </label>
+          <input
+            id="pay-email"
+            className={`p-input${touched && badEmail ? " is-error" : ""}`}
+            value={email}
+            inputMode="email"
+            placeholder="you@example.com"
+            onChange={(e) => setEmail(e.target.value)}
+          />
+          <p className="p-field__note">
+            {product.delivery === "auto"
+              ? "このアドレス宛にダウンロード用のリンクをお送りします。"
+              : "このアドレス宛に、担当者からご連絡します。"}
+          </p>
+          {touched && badEmail ? <p className="p-field__err">メールアドレスの形式を確認してください。</p> : null}
         </div>
 
-        <div className="space-y-4 px-5 py-5">
-          <div className="rounded bg-zinc-50 px-4 py-3">
-            <p className="text-sm font-medium">{product.name}</p>
-            <p className="mt-1 text-lg font-semibold tabular-nums">{yen(product.price)}</p>
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs text-zinc-500">
-              メールアドレス<span className="ml-1 text-rose-500">必須</span>
-            </label>
-            <input
-              value={email}
-              inputMode="email"
-              placeholder="you@example.com"
-              onChange={(e) => setEmail(e.target.value)}
-              className={`w-full rounded border px-3 py-2 text-sm ${touched && badEmail ? "border-rose-400" : "border-zinc-300"}`}
-            />
-            <p className="mt-1 text-xs text-zinc-500">このアドレス宛にダウンロード用のリンクをお送りします。</p>
-            {touched && badEmail && <p className="mt-1 text-xs text-rose-600">メールアドレスの形式を確認してください。</p>}
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs text-zinc-500">
-              カード番号<span className="ml-1 text-rose-500">必須</span>
-            </label>
-            <input
-              value={card}
-              inputMode="numeric"
-              placeholder="4242 4242 4242 4242"
-              onChange={(e) => setCard(e.target.value)}
-              className={`w-full rounded border px-3 py-2 font-mono text-sm ${touched && badCard ? "border-rose-400" : "border-zinc-300"}`}
-            />
-            {touched && badCard && <p className="mt-1 text-xs text-rose-600">カード番号を確認してください。</p>}
-            <p className="mt-1 text-xs text-zinc-400">デモのため実際の決済は行われません。任意の数字で進みます。</p>
-          </div>
+        <div className="p-field">
+          <label className="p-field__label" htmlFor="pay-card">
+            カード番号<span className="p-field__req">必須</span>
+          </label>
+          <input
+            id="pay-card"
+            className={`p-input p-input--mono${touched && badCard ? " is-error" : ""}`}
+            value={card}
+            inputMode="numeric"
+            placeholder="4242 4242 4242 4242"
+            onChange={(e) => setCard(e.target.value)}
+          />
+          <p className="p-field__note">デモのため実際の決済は行われません。任意の数字で進みます。</p>
+          {touched && badCard ? <p className="p-field__err">カード番号を確認してください。</p> : null}
         </div>
+      </div>
 
-        <div className="flex gap-2 border-t border-zinc-200 px-5 py-4">
-          <button
-            onClick={pay}
-            disabled={paying}
-            className="rounded bg-indigo-950 px-5 py-2 text-sm text-white hover:bg-indigo-800 disabled:bg-zinc-400"
-          >
-            {paying ? "処理しています…" : `${yen(product.price)}を支払う`}
-          </button>
-          <button onClick={onCancel} className="rounded border border-zinc-300 px-4 py-2 text-sm hover:bg-zinc-100">
-            やめる
-          </button>
-        </div>
+      <div className="p-form__foot">
+        <button type="button" className="p-btn p-btn--main" onClick={pay} disabled={paying}>
+          {paying ? "処理しています…" : `${yen(product.price)}を支払う`}
+        </button>
+        <button type="button" className="p-btn" onClick={onCancel}>やめる</button>
       </div>
     </div>
   );
 }
 
-/* ------------------------------ 購入完了画面 ------------------------------ */
+/* ==================================================================
+   購入完了
+================================================================== */
 
-function Receipt({ order, product, onDownload, onBack }) {
+function Receipt({ order, product, orders, onDownload, onBack }) {
   const [copied, setCopied] = useState(false);
-  const remaining = SHOP.downloadLimit - order.downloads;
+  const live = orders.find((o) => o.id === order.id) || order;
+  const remaining = SHOP.downloadLimit - live.downloads;
   const usedUp = remaining <= 0;
-  const link = `https://studio-kanade.example.com/d/${order.token}`;
+  const link = `https://studio-kanade.example.com/d/${live.token}`;
 
   return (
-    <main className="mx-auto max-w-3xl px-4 py-12">
-      <p className="text-sm text-indigo-800">お支払いが完了しました</p>
-      <h1 className="mt-2 text-2xl font-semibold tracking-tight">{product.name}</h1>
-      <p className="mt-1 text-sm text-zinc-500">
-        注文番号 {order.id}／{order.paidAt}／{yen(order.amount)}
-      </p>
+    <section className="p-section">
+      <div className="p-heading">
+        <span className="p-heading__no">お支払いが完了しました</span>
+        <h2 className="p-heading__text">ご購入ありがとうございます</h2>
+      </div>
+
+      <div className="p-done">
+        <p className="p-done__label">ご購入いただいた商品</p>
+        <p className="p-done__name">{product.name}</p>
+        <p className="p-done__meta">
+          注文番号 {live.id}／{live.paidAt}／{yen(live.amount)}
+        </p>
+      </div>
 
       {product.delivery === "auto" ? (
-        <section className="mt-8 rounded border-2 border-indigo-950 p-6">
-          <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h2 className="text-sm font-semibold">ダウンロード</h2>
-            <span className="font-mono text-xs text-zinc-500">
-              {product.file}／{product.size}
-            </span>
+        <div className="p-deliver">
+          <div className="p-deliver__head">
+            <p className="p-deliver__title">ダウンロード</p>
+            <span className="p-deliver__file">{product.file}／{product.size}</span>
           </div>
 
-          <div className="mt-4 flex flex-wrap items-center gap-3">
-            <button
-              onClick={() => !usedUp && onDownload(order.id)}
-              disabled={usedUp}
-              className="rounded bg-indigo-950 px-5 py-2.5 text-sm text-white hover:bg-indigo-800 disabled:bg-zinc-300"
-            >
-              {usedUp ? "回数の上限に達しました" : "ファイルをダウンロード"}
-            </button>
-            <button
-              onClick={() => { setCopied(true); setTimeout(() => setCopied(false), 1600); }}
-              className="rounded border border-zinc-300 px-4 py-2.5 text-sm hover:bg-zinc-100"
-            >
-              {copied ? "リンクをコピーしました" : "リンクをコピー"}
-            </button>
+          <div className="p-deliver__body">
+            <div className="p-actions">
+              <button
+                type="button"
+                className="p-btn p-btn--main"
+                onClick={() => !usedUp && onDownload(live.id)}
+                disabled={usedUp}
+              >
+                {usedUp ? "回数の上限に達しました" : "ファイルをダウンロード"}
+              </button>
+              <button
+                type="button"
+                className="p-btn"
+                onClick={() => { setCopied(true); setTimeout(() => setCopied(false), 1600); }}
+              >
+                {copied ? "リンクをコピーしました" : "リンクをコピー"}
+              </button>
+            </div>
+
+            <dl className="p-kv">
+              <div>
+                <dt>残りダウンロード回数</dt>
+                <dd className={usedUp ? "is-out" : ""}>
+                  {Math.max(remaining, 0)} / {SHOP.downloadLimit} 回
+                </dd>
+              </div>
+              <div>
+                <dt>期限</dt>
+                <dd>{live.expiresAt}</dd>
+              </div>
+              <div>
+                <dt>配信用リンク</dt>
+                <dd className="is-link">{link}</dd>
+              </div>
+            </dl>
+
+            <p className="p-note">
+              同じ内容のメールを {live.email} 宛にお送りしました。
+              期限を過ぎた場合や回数を使い切った場合は、{SHOP.supportEmail} までご連絡ください。再発行します。
+            </p>
           </div>
-
-          <dl className="mt-5 grid gap-3 border-t border-zinc-200 pt-4 text-sm sm:grid-cols-3">
-            <div>
-              <dt className="text-xs text-zinc-500">残りダウンロード回数</dt>
-              <dd className="mt-0.5 font-semibold tabular-nums">
-                {Math.max(remaining, 0)} / {SHOP.downloadLimit} 回
-              </dd>
-            </div>
-            <div>
-              <dt className="text-xs text-zinc-500">期限</dt>
-              <dd className="mt-0.5 font-mono">{order.expiresAt}</dd>
-            </div>
-            <div>
-              <dt className="text-xs text-zinc-500">配信用リンク</dt>
-              <dd className="mt-0.5 truncate font-mono text-xs text-zinc-500">{link}</dd>
-            </div>
-          </dl>
-
-          <p className="mt-4 text-xs leading-relaxed text-zinc-500">
-            同じ内容のメールを {order.email} 宛にお送りしました。
-            期限を過ぎた場合や回数を使い切った場合は、{SHOP.supportEmail} までご連絡ください。再発行します。
-          </p>
-        </section>
+        </div>
       ) : (
-        <section className="mt-8 rounded border-2 border-amber-500 p-6">
-          <h2 className="text-sm font-semibold">担当者よりご連絡します</h2>
-          <p className="mt-3 text-sm leading-relaxed text-zinc-700">
-            この商品はご購入後に個別で進める内容です。
-            {order.email} 宛に、2営業日以内に担当者からご連絡します。
-          </p>
-          <p className="mt-3 text-xs text-zinc-500">
-            ご購入は管理画面に通知済みです。お急ぎの場合は {SHOP.supportEmail} までご連絡ください。
-          </p>
-        </section>
+        <div className="p-deliver p-deliver--manual">
+          <div className="p-deliver__head">
+            <p className="p-deliver__title">担当者よりご連絡します</p>
+            <span className={markClass(DELIVERY.manual.tone)}>{DELIVERY.manual.short}</span>
+          </div>
+
+          <div className="p-deliver__body">
+            <p>
+              この商品はご購入後に個別で進める内容です。
+              {live.email} 宛に、2営業日以内に担当者からご連絡します。
+            </p>
+            <p className="p-note">
+              ご購入は管理画面に「未対応」として通知済みです。お急ぎの場合は {SHOP.supportEmail} までご連絡ください。
+            </p>
+          </div>
+        </div>
       )}
 
-      <button onClick={onBack} className="mt-8 rounded border border-zinc-300 px-4 py-2 text-sm hover:bg-zinc-100">
-        ストアに戻る
-      </button>
-    </main>
+      <p className="p-actions" style={{ marginTop: "var(--sp-4)" }}>
+        <button type="button" className="p-btn p-btn--main" onClick={onBack}>ストアに戻る</button>
+      </p>
+    </section>
   );
 }
 
-/* ------------------------------- 管理画面 ------------------------------- */
+/* ==================================================================
+   管理画面（店の側）
+================================================================== */
 
 function Admin({ orders, onHandled }) {
   const [range, setRange] = useState("all");
@@ -402,10 +1326,10 @@ function Admin({ orders, onHandled }) {
   const exportCsv = () => {
     const header = ["注文番号", "決済日時", "商品", "金額", "メール", "配信方式", "DL回数", "期限", "対応状況"];
     const body = orders.map((o) => {
-      const p = PRODUCTS.find((x) => x.id === o.productId);
+      const p = productOf(o.productId);
       return [
         o.id, o.paidAt, p.name, o.amount, o.email,
-        p.delivery === "auto" ? "自動配信" : "個別対応",
+        DELIVERY[p.delivery].short,
         p.delivery === "auto" ? o.downloads : "",
         o.expiresAt ?? "",
         o.handled === null ? "" : o.handled ? "対応済み" : "未対応",
@@ -421,104 +1345,124 @@ function Admin({ orders, onHandled }) {
   };
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-8">
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Stat label="注文件数" value={`${orders.length} 件`} />
-        <Stat label="売上合計" value={yen(total)} />
-        <Stat label="個別対応が必要" value={`${pending} 件`} alert={pending > 0} />
-      </div>
-
-      <div className="mt-8 flex flex-wrap items-end justify-between gap-3">
-        <div className="flex rounded border border-zinc-300 text-xs">
-          <button
-            onClick={() => setRange("all")}
-            className={`px-3 py-1.5 ${range === "all" ? "bg-zinc-900 text-white" : "text-zinc-600"}`}
-          >
-            すべての注文
-          </button>
-          <button
-            onClick={() => setRange("manual")}
-            className={`px-3 py-1.5 ${range === "manual" ? "bg-zinc-900 text-white" : "text-zinc-600"}`}
-          >
-            未対応のみ
-          </button>
+    <React.Fragment>
+      <section className="p-section">
+        <div className="p-heading">
+          <span className="p-heading__no">一</span>
+          <h2 className="p-heading__text">注文の状況</h2>
         </div>
-        <button onClick={exportCsv} className="rounded border border-zinc-300 px-3 py-2 text-sm hover:bg-zinc-100">
-          CSVで書き出す
-        </button>
-      </div>
 
-      {filtered.length === 0 ? (
-        <p className="mt-6 rounded border border-dashed border-zinc-300 px-6 py-12 text-center text-sm text-zinc-500">
-          未対応の注文はありません。
+        <p className="p-lead">
+          自動配信の注文も個別対応の注文も、同じ台帳に並びます。
+          違うのは、人が動く必要があるかどうかだけです。
         </p>
-      ) : (
-        <div className="mt-4 overflow-x-auto rounded border border-zinc-200">
-          <table className="w-full min-w-[720px] text-left text-sm">
-            <thead className="bg-zinc-50 text-xs text-zinc-500">
-              <tr>
-                <th className="px-4 py-3 font-medium">注文番号</th>
-                <th className="px-4 py-3 font-medium">決済日時</th>
-                <th className="px-4 py-3 font-medium">商品</th>
-                <th className="px-4 py-3 font-medium">金額</th>
-                <th className="px-4 py-3 font-medium">購入者</th>
-                <th className="px-4 py-3 font-medium">配信</th>
-                <th className="px-4 py-3" />
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((o) => {
-                const p = PRODUCTS.find((x) => x.id === o.productId);
-                return (
-                  <tr key={o.id} className="border-t border-zinc-100">
-                    <td className="px-4 py-3 font-mono text-xs">{o.id}</td>
-                    <td className="px-4 py-3 font-mono text-xs text-zinc-600">{o.paidAt}</td>
-                    <td className="px-4 py-3">{p.name}</td>
-                    <td className="px-4 py-3 tabular-nums">{yen(o.amount)}</td>
-                    <td className="px-4 py-3 font-mono text-xs text-zinc-600">{o.email}</td>
-                    <td className="px-4 py-3">
-                      {p.delivery === "auto" ? (
-                        <span className="text-xs text-zinc-600">
-                          自動配信済み
-                          <span className="ml-1 font-mono">{o.downloads}/{SHOP.downloadLimit}回</span>
-                        </span>
-                      ) : o.handled ? (
-                        <span className="inline-flex rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-600 ring-1 ring-zinc-200">
-                          対応済み
-                        </span>
-                      ) : (
-                        <span className="inline-flex rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-800 ring-1 ring-amber-200">
-                          未対応
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      {o.handled === false && (
-                        <button
-                          onClick={() => onHandled(o.id)}
-                          className="rounded border border-zinc-300 px-3 py-1 text-xs hover:bg-zinc-100"
-                        >
-                          対応済みにする
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </main>
-  );
-}
 
-function Stat({ label, value, alert }) {
-  return (
-    <div className={`rounded border p-4 ${alert ? "border-amber-300 bg-amber-50" : "border-zinc-200"}`}>
-      <p className="text-xs text-zinc-500">{label}</p>
-      <p className="mt-1 text-xl font-semibold tabular-nums">{value}</p>
-    </div>
+        <div className="p-tiles">
+          <div className="p-tile">
+            <p className="p-tile__label">注文件数</p>
+            <p className="p-tile__num">{orders.length}<span className="p-tile__unit">件</span></p>
+            <p className="p-tile__sub">配信方式を問わず、決済が済んだ注文の合計です。</p>
+          </div>
+          <div className="p-tile">
+            <p className="p-tile__label">売上合計</p>
+            <p className="p-tile__num">{total.toLocaleString()}<span className="p-tile__unit">円</span></p>
+            <p className="p-tile__sub">同じ台帳で数えているため、1か所で足りています。</p>
+          </div>
+          <div className={pending > 0 ? "p-tile p-tile--alert" : "p-tile"}>
+            <p className="p-tile__label">個別対応が必要</p>
+            <p className="p-tile__num">{pending}<span className="p-tile__unit">件</span></p>
+            <p className="p-tile__sub">
+              {pending > 0
+                ? "人が動くまで終わりません。下の一覧で色が付いている行です。"
+                : "人の手が要る注文は残っていません。"}
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section className="p-section">
+        <div className="p-heading">
+          <span className="p-heading__no">二</span>
+          <h2 className="p-heading__text">注文一覧</h2>
+        </div>
+
+        <p className="p-lead">
+          「未対応のみ」に絞ると、人が動くべき注文だけが残ります。
+          自動配信の行は、何回ダウンロードされたかがそのまま出ます。
+        </p>
+
+        <div className="p-actions" style={{ marginBottom: "var(--sp-3)" }}>
+          <button type="button" className="p-choice" aria-pressed={range === "all"} onClick={() => setRange("all")}>
+            すべての注文<span className="p-choice__n">{orders.length}</span>
+          </button>
+          <button type="button" className="p-choice" aria-pressed={range === "manual"} onClick={() => setRange("manual")}>
+            未対応のみ<span className="p-choice__n">{pending}</span>
+          </button>
+          <span className="p-actions__spacer" />
+          <button type="button" className="p-btn" onClick={exportCsv} disabled={orders.length === 0}>
+            CSVで書き出す
+          </button>
+        </div>
+
+        {filtered.length === 0 ? (
+          <div className="p-empty">
+            <p>{range === "manual" ? "未対応の注文はありません。" : "注文はまだありません。"}</p>
+          </div>
+        ) : (
+          <div className="p-scroll">
+            <table className="p-table p-table--orders">
+              <thead>
+                <tr>
+                  <th>注文番号</th>
+                  <th>決済日時</th>
+                  <th>商品</th>
+                  <th className="is-num">金額</th>
+                  <th>購入者</th>
+                  <th>配信</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((o) => {
+                  const p = productOf(o.productId);
+                  return (
+                    <tr key={o.id} className={o.handled === false ? "is-pending" : ""}>
+                      <td className="is-mono">{o.id}</td>
+                      <td className="is-mono">{o.paidAt}</td>
+                      <td className="is-name">{p.name}</td>
+                      <td className="is-num">{yen(o.amount)}</td>
+                      <td className="is-mono">{o.email}</td>
+                      <td>
+                        {p.delivery === "auto" ? (
+                          <span className="is-plain">
+                            {DELIVERY.auto.short}済み　{o.downloads}/{SHOP.downloadLimit}回
+                          </span>
+                        ) : o.handled ? (
+                          <span className="p-mark p-mark--muted">対応済み</span>
+                        ) : (
+                          <span className="p-mark p-mark--alert">未対応</span>
+                        )}
+                      </td>
+                      <td className="is-act">
+                        {o.handled === false ? (
+                          <button type="button" className="p-btn p-btn--quiet" onClick={() => onHandled(o.id)}>
+                            対応済みにする
+                          </button>
+                        ) : null}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <p className="p-note">
+          表は横にスクロールできます。CSVは絞り込みに関係なく、全注文を書き出します。
+        </p>
+      </section>
+    </React.Fragment>
   );
 }
 

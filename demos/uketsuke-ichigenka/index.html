@@ -1,0 +1,1635 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>受付一元化＋進捗自動連絡 デモ | 業務棚卸しから始める中小企業のAI導入</title>
+<meta name="description" content="電話・Webフォーム・LINE・来店の受付を1つの台帳にまとめ、工程が進むたびに自動で連絡する仕組みのデモ。業務棚卸し・受付・管理画面・導入後の数字の4画面。工務店／歯科医院／自動車整備で切り替えられます。数値はデモ用の想定値です。">
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body>
+<div id="root"></div>
+<script>Babel.registerPreset("react-classic", { presets: [[Babel.availablePresets["react"], { runtime: "classic" }]] });</script>
+<script type="text/babel" data-presets="react-classic">
+const { useState } = React;
+
+/* ==================================================================
+   このデモについて
+
+   ・掲載している所要時間・件数・導入後の数字は、すべて
+     「デモ用の想定値」です。実在の企業の実績ではありません。
+   ・受付フォームに入力した内容は、どこにも保存・送信されません。
+     ブラウザのメモリ上にだけ置き、リロードすると消えます。
+     localStorage / Cookie / 外部送信のいずれも使っていません。
+
+   構成の考え方
+
+   下の CONFIG（配色・共通設定）と INDUSTRIES（業種定義）を
+   差し替えるだけで、別業種のデモになります。
+   画面側のコードは、業種の中身を一切知りません。
+================================================================== */
+
+/* ------------------------------------------------------------------
+   1. 共通設定。配色と分類の削減率はここだけで決まります。
+------------------------------------------------------------------ */
+const CONFIG = {
+  siteTitle: "受付一元化＋進捗自動連絡",
+  siteSubtitle: "業務棚卸しから始める、中小企業のAI・自動化導入",
+  theme: {
+    bg: "#f7f3f5",
+    surface: "#ffffff",
+    ink: "#2b1f27",
+    sub: "#5c4b55",
+    muted: "#8d7d86",
+    line: "#e7dce2",
+    lineStrong: "#d3c3cc",
+    primary: "#6b2350",       // 主色（すもも色）
+    primaryDark: "#4a1536",
+    primaryLight: "#f4e9ef",
+    accent: "#bf5730",        // 副色（テラコッタ）
+    accentDark: "#8f3d1e",
+    accentLight: "#fbeee7",
+    human: "#6f6068",         // 「人がやるべき」の色
+    alert: "#a92323",
+    alertLight: "#fbeaea",
+    ok: "#3f6b4f",
+    okLight: "#eaf2ec",
+  },
+  // 分類ごとの削減率。デモ用の仮置きの数字です。
+  kinds: {
+    auto:  { label: "自動化できる", cut: 0.8, hint: "人の判断が要らない。仕組みに任せられる" },
+    semi:  { label: "半自動化",     cut: 0.4, hint: "下書き・候補までは自動。最後は人が見る" },
+    human: { label: "人がやるべき", cut: 0.0, hint: "自動化の対象外。ここを守るために事務を減らす" },
+  },
+  defaultWage: 2200,   // 人件費換算に使う時給（円）
+  wageMin: 1200,
+  wageMax: 4000,
+};
+
+/* ------------------------------------------------------------------
+   2. 業種定義。1業種＝1オブジェクト。
+      ここに1つ足すと、画面上の切替ボタンが1つ増えます。
+------------------------------------------------------------------ */
+const INDUSTRIES = {
+  koumuten: {
+    label: "工務店・リフォーム",
+    orgName: "株式会社◯◯工務店",
+    customerWord: "お客さま",
+    coreWord: "施工",
+    // 工程（ステージ）
+    stages: ["受付", "現地調査", "見積提示", "契約", "着工", "完了"],
+    // 受付チャネル
+    channels: [
+      { key: "tel",  label: "電話",       note: "聞き取った内容をその場で台帳に入力" },
+      { key: "web",  label: "Webフォーム", note: "送信内容がそのまま台帳の1行になる" },
+      { key: "line", label: "LINE",       note: "トーク内容を台帳に取り込む" },
+      { key: "shop", label: "来店",       note: "タブレットの同じフォームから入力" },
+    ],
+    // 業務棚卸し
+    tasks: [
+      { group: "office", name: "電話の一次対応（用件の聞き取り）", min: 8,  cnt: 120, kind: "semi", note: "聞き取り項目を固定し、入力欄に直接起こす" },
+      { group: "office", name: "不在着信の折り返し・行き違い対応", min: 6,  cnt: 70,  kind: "auto", note: "自動返信で用件を先に受け取る" },
+      { group: "office", name: "Webフォーム・LINEの内容確認",     min: 4,  cnt: 65,  kind: "auto", note: "同じ台帳に自動で入る" },
+      { group: "office", name: "受付内容の台帳・Excelへの転記",   min: 6,  cnt: 185, kind: "auto", note: "転記そのものをなくす" },
+      { group: "office", name: "現地調査の日程調整",               min: 12, cnt: 45,  kind: "semi", note: "空き枠を提示。確定は人が判断" },
+      { group: "office", name: "見積書の作成",                     min: 55, cnt: 42,  kind: "semi", note: "過去案件から下書き。金額は人が決める" },
+      { group: "office", name: "見積の送付と開封・返答の確認",     min: 8,  cnt: 42,  kind: "auto", note: "送付と督促を自動化" },
+      { group: "office", name: "進捗のご連絡（調査日・着工日・完了予定）", min: 7, cnt: 95, kind: "auto", note: "工程が進むと自動で送る" },
+      { group: "office", name: "催促への対応（「どうなっていますか」）",   min: 10, cnt: 38, kind: "auto", note: "先に連絡が届いていれば発生しない" },
+      { group: "office", name: "職人・協力会社への日程共有",       min: 9,  cnt: 60,  kind: "semi", note: "同じ台帳から配信。最終確認は人" },
+      { group: "office", name: "完了後の書類送付・アフター案内",   min: 12, cnt: 22,  kind: "semi", note: "定型部分だけ自動生成" },
+      { group: "core",   name: "現地調査（実測・劣化の確認）",     min: 90,   cnt: 45, kind: "human", note: "現場を見た人にしか判断できない" },
+      { group: "core",   name: "仕様・工法の決定と提案",           min: 45,   cnt: 42, kind: "human", note: "責任を伴う判断。人が決める" },
+      { group: "core",   name: "施工（現場作業）",                 min: 1200, cnt: 22, kind: "human", note: "本業。ここに時間を戻すのが目的" },
+    ],
+    // 受付フォーム
+    form: {
+      lead: "工事・修繕のご相談を受け付けます。1営業日以内に担当者からご連絡します。",
+      fields: [
+        { key: "name",  label: "お名前",           type: "text",     required: true, placeholder: "山田 太郎" },
+        { key: "tel",   label: "電話番号",         type: "text",     required: true, placeholder: "090-0000-0000" },
+        { key: "area",  label: "建物の所在地",     type: "text",     required: true, placeholder: "◯◯市◯◯町" },
+        { key: "topic", label: "ご相談の種類",     type: "select",   required: true, options: ["新築", "リフォーム", "修繕・不具合", "点検のみ", "その他"] },
+        { key: "reply", label: "ご希望の連絡方法", type: "select",   required: true, options: ["電話", "メール", "LINE"] },
+        { key: "body",  label: "ご相談内容",       type: "textarea", required: true, scan: true, placeholder: "できるだけ具体的にご記入ください" },
+      ],
+      samples: {
+        normal: { name: "山田 太郎", tel: "090-1234-5678", area: "調布市入間町", topic: "リフォーム", reply: "メール", body: "築25年の戸建てです。1階の水回り（キッチンと浴室）のリフォームを検討しています。まずは概算だけでも知りたいです。" },
+        urgent: { name: "佐藤 健一", tel: "090-8765-4321", area: "世田谷区上野毛", topic: "修繕・不具合", reply: "電話", body: "昨夜の雨で2階の天井から雨漏りしています。バケツで受けている状態です。至急みていただけませんか。" },
+      },
+    },
+    // 緊急と判定する語
+    urgentWords: ["雨漏り", "水漏れ", "漏水", "至急", "急ぎ", "今日中", "折れ", "割れ", "傾いて", "落ちて", "危険", "停電", "止まらない", "台風"],
+    // 自動返信の文面
+    reply: {
+      normalLead: "担当者が内容を確認し、1営業日以内にご連絡します。",
+      urgentLead: "緊急のご相談として受け付けました。担当者の携帯へ即時に通知済みです。30分以内に折り返します。",
+      closing: "工程が進むたびに、この連絡先へ自動でご案内します。お客さまからお問い合わせいただかなくても、次に何が起きるかが分かる状態にします。",
+    },
+    // 管理画面の初期データ
+    seeds: [
+      {
+        name: "佐藤 健一", channel: "tel", urgent: true, stage: 0, at: "8/17 8:42",
+        summary: [["ご相談の種類", "修繕・不具合"], ["所在地", "世田谷区上野毛"], ["連絡方法", "電話"]],
+        body: "2階の天井から雨漏り。至急見てほしいとのこと。",
+        history: [
+          { t: "8/17 8:42", kind: "auto", text: "受付完了の自動返信を送信（電話番号へSMS）" },
+          { t: "8/17 8:42", kind: "auto", text: "緊急語「雨漏り」「至急」を検知。担当者の携帯へ通知" },
+        ],
+      },
+      {
+        name: "田中 美咲", channel: "web", urgent: false, stage: 1, at: "8/14 21:07",
+        summary: [["ご相談の種類", "リフォーム"], ["所在地", "調布市入間町"], ["連絡方法", "メール"]],
+        body: "水回りのリフォームを検討中。まず概算を知りたい。",
+        history: [
+          { t: "8/14 21:07", kind: "auto",  text: "受付完了の自動返信を送信（メール）" },
+          { t: "8/15 9:20",  kind: "staff", text: "電話で現地調査の日程をご相談（8/19 10:00で仮押さえ）" },
+          { t: "8/15 9:26",  kind: "auto",  text: "「現地調査」に進んだことを自動連絡（日程・所要時間・当日の準備を記載）" },
+        ],
+      },
+      {
+        name: "鈴木商店 様", channel: "line", urgent: false, stage: 2, at: "8/8 13:31",
+        summary: [["ご相談の種類", "修繕・不具合"], ["所在地", "三鷹市下連雀"], ["連絡方法", "LINE"]],
+        body: "店舗外壁の一部が剥がれている。営業しながらの工事は可能か。",
+        history: [
+          { t: "8/8 13:31",  kind: "auto",  text: "受付完了の自動返信を送信（LINE）" },
+          { t: "8/9 11:00",  kind: "auto",  text: "「現地調査」に進んだことを自動連絡" },
+          { t: "8/12 16:40", kind: "staff", text: "現地調査を実施。足場の要否を確認" },
+          { t: "8/13 10:05", kind: "auto",  text: "「見積提示」に進んだことを自動連絡（見積書PDFを添付）" },
+        ],
+      },
+      {
+        name: "高橋 由紀", channel: "shop", urgent: false, stage: 3, at: "7/29 11:15",
+        summary: [["ご相談の種類", "新築"], ["所在地", "武蔵野市境南町"], ["連絡方法", "メール"]],
+        body: "土地取得済み。木造2階建てを検討している。",
+        history: [
+          { t: "7/29 11:15", kind: "staff", text: "来店対応。タブレットの同じフォームから受付を入力" },
+          { t: "7/29 11:16", kind: "auto",  text: "受付完了の自動返信を送信（メール）" },
+          { t: "8/2 14:00",  kind: "auto",  text: "「現地調査」に進んだことを自動連絡" },
+          { t: "8/7 17:20",  kind: "auto",  text: "「見積提示」に進んだことを自動連絡" },
+          { t: "8/13 15:00", kind: "auto",  text: "「契約」に進んだことを自動連絡（契約日・必要書類を記載）" },
+        ],
+      },
+      {
+        name: "伊藤 誠", channel: "web", urgent: false, stage: 4, at: "7/11 19:48",
+        summary: [["ご相談の種類", "リフォーム"], ["所在地", "杉並区高円寺南"], ["連絡方法", "メール"]],
+        body: "外壁塗装。施工事例を見て問い合わせ。",
+        history: [
+          { t: "7/11 19:48", kind: "auto",  text: "受付完了の自動返信を送信（メール）" },
+          { t: "7/15 10:30", kind: "auto",  text: "「現地調査」に進んだことを自動連絡" },
+          { t: "7/22 13:10", kind: "auto",  text: "「見積提示」に進んだことを自動連絡" },
+          { t: "7/30 16:00", kind: "auto",  text: "「契約」に進んだことを自動連絡" },
+          { t: "8/12 8:00",  kind: "auto",  text: "「着工」に進んだことを自動連絡（工期・近隣挨拶の予定を記載）" },
+          { t: "8/14 18:30", kind: "staff", text: "施主より色味の変更希望。現場と調整済み" },
+        ],
+      },
+    ],
+    // 導入後の数字（デモ用の想定値）
+    metrics: [
+      { label: "一次返信までの時間（平均）", before: "5時間12分",     after: "1分以内",      note: "受付と同時に自動返信するため、担当者の在席状況に左右されません" },
+      { label: "お客さまからの催促件数",     before: "38件 / 月",     after: "6件 / 月",     note: "工程が進むたびに先に連絡が届くため、確認の電話が減ります" },
+      { label: "現地調査の日程の重複",       before: "4件 / 月",      after: "0件 / 月",     note: "電話・Web・LINE・来店を1つの台帳に集約したため" },
+      { label: "台帳への転記時間",           before: "18.5時間 / 月", after: "2.0時間 / 月", note: "受付フォームの送信内容が、そのまま台帳の1行になります" },
+    ],
+  },
+
+  shika: {
+    label: "歯科医院",
+    orgName: "◯◯歯科クリニック",
+    customerWord: "患者さま",
+    coreWord: "診療",
+    stages: ["受付", "初診カウンセリング", "検査・診断", "治療計画の説明", "治療", "メンテナンス移行"],
+    channels: [
+      { key: "tel",  label: "電話",    note: "受付が聞き取った内容をその場で入力" },
+      { key: "web",  label: "Web予約", note: "予約内容がそのまま台帳の1行になる" },
+      { key: "line", label: "LINE",    note: "トーク内容を台帳に取り込む" },
+      { key: "shop", label: "来院",    note: "受付のタブレットから同じフォームで入力" },
+    ],
+    tasks: [
+      { group: "office", name: "電話での予約受付",                   min: 5,  cnt: 320, kind: "semi", note: "空き枠の提示までを自動化。確定は受付が行う" },
+      { group: "office", name: "診療中にかかってきた電話の折り返し", min: 6,  cnt: 140, kind: "auto", note: "自動応答で用件と希望日時を先に受け取る" },
+      { group: "office", name: "Web予約と電話予約の突き合わせ",      min: 4,  cnt: 180, kind: "auto", note: "1つの台帳に集約すれば作業自体が消える" },
+      { group: "office", name: "予約台帳・受付簿への転記",           min: 4,  cnt: 400, kind: "auto", note: "転記そのものをなくす" },
+      { group: "office", name: "前日のリマインド連絡",               min: 3,  cnt: 380, kind: "auto", note: "予約時刻から逆算して自動送信" },
+      { group: "office", name: "予約変更・キャンセルの受付と枠の空け直し", min: 7, cnt: 90, kind: "semi", note: "空いた枠のご案内までを自動化" },
+      { group: "office", name: "定期検診のリコール案内",             min: 5,  cnt: 150, kind: "auto", note: "最終来院日から自動抽出して送信" },
+      { group: "office", name: "治療内容・費用の問い合わせ対応",     min: 8,  cnt: 60,  kind: "semi", note: "よくある質問は自動回答。個別判断は人が返す" },
+      { group: "office", name: "保険証確認のご案内",                 min: 3,  cnt: 200, kind: "auto", note: "月初の該当者へ自動送信" },
+      { group: "office", name: "中断された方へのフォロー連絡",       min: 6,  cnt: 70,  kind: "auto", note: "未来院の抽出と初回連絡を自動化" },
+      { group: "core",   name: "検査・診断",                         min: 15, cnt: 180, kind: "human", note: "医師の判断。自動化の対象外" },
+      { group: "core",   name: "治療計画の説明（カウンセリング）",   min: 20, cnt: 120, kind: "human", note: "同意をいただく場。人が向き合う" },
+      { group: "core",   name: "診療（処置）",                       min: 40, cnt: 620, kind: "human", note: "本業。ここに時間を戻すのが目的" },
+    ],
+    form: {
+      lead: "ご予約・ご相談を受け付けます。内容を確認のうえ、受付からご連絡します。",
+      fields: [
+        { key: "name",  label: "お名前",           type: "text",     required: true, placeholder: "山田 花子" },
+        { key: "tel",   label: "電話番号",         type: "text",     required: true, placeholder: "090-0000-0000" },
+        { key: "hope",  label: "ご希望の日時",     type: "text",     required: true, placeholder: "8月20日 午前 など" },
+        { key: "topic", label: "ご相談の種類",     type: "select",   required: true, options: ["初診", "定期検診", "痛み・不具合", "被せ物が取れた", "矯正の相談", "その他"] },
+        { key: "reply", label: "ご希望の連絡方法", type: "select",   required: true, options: ["電話", "メール", "LINE"] },
+        { key: "body",  label: "お困りの内容",     type: "textarea", required: true, scan: true, placeholder: "症状やご希望をご記入ください" },
+      ],
+      samples: {
+        normal: { name: "山田 花子", tel: "090-1234-5678", hope: "8月22日 午後", topic: "定期検診", reply: "LINE", body: "半年に一度の検診をお願いしたいです。クリーニングも希望します。平日の夕方だと助かります。" },
+        urgent: { name: "中村 彩", tel: "090-8765-4321", hope: "できるだけ早く", topic: "痛み・不具合", reply: "電話", body: "右下の奥歯が昨夜から痛みます。頬も少し腫れていて、痛くて眠れませんでした。至急みていただけないでしょうか。" },
+      },
+    },
+    urgentWords: ["痛い", "痛み", "痛く", "腫れ", "出血", "血が止まらない", "取れた", "折れ", "欠け", "至急", "急ぎ", "今日中", "眠れ", "熱"],
+    reply: {
+      normalLead: "受付が内容を確認し、診療時間内にご連絡します。",
+      urgentLead: "痛みを伴うご相談として受け付けました。受付の端末へ即時に通知済みです。当日枠の可否を優先してご連絡します。",
+      closing: "ご予約日時の確定・前日のご案内・次回検診のご案内は、この連絡先へ自動でお送りします。",
+    },
+    seeds: [
+      {
+        name: "中村 彩", channel: "tel", urgent: true, stage: 0, at: "8/17 9:05",
+        summary: [["ご相談の種類", "痛み・不具合"], ["ご希望の日時", "できるだけ早く"], ["連絡方法", "電話"]],
+        body: "右下奥歯の痛み。腫れあり。夜眠れない。",
+        history: [
+          { t: "8/17 9:05", kind: "auto", text: "受付完了の自動返信を送信（SMS）" },
+          { t: "8/17 9:05", kind: "auto", text: "緊急語「痛み」「腫れ」「至急」を検知。受付端末へ通知" },
+        ],
+      },
+      {
+        name: "小林 大輔", channel: "web", urgent: false, stage: 1, at: "8/15 23:12",
+        summary: [["ご相談の種類", "初診"], ["ご希望の日時", "8/19 夕方"], ["連絡方法", "メール"]],
+        body: "引っ越してきたばかり。まず一度みてほしい。",
+        history: [
+          { t: "8/15 23:12", kind: "auto",  text: "受付完了の自動返信を送信（メール）" },
+          { t: "8/16 9:30",  kind: "staff", text: "8/19 17:30で確定。初診票のURLをご案内" },
+          { t: "8/16 9:31",  kind: "auto",  text: "「初診カウンセリング」に進んだことを自動連絡（日時・持ち物・所要時間を記載）" },
+        ],
+      },
+      {
+        name: "渡辺 久美子", channel: "line", urgent: false, stage: 2, at: "8/6 18:44",
+        summary: [["ご相談の種類", "定期検診"], ["ご希望の日時", "8/9 午前"], ["連絡方法", "LINE"]],
+        body: "半年ごとの検診。クリーニング希望。",
+        history: [
+          { t: "8/6 18:44", kind: "auto", text: "受付完了の自動返信を送信（LINE）" },
+          { t: "8/8 10:00", kind: "auto", text: "前日のリマインドを自動送信" },
+          { t: "8/9 10:40", kind: "auto", text: "「検査・診断」に進んだことを自動連絡" },
+        ],
+      },
+      {
+        name: "山本 拓也", channel: "shop", urgent: false, stage: 3, at: "7/30 15:20",
+        summary: [["ご相談の種類", "その他"], ["ご希望の日時", "8/2 午後"], ["連絡方法", "メール"]],
+        body: "詰め物のやり直しを相談したい。",
+        history: [
+          { t: "7/30 15:20", kind: "staff", text: "来院時に受付のタブレットから入力" },
+          { t: "7/30 15:21", kind: "auto",  text: "受付完了の自動返信を送信（メール）" },
+          { t: "8/2 14:10",  kind: "auto",  text: "「検査・診断」に進んだことを自動連絡" },
+          { t: "8/9 16:00",  kind: "auto",  text: "「治療計画の説明」に進んだことを自動連絡（費用の目安と回数を記載）" },
+        ],
+      },
+      {
+        name: "加藤 千尋", channel: "web", urgent: false, stage: 4, at: "7/3 20:31",
+        summary: [["ご相談の種類", "初診"], ["ご希望の日時", "7/6 午前"], ["連絡方法", "LINE"]],
+        body: "以前の治療の続き。通いやすい医院を探していた。",
+        history: [
+          { t: "7/3 20:31",  kind: "auto",  text: "受付完了の自動返信を送信（LINE）" },
+          { t: "7/6 10:00",  kind: "auto",  text: "「初診カウンセリング」に進んだことを自動連絡" },
+          { t: "7/13 11:00", kind: "auto",  text: "「検査・診断」に進んだことを自動連絡" },
+          { t: "7/20 11:00", kind: "auto",  text: "「治療計画の説明」に進んだことを自動連絡" },
+          { t: "7/27 11:00", kind: "auto",  text: "「治療」に進んだことを自動連絡（通院回数の目安を記載）" },
+          { t: "8/10 12:05", kind: "staff", text: "次回のご予約日を変更（8/24へ）" },
+        ],
+      },
+    ],
+    metrics: [
+      { label: "一次返信までの時間（平均）", before: "3時間40分",     after: "1分以内",      note: "診療中で電話に出られない時間帯でも、受付だけは自動で返ります" },
+      { label: "患者さまからの催促件数",     before: "22件 / 月",     after: "4件 / 月",     note: "予約確定・前日案内・次回案内が自動で届くため" },
+      { label: "予約の重複",                 before: "9件 / 月",      after: "0件 / 月",     note: "Web予約と電話予約を同じ枠管理に統合したため" },
+      { label: "台帳への転記時間",           before: "26.7時間 / 月", after: "3.0時間 / 月", note: "予約内容がそのまま台帳の1行になります" },
+    ],
+  },
+
+  seibi: {
+    label: "自動車整備",
+    orgName: "◯◯オートサービス",
+    customerWord: "お客さま",
+    coreWord: "整備・診断",
+    stages: ["受付", "入庫", "診断・見積", "作業承認", "整備作業", "納車"],
+    channels: [
+      { key: "tel",  label: "電話",       note: "聞き取った内容をその場で台帳に入力" },
+      { key: "web",  label: "Webフォーム", note: "送信内容がそのまま台帳の1行になる" },
+      { key: "line", label: "LINE",       note: "トーク内容と写真を台帳に取り込む" },
+      { key: "shop", label: "来店",       note: "受付カウンターの同じフォームから入力" },
+    ],
+    tasks: [
+      { group: "office", name: "電話での入庫相談・受付",             min: 7,  cnt: 150, kind: "semi", note: "聞き取り項目を固定。空き枠の提示まで自動" },
+      { group: "office", name: "折り返し・不在対応",                 min: 5,  cnt: 80,  kind: "auto", note: "自動返信で用件を先に受け取る" },
+      { group: "office", name: "車検案内（期限が近い車両の抽出と連絡）", min: 6, cnt: 130, kind: "auto", note: "車検満了日から自動抽出して送信" },
+      { group: "office", name: "受付票・作業伝票への転記",           min: 5,  cnt: 210, kind: "auto", note: "転記そのものをなくす" },
+      { group: "office", name: "代車の空き確認と割り当て",           min: 8,  cnt: 70,  kind: "semi", note: "空き状況の照合を自動化。割当は人が決める" },
+      { group: "office", name: "見積の連絡と承認待ちの追いかけ",     min: 9,  cnt: 110, kind: "auto", note: "送付と督促を自動化。承認はお客さまが画面で行う" },
+      { group: "office", name: "部品の入荷待ち状況のご連絡",         min: 6,  cnt: 90,  kind: "auto", note: "状況が変わった時点で自動送信" },
+      { group: "office", name: "完成・納車日のご連絡",               min: 5,  cnt: 140, kind: "auto", note: "工程が進むと自動で送る" },
+      { group: "office", name: "催促への対応（「まだですか」）",     min: 9,  cnt: 45,  kind: "auto", note: "先に連絡が届いていれば発生しない" },
+      { group: "office", name: "点検記録簿・書類の作成補助",         min: 10, cnt: 60,  kind: "semi", note: "定型部分を自動生成。記入と確認は人が行う" },
+      { group: "core",   name: "診断（不具合の切り分け）",           min: 35,  cnt: 150, kind: "human", note: "整備士の判断。自動化の対象外" },
+      { group: "core",   name: "整備作業",                           min: 120, cnt: 200, kind: "human", note: "本業。ここに時間を戻すのが目的" },
+      { group: "core",   name: "完成検査・試運転",                   min: 20,  cnt: 200, kind: "human", note: "安全に直結する確認。人が行う" },
+    ],
+    form: {
+      lead: "車検・点検・修理のご相談を受け付けます。内容を確認のうえ、担当からご連絡します。",
+      fields: [
+        { key: "name",  label: "お名前",           type: "text",     required: true, placeholder: "山田 太郎" },
+        { key: "tel",   label: "電話番号",         type: "text",     required: true, placeholder: "090-0000-0000" },
+        { key: "car",   label: "車種・年式",       type: "text",     required: true, placeholder: "◯◯ / 2019年" },
+        { key: "topic", label: "ご相談の種類",     type: "select",   required: true, options: ["車検", "定期点検", "修理", "不具合の相談", "見積のみ", "その他"] },
+        { key: "reply", label: "ご希望の連絡方法", type: "select",   required: true, options: ["電話", "メール", "LINE"] },
+        { key: "body",  label: "ご相談内容",       type: "textarea", required: true, scan: true, placeholder: "症状やご希望の時期をご記入ください" },
+      ],
+      samples: {
+        normal: { name: "山田 太郎", tel: "090-1234-5678", car: "軽ワゴン / 2019年", topic: "車検", reply: "メール", body: "来月末で車検が切れます。見積をお願いしたいです。代車をお借りできると助かります。" },
+        urgent: { name: "松本 亮", tel: "090-8765-4321", car: "セダン / 2016年", topic: "不具合の相談", reply: "電話", body: "走行中に警告灯が点いて、前のほうから異音がします。ブレーキの効きも不安です。至急みていただけますか。" },
+      },
+    },
+    urgentWords: ["警告灯", "異音", "煙", "動かない", "止まらない", "ブレーキ", "パンク", "レッカー", "至急", "急ぎ", "今日中", "事故", "エンジンがかから"],
+    reply: {
+      normalLead: "担当が内容を確認し、1営業日以内にご連絡します。",
+      urgentLead: "走行に支障がある可能性のあるご相談として受け付けました。担当の端末へ即時に通知済みです。安全のため、まずは走行を控えてお待ちください。",
+      closing: "入庫・見積・部品の入荷・納車日は、工程が変わるたびにこの連絡先へ自動でご案内します。",
+    },
+    seeds: [
+      {
+        name: "松本 亮", channel: "tel", urgent: true, stage: 0, at: "8/17 8:20",
+        summary: [["ご相談の種類", "不具合の相談"], ["車種・年式", "セダン / 2016年"], ["連絡方法", "電話"]],
+        body: "走行中に警告灯。前方から異音。ブレーキの効きも不安とのこと。",
+        history: [
+          { t: "8/17 8:20", kind: "auto", text: "受付完了の自動返信を送信（SMS）" },
+          { t: "8/17 8:20", kind: "auto", text: "緊急語「警告灯」「異音」「ブレーキ」「至急」を検知。担当の端末へ通知" },
+        ],
+      },
+      {
+        name: "井上 直樹", channel: "web", urgent: false, stage: 1, at: "8/15 22:03",
+        summary: [["ご相談の種類", "車検"], ["車種・年式", "ミニバン / 2020年"], ["連絡方法", "メール"]],
+        body: "9月上旬に車検満了。代車を希望。",
+        history: [
+          { t: "8/15 22:03", kind: "auto",  text: "受付完了の自動返信を送信（メール）" },
+          { t: "8/16 10:12", kind: "staff", text: "8/20入庫で確定。代車を1台確保" },
+          { t: "8/16 10:14", kind: "auto",  text: "「入庫」に進んだことを自動連絡（日時・代車・持ち物を記載）" },
+        ],
+      },
+      {
+        name: "木村 恵", channel: "line", urgent: false, stage: 2, at: "8/12 12:50",
+        summary: [["ご相談の種類", "修理"], ["車種・年式", "コンパクト / 2015年"], ["連絡方法", "LINE"]],
+        body: "エアコンが冷えない。写真を送付済み。",
+        history: [
+          { t: "8/12 12:50", kind: "auto",  text: "受付完了の自動返信を送信（LINE）" },
+          { t: "8/13 9:00",  kind: "auto",  text: "「入庫」に進んだことを自動連絡" },
+          { t: "8/13 15:30", kind: "staff", text: "診断の結果、コンプレッサーの交換が必要と判断" },
+          { t: "8/13 16:02", kind: "auto",  text: "「診断・見積」に進んだことを自動連絡（見積と作業時間を記載）" },
+        ],
+      },
+      {
+        name: "清水 隆", channel: "shop", urgent: false, stage: 3, at: "8/5 10:10",
+        summary: [["ご相談の種類", "定期点検"], ["車種・年式", "SUV / 2021年"], ["連絡方法", "電話"]],
+        body: "12か月点検。あわせてタイヤも見てほしい。",
+        history: [
+          { t: "8/5 10:10", kind: "staff", text: "来店対応。受付の同じフォームから入力" },
+          { t: "8/5 10:11", kind: "auto",  text: "受付完了の自動返信を送信（SMS）" },
+          { t: "8/8 9:00",  kind: "auto",  text: "「入庫」に進んだことを自動連絡" },
+          { t: "8/8 13:40", kind: "auto",  text: "「診断・見積」に進んだことを自動連絡" },
+          { t: "8/9 9:15",  kind: "auto",  text: "「作業承認」に進んだことを自動連絡（承認内容の控えを送付）" },
+        ],
+      },
+      {
+        name: "森田 亜紀", channel: "web", urgent: false, stage: 4, at: "7/28 17:22",
+        summary: [["ご相談の種類", "修理"], ["車種・年式", "軽自動車 / 2017年"], ["連絡方法", "メール"]],
+        body: "左後方をこすってしまった。板金の相談。",
+        history: [
+          { t: "7/28 17:22", kind: "auto", text: "受付完了の自動返信を送信（メール）" },
+          { t: "7/31 9:00",  kind: "auto", text: "「入庫」に進んだことを自動連絡" },
+          { t: "7/31 14:20", kind: "auto", text: "「診断・見積」に進んだことを自動連絡" },
+          { t: "8/1 10:05",  kind: "auto", text: "「作業承認」に進んだことを自動連絡" },
+          { t: "8/4 8:30",   kind: "auto", text: "「整備作業」に進んだことを自動連絡（完了予定日を記載）" },
+          { t: "8/12 16:00", kind: "auto", text: "部品の入荷待ちにより完了予定日が変わったことを自動連絡" },
+        ],
+      },
+    ],
+    metrics: [
+      { label: "一次返信までの時間（平均）", before: "4時間05分",     after: "1分以内",      note: "ピットに入っていて電話に出られない時間帯でも、受付だけは自動で返ります" },
+      { label: "お客さまからの催促件数",     before: "45件 / 月",     after: "8件 / 月",     note: "見積・部品の入荷・納車日が自動で届くため" },
+      { label: "入庫・代車の重複",           before: "6件 / 月",      after: "0件 / 月",     note: "電話・Web・LINE・来店を1つの台帳に集約したため" },
+      { label: "台帳への転記時間",           before: "17.5時間 / 月", after: "2.5時間 / 月", note: "受付内容がそのまま作業伝票の下書きになります" },
+    ],
+  },
+};
+
+/* ------------------------------------------------------------------
+   3. 調査データ（画面に出典つきで表示します）
+------------------------------------------------------------------ */
+const FACTS = {
+  adoption: [
+    { label: "中小企業のAI導入率", value: "20.4%" },
+    { label: "障壁：具体的な活用場面が不明", value: "35.6%" },
+    { label: "障壁：導入を推進する人材がいない", value: "32.0%" },
+  ],
+  adoptionSource: "中小機構・商工中金 2026年調査",
+  jobs: [
+    { label: "電話対応", value: 618 },
+    { label: "問い合わせ対応", value: 359 },
+    { label: "データ入力", value: 202 },
+  ],
+  jobsSource: "求人票の検索件数（単位：万件）",
+  reviewSource: "Googleの口コミ120社の分析",
+};
+
+/* ------------------------------------------------------------------
+   4. 共通ユーティリティ
+------------------------------------------------------------------ */
+const hoursOf = (min) => min / 60;
+const fmtH = (min) => (min / 60).toFixed(1);
+const fmtYen = (n) => "¥" + Math.round(n).toLocaleString("ja-JP");
+const fmtNum = (n) => n.toLocaleString("ja-JP");
+
+const nowLabel = () => {
+  const d = new Date();
+  return `${d.getMonth() + 1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}`;
+};
+
+// 緊急判定：語句一致。判定に使った語をそのまま返します（根拠を画面に出すため）
+const detectUrgent = (text, words) => {
+  const t = String(text || "");
+  const hits = words.filter((w) => t.includes(w));
+  return { urgent: hits.length > 0, hits };
+};
+
+const seedCases = (indKey) =>
+  INDUSTRIES[indKey].seeds.map((s, i) => ({
+    id: `${indKey}-${i + 1}`,
+    no: `R-2026-${101 + i}`,
+    ...s,
+    history: s.history.map((h) => ({ ...h })),
+  }));
+
+/* ------------------------------------------------------------------
+   5. 小さな表示部品
+------------------------------------------------------------------ */
+function Card({ children, className = "" }) {
+  return (
+    <div className={`rounded-xl border border-[var(--c-line)] bg-[var(--c-surface)] ${className}`}>
+      {children}
+    </div>
+  );
+}
+
+function SectionTitle({ n, title, desc }) {
+  return (
+    <div className="mb-4">
+      <div className="flex items-baseline gap-2">
+        <span className="rounded bg-[var(--c-primary)] px-2 py-0.5 text-xs font-bold text-white">{n}</span>
+        <h2 className="text-lg font-bold tracking-tight text-[var(--c-ink)] sm:text-xl">{title}</h2>
+      </div>
+      <p className="mt-2 text-sm leading-relaxed text-[var(--c-sub)]">{desc}</p>
+    </div>
+  );
+}
+
+function KindTag({ kind }) {
+  const cls =
+    kind === "auto"
+      ? "bg-[var(--c-primary)] text-white border-[var(--c-primary)]"
+      : kind === "semi"
+      ? "bg-[var(--c-accent-l)] text-[var(--c-accent-d)] border-[var(--c-accent)]"
+      : "bg-white text-[var(--c-human)] border-[var(--c-human)]";
+  return (
+    <span className={`inline-block whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-bold ${cls}`}>
+      {CONFIG.kinds[kind].label}
+    </span>
+  );
+}
+
+function Note({ children, tone = "plain" }) {
+  const cls =
+    tone === "alert"
+      ? "border-[var(--c-alert)] bg-[var(--c-alert-l)] text-[var(--c-alert)]"
+      : tone === "ok"
+      ? "border-[var(--c-ok)] bg-[var(--c-ok-l)] text-[var(--c-ok)]"
+      : "border-[var(--c-line-s)] bg-[var(--c-primary-l)] text-[var(--c-sub)]";
+  return <div className={`rounded-lg border px-3 py-2.5 text-xs leading-relaxed sm:text-[13px] ${cls}`}>{children}</div>;
+}
+
+/* ==================================================================
+   画面① 業務棚卸し
+================================================================== */
+function InventoryTab({ ind, wage, setWage }) {
+  const rows = ind.tasks.map((t) => ({ ...t, total: t.min * t.cnt }));
+  const office = rows.filter((r) => r.group === "office");
+  const core = rows.filter((r) => r.group === "core");
+
+  const officeTotal = office.reduce((s, r) => s + r.total, 0);
+  const coreTotal = core.reduce((s, r) => s + r.total, 0);
+  const saved = office.reduce((s, r) => s + r.total * CONFIG.kinds[r.kind].cut, 0);
+  const officeMax = Math.max.apply(null, office.map((r) => r.total));
+  const coreMax = Math.max.apply(null, core.map((r) => r.total));
+
+  const barColor = (kind) =>
+    kind === "auto" ? "var(--c-primary)" : kind === "semi" ? "var(--c-accent)" : "var(--c-human)";
+
+  const Table = ({ list, max, label, caption }) => (
+    <div className="mb-6">
+      <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+        <h3 className="text-sm font-bold text-[var(--c-ink)]">{label}</h3>
+        <p className="text-[11px] text-[var(--c-muted)]">{caption}</p>
+      </div>
+      <div className="overflow-hidden rounded-lg border border-[var(--c-line)]">
+        <div className="hidden border-b border-[var(--c-line)] bg-[var(--c-primary-l)] px-3 py-2 text-[11px] font-bold text-[var(--c-sub)] sm:grid sm:grid-cols-[minmax(0,1fr)_72px_72px_92px_112px] sm:gap-2">
+          <span>工程</span>
+          <span className="text-right">1件あたり</span>
+          <span className="text-right">月間件数</span>
+          <span className="text-right">月の合計</span>
+          <span>分類</span>
+        </div>
+        {list.map((r, i) => (
+          <div key={r.name} className={`px-3 py-3 ${i % 2 ? "bg-[var(--c-bg)]" : "bg-[var(--c-surface)]"}`}>
+            <div className="sm:grid sm:grid-cols-[minmax(0,1fr)_72px_72px_92px_112px] sm:items-center sm:gap-2">
+              <div className="min-w-0">
+                <p className="text-[13px] font-semibold leading-snug text-[var(--c-ink)]">{r.name}</p>
+                <p className="mt-0.5 text-[11px] leading-snug text-[var(--c-muted)]">{r.note}</p>
+              </div>
+              <div className="mt-2 flex items-center gap-3 text-[12px] tabular-nums text-[var(--c-sub)] sm:mt-0 sm:contents">
+                <span className="sm:text-right">
+                  <span className="text-[10px] text-[var(--c-muted)] sm:hidden">1件 </span>
+                  {r.min}分
+                </span>
+                <span className="sm:text-right">
+                  <span className="text-[10px] text-[var(--c-muted)] sm:hidden">月 </span>
+                  {fmtNum(r.cnt)}件
+                </span>
+                <span className="font-bold text-[var(--c-ink)] sm:text-right">{fmtH(r.total)}時間</span>
+              </div>
+              <div className="mt-2 sm:mt-0">
+                <KindTag kind={r.kind} />
+              </div>
+            </div>
+            {/* 横棒グラフ（CSSの幅指定） */}
+            <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-[var(--c-line)]">
+              <div
+                className="h-full rounded-full"
+                style={{ width: `${Math.max(2, (r.total / max) * 100)}%`, backgroundColor: barColor(r.kind) }}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  return (
+    <div>
+      <SectionTitle
+        n="①"
+        title="業務棚卸し"
+        desc="ツールを選ぶ前に、いまどの作業に何時間かかっているかを一覧にします。AI導入の失敗は「棚卸しをせずにツールだけ入れた」ケースに集中しています。先に時間の大きい工程を特定し、そのうえで自動化の可否を1件ずつ判断します。"
+      />
+
+      {/* 背景 */}
+      <div className="mb-6 grid gap-3 sm:grid-cols-2">
+        <Card className="p-4">
+          <p className="text-xs font-bold text-[var(--c-primary)]">なぜ棚卸しから始めるか</p>
+          <div className="mt-3 space-y-2">
+            {FACTS.adoption.map((f) => (
+              <div key={f.label} className="flex items-baseline justify-between gap-3 border-b border-dashed border-[var(--c-line)] pb-2 last:border-0">
+                <span className="text-[12px] leading-snug text-[var(--c-sub)]">{f.label}</span>
+                <span className="shrink-0 text-base font-bold tabular-nums text-[var(--c-ink)]">{f.value}</span>
+              </div>
+            ))}
+          </div>
+          <p className="mt-3 text-[11px] leading-relaxed text-[var(--c-muted)]">
+            出典：{FACTS.adoptionSource}。導入が進まない理由の上位2つは、ツールの性能ではなく
+            「どこに使うか分からない」「進める人がいない」でした。棚卸しは、この2つに直接答えるための作業です。
+          </p>
+        </Card>
+
+        <Card className="p-4">
+          <p className="text-xs font-bold text-[var(--c-primary)]">人が張り付いている作業</p>
+          <div className="mt-3 space-y-2.5">
+            {FACTS.jobs.map((f) => (
+              <div key={f.label}>
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="text-[12px] text-[var(--c-sub)]">{f.label}</span>
+                  <span className="text-sm font-bold tabular-nums text-[var(--c-ink)]">{fmtNum(f.value)}万件</span>
+                </div>
+                <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-[var(--c-line)]">
+                  <div
+                    className="h-full rounded-full bg-[var(--c-accent)]"
+                    style={{ width: `${(f.value / FACTS.jobs[0].value) * 100}%` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="mt-3 text-[11px] leading-relaxed text-[var(--c-muted)]">
+            {FACTS.jobsSource}。求人票にこれだけ並んでいるということは、それだけの人数がこの作業に充てられているということです。
+            この3つは、下の表の上位とほぼ重なります。
+          </p>
+        </Card>
+      </div>
+
+      {/* サマリ */}
+      <Card className="mb-6 overflow-hidden">
+        <div className="border-b border-[var(--c-line)] bg-[var(--c-primary)] px-4 py-3">
+          <p className="text-sm font-bold text-white">{ind.label}での集計（デモ用の想定値）</p>
+        </div>
+        <div className="grid divide-y divide-[var(--c-line)] sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+          <div className="p-4">
+            <p className="text-[11px] font-bold text-[var(--c-muted)]">受付・事務まわりの合計</p>
+            <p className="mt-1 text-2xl font-bold tabular-nums text-[var(--c-ink)]">
+              {fmtH(officeTotal)}
+              <span className="ml-1 text-sm font-normal">時間 / 月</span>
+            </p>
+            <p className="mt-1 text-[11px] text-[var(--c-muted)]">自動化を検討する対象</p>
+          </div>
+          <div className="p-4">
+            <p className="text-[11px] font-bold text-[var(--c-accent-d)]">このうち削減できる見込み</p>
+            <p className="mt-1 text-2xl font-bold tabular-nums text-[var(--c-accent-d)]">
+              {fmtH(saved)}
+              <span className="ml-1 text-sm font-normal">時間 / 月</span>
+            </p>
+            <p className="mt-1 text-[11px] text-[var(--c-muted)]">
+              対象業務の {Math.round((saved / officeTotal) * 100)}%（年 {fmtH(saved * 12)}時間）
+            </p>
+          </div>
+          <div className="p-4">
+            <p className="text-[11px] font-bold text-[var(--c-muted)]">人件費換算</p>
+            <p className="mt-1 text-2xl font-bold tabular-nums text-[var(--c-ink)]">
+              {fmtYen(hoursOf(saved) * wage)}
+              <span className="ml-1 text-sm font-normal">/ 月</span>
+            </p>
+            <p className="mt-1 text-[11px] text-[var(--c-muted)]">年 {fmtYen(hoursOf(saved) * wage * 12)}</p>
+          </div>
+        </div>
+        <div className="border-t border-[var(--c-line)] bg-[var(--c-bg)] px-4 py-3">
+          <label className="flex flex-wrap items-center gap-3">
+            <span className="text-xs font-bold text-[var(--c-sub)]">時給（人件費換算に使用）</span>
+            <input
+              type="range"
+              min={CONFIG.wageMin}
+              max={CONFIG.wageMax}
+              step={100}
+              value={wage}
+              onChange={(e) => setWage(Number(e.target.value))}
+              className="h-1.5 w-full min-w-[180px] max-w-xs flex-1 cursor-pointer appearance-none rounded-full bg-[var(--c-line-s)] accent-[var(--c-primary)]"
+            />
+            <span className="rounded bg-[var(--c-primary)] px-2 py-1 text-xs font-bold tabular-nums text-white">
+              {fmtYen(wage)} / 時
+            </span>
+          </label>
+          <p className="mt-2 text-[11px] leading-relaxed text-[var(--c-muted)]">
+            削減率は分類ごとの仮置きです。自動化できる = {CONFIG.kinds.auto.cut * 100}%減、半自動化 = {CONFIG.kinds.semi.cut * 100}%減、
+            人がやるべき = 0%。実際の案件では、この率を工程ごとの実測値に置き換えます。
+          </p>
+        </div>
+      </Card>
+
+      {/* 分類の凡例 */}
+      <div className="mb-5 grid gap-2 sm:grid-cols-3">
+        {Object.keys(CONFIG.kinds).map((k) => (
+          <div key={k} className="rounded-lg border border-[var(--c-line)] bg-[var(--c-surface)] p-3">
+            <KindTag kind={k} />
+            <p className="mt-2 text-[11px] leading-relaxed text-[var(--c-sub)]">{CONFIG.kinds[k].hint}</p>
+          </div>
+        ))}
+      </div>
+
+      <Table
+        list={office.slice().sort((a, b) => b.total - a.total)}
+        max={officeMax}
+        label="受付・事務まわり（自動化の検討対象）"
+        caption="バーはこの区分内での相対比較"
+      />
+
+      <div className="mb-3">
+        <Note tone="alert">
+          <span className="font-bold">下の{core.length}工程は、はじめから自動化の対象外にしています。</span>
+          {ind.coreWord}のような中核業務は「人がやるべき」に分類し、上の削減見込みには一切含めていません。
+          事務作業を減らすのは、この中核業務に時間を戻すためです。逆にすると、品質が落ちて売上が下がります。
+        </Note>
+      </div>
+
+      <Table
+        list={core.slice().sort((a, b) => b.total - a.total)}
+        max={coreMax}
+        label={`中核業務（自動化の対象外・別掲）　合計 ${fmtH(coreTotal)}時間 / 月`}
+        caption="バーはこの区分内での相対比較"
+      />
+
+      <Note>
+        棚卸しは、この画面に載せている{ind.tasks.length}工程では足りません。実際の導入では30〜50工程まで洗い出します。
+        件数と所要時間は、担当者への聞き取りと、可能なものは実測（通話履歴・送信履歴・タイムスタンプ）で埋めます。
+        この画面の数値は、すべてデモ用の想定値です。
+      </Note>
+    </div>
+  );
+}
+
+/* ==================================================================
+   画面② 受付（顧客側）
+================================================================== */
+function IntakeTab({ ind, indKey, onSubmit }) {
+  const blank = () => {
+    const o = {};
+    ind.form.fields.forEach((f) => {
+      o[f.key] = f.type === "select" ? f.options[0] : "";
+    });
+    return o;
+  };
+  const [values, setValues] = useState(blank);
+  const [errors, setErrors] = useState({});
+  const [result, setResult] = useState(null);
+  const [showWords, setShowWords] = useState(false);
+
+  // 業種が変わったらフォームを初期化する
+  const [lastInd, setLastInd] = useState(indKey);
+  if (lastInd !== indKey) {
+    setLastInd(indKey);
+    setValues(blank());
+    setErrors({});
+    setResult(null);
+  }
+
+  const set = (k, v) => setValues((p) => ({ ...p, [k]: v }));
+
+  const fillSample = (which) => {
+    setValues(Object.assign(blank(), ind.form.samples[which]));
+    setErrors({});
+    setResult(null);
+  };
+
+  const submit = (e) => {
+    e.preventDefault();
+    const err = {};
+    ind.form.fields.forEach((f) => {
+      if (f.required && !String(values[f.key] || "").trim()) err[f.key] = "入力してください";
+    });
+    setErrors(err);
+    if (Object.keys(err).length) {
+      setResult(null);
+      return;
+    }
+    const scanText = ind.form.fields.filter((f) => f.scan).map((f) => values[f.key]).join("\n");
+    const judged = detectUrgent(scanText, ind.urgentWords);
+    const no = onSubmit(values, judged.urgent, judged.hits);
+    setResult({ values: Object.assign({}, values), urgent: judged.urgent, hits: judged.hits, no: no, at: nowLabel() });
+  };
+
+  return (
+    <div>
+      <SectionTitle
+        n="②"
+        title="受付（お客さま側の画面）"
+        desc={`電話・${ind.channels[1].label}・LINE・${ind.channels[3].label}のどこから来ても、同じ台帳の1行になります。受付と同時に自動返信が出るため、一次返信が担当者の在席状況に左右されません。`}
+      />
+
+      {/* チャネル図 */}
+      <Card className="mb-6 p-4">
+        <p className="text-xs font-bold text-[var(--c-primary)]">4つの入口 → 1つの台帳</p>
+        <div className="mt-3 grid gap-2 sm:grid-cols-4">
+          {ind.channels.map((c) => (
+            <div key={c.key} className="rounded-lg border border-[var(--c-line)] bg-[var(--c-bg)] p-3">
+              <p className="text-[13px] font-bold text-[var(--c-ink)]">{c.label}</p>
+              <p className="mt-1 text-[11px] leading-snug text-[var(--c-muted)]">{c.note}</p>
+            </div>
+          ))}
+        </div>
+        <div className="mt-3 flex items-center gap-2">
+          <div className="h-px flex-1 bg-[var(--c-line-s)]" />
+          <span className="text-xs text-[var(--c-muted)]">↓ すべて同じ形で入る</span>
+          <div className="h-px flex-1 bg-[var(--c-line-s)]" />
+        </div>
+        <div className="mt-3 rounded-lg border border-[var(--c-primary)] bg-[var(--c-primary-l)] px-3 py-2.5">
+          <p className="text-[13px] font-bold text-[var(--c-primary-d)]">受付台帳（③の管理画面）</p>
+          <p className="mt-1 text-[11px] leading-relaxed text-[var(--c-sub)]">
+            入口ごとにノート・Excel・トーク画面と保管場所が分かれていると、同じ{ind.customerWord}の予定が二重に入ります。
+            台帳を1つにするだけで、重複と「どこに書いたか分からない」が同時になくなります。
+          </p>
+        </div>
+      </Card>
+
+      <div className="grid gap-5 lg:grid-cols-2">
+        {/* フォーム */}
+        <Card className="overflow-hidden">
+          <div className="border-b border-[var(--c-line)] bg-[var(--c-primary)] px-4 py-3">
+            <p className="text-sm font-bold text-white">{ind.orgName}　お問い合わせフォーム</p>
+            <p className="mt-1 text-[11px] leading-relaxed text-white/80">{ind.form.lead}</p>
+          </div>
+          <div className="border-b border-[var(--c-line)] bg-[var(--c-bg)] px-4 py-2.5">
+            <p className="mb-2 text-[11px] font-bold text-[var(--c-sub)]">入力例で試す</p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => fillSample("normal")}
+                className="rounded-full border border-[var(--c-line-s)] bg-white px-3 py-1.5 text-[11px] font-bold text-[var(--c-sub)] hover:border-[var(--c-primary)] hover:text-[var(--c-primary)]"
+              >
+                通常のご相談
+              </button>
+              <button
+                type="button"
+                onClick={() => fillSample("urgent")}
+                className="rounded-full border border-[var(--c-alert)] bg-[var(--c-alert-l)] px-3 py-1.5 text-[11px] font-bold text-[var(--c-alert)] hover:opacity-80"
+              >
+                緊急のご相談
+              </button>
+            </div>
+          </div>
+
+          <form onSubmit={submit} className="space-y-3.5 p-4" noValidate>
+            {ind.form.fields.map((f) => (
+              <div key={f.key}>
+                <label className="mb-1 flex items-center gap-2 text-[12px] font-bold text-[var(--c-sub)]">
+                  {f.label}
+                  {f.required && (
+                    <span className="rounded bg-[var(--c-accent)] px-1.5 py-px text-[10px] font-bold text-white">必須</span>
+                  )}
+                </label>
+                {f.type === "select" ? (
+                  <select
+                    value={values[f.key]}
+                    onChange={(e) => set(f.key, e.target.value)}
+                    className="w-full rounded-lg border border-[var(--c-line-s)] bg-white px-3 py-2 text-sm text-[var(--c-ink)] focus:border-[var(--c-primary)] focus:outline-none"
+                  >
+                    {f.options.map((o) => (
+                      <option key={o} value={o}>{o}</option>
+                    ))}
+                  </select>
+                ) : f.type === "textarea" ? (
+                  <textarea
+                    rows={4}
+                    value={values[f.key]}
+                    placeholder={f.placeholder}
+                    onChange={(e) => set(f.key, e.target.value)}
+                    className="w-full rounded-lg border border-[var(--c-line-s)] bg-white px-3 py-2 text-sm leading-relaxed text-[var(--c-ink)] focus:border-[var(--c-primary)] focus:outline-none"
+                  />
+                ) : (
+                  <input
+                    type="text"
+                    value={values[f.key]}
+                    placeholder={f.placeholder}
+                    onChange={(e) => set(f.key, e.target.value)}
+                    className="w-full rounded-lg border border-[var(--c-line-s)] bg-white px-3 py-2 text-sm text-[var(--c-ink)] focus:border-[var(--c-primary)] focus:outline-none"
+                  />
+                )}
+                {errors[f.key] && <p className="mt-1 text-[11px] font-bold text-[var(--c-alert)]">{errors[f.key]}</p>}
+              </div>
+            ))}
+
+            <button
+              type="submit"
+              className="w-full rounded-lg bg-[var(--c-primary)] px-4 py-3 text-sm font-bold text-white hover:bg-[var(--c-primary-d)]"
+            >
+              この内容で送信する
+            </button>
+
+            <p className="text-[11px] leading-relaxed text-[var(--c-muted)]">
+              これはデモです。入力内容はどこにも保存・送信されません。ブラウザのメモリ上にだけ置き、
+              ページを再読み込みすると消えます（localStorage・Cookie・外部送信のいずれも使っていません）。
+            </p>
+          </form>
+        </Card>
+
+        {/* 自動返信 */}
+        <div className="space-y-4">
+          {!result ? (
+            <Card className="flex h-full min-h-[280px] flex-col items-center justify-center p-8 text-center">
+              <p className="text-sm font-bold text-[var(--c-muted)]">送信すると、ここに自動返信の文面が出ます</p>
+              <p className="mt-2 max-w-sm text-[12px] leading-relaxed text-[var(--c-muted)]">
+                本文に緊急語が含まれていた場合は「緊急」と判定し、判定の根拠になった語をそのまま表示します。
+                左の「緊急のご相談」ボタンで試せます。
+              </p>
+            </Card>
+          ) : (
+            <React.Fragment>
+              {/* 判定 */}
+              <Card className="overflow-hidden">
+                <div className="px-4 py-2.5" style={{ backgroundColor: result.urgent ? "var(--c-alert)" : "var(--c-ok)" }}>
+                  <p className="text-sm font-bold text-white">
+                    {result.urgent ? "緊急と判定しました" : "通常の受付として登録しました"}
+                  </p>
+                </div>
+                <div className="p-4">
+                  {result.urgent ? (
+                    <React.Fragment>
+                      <p className="text-[13px] leading-relaxed text-[var(--c-ink)]">
+                        本文に次の語が含まれていたため、緊急と判定しました。
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {result.hits.map((w) => (
+                          <span
+                            key={w}
+                            className="rounded border border-[var(--c-alert)] bg-[var(--c-alert-l)] px-2 py-0.5 text-xs font-bold text-[var(--c-alert)]"
+                          >
+                            {w}
+                          </span>
+                        ))}
+                      </div>
+                      <p className="mt-3 text-[12px] leading-relaxed text-[var(--c-sub)]">
+                        判定と同時に、担当者へ通知しました。③の受付一覧でも「緊急」の印がつきます。
+                      </p>
+                    </React.Fragment>
+                  ) : (
+                    <p className="text-[13px] leading-relaxed text-[var(--c-ink)]">
+                      本文に緊急語は含まれていませんでした。通常の順番で対応します。
+                    </p>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => setShowWords((v) => !v)}
+                    className="mt-3 text-[11px] font-bold text-[var(--c-primary)] underline"
+                  >
+                    {showWords ? "判定に使う語の一覧を閉じる" : `判定に使う語の一覧を見る（${ind.urgentWords.length}語）`}
+                  </button>
+                  {showWords && (
+                    <div className="mt-2 rounded-lg border border-[var(--c-line)] bg-[var(--c-bg)] p-3">
+                      <div className="flex flex-wrap gap-1.5">
+                        {ind.urgentWords.map((w) => (
+                          <span key={w} className="rounded bg-white px-2 py-0.5 text-[11px] text-[var(--c-sub)] ring-1 ring-[var(--c-line)]">
+                            {w}
+                          </span>
+                        ))}
+                      </div>
+                      <p className="mt-2 text-[11px] leading-relaxed text-[var(--c-muted)]">
+                        語句一致による判定です。判定基準を画面から確認でき、業種ごとに追加・削除できることを優先しました。
+                        本番では、ここに文脈の判定を足したうえで、判定に使った語は同じように表示し続けます
+                        （なぜ緊急になったのか説明できない状態を作らないためです）。
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </Card>
+
+              {/* 自動返信の文面 */}
+              <Card className="overflow-hidden">
+                <div className="border-b border-[var(--c-line)] bg-[var(--c-bg)] px-4 py-2.5">
+                  <p className="text-xs font-bold text-[var(--c-sub)]">自動返信（{result.at} 送信・担当者の操作なし）</p>
+                </div>
+                <div className="space-y-3 p-4 text-[13px] leading-relaxed text-[var(--c-ink)]">
+                  <p className="font-bold">【自動返信】お問い合わせを受け付けました（受付番号 {result.no}）</p>
+                  <p>{result.values.name} 様</p>
+                  <p>このたびはご連絡ありがとうございます。以下の内容で受け付けました。</p>
+                  <p>{result.urgent ? ind.reply.urgentLead : ind.reply.normalLead}</p>
+                  <div className="rounded-lg border border-[var(--c-line)] bg-[var(--c-bg)] p-3">
+                    <p className="mb-2 text-[11px] font-bold text-[var(--c-muted)]">■ 受付内容</p>
+                    <dl className="space-y-1.5">
+                      {ind.form.fields.map((f) => (
+                        <div key={f.key} className="grid grid-cols-[92px_minmax(0,1fr)] gap-2">
+                          <dt className="text-[11px] text-[var(--c-muted)]">{f.label}</dt>
+                          <dd className="whitespace-pre-wrap break-words text-[12px] text-[var(--c-ink)]">
+                            {result.values[f.key]}
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </div>
+                  <div>
+                    <p className="mb-1 text-[11px] font-bold text-[var(--c-muted)]">■ 今後の流れ</p>
+                    <p className="text-[12px] text-[var(--c-sub)]">{ind.stages.join(" → ")}</p>
+                  </div>
+                  <p className="text-[12px] leading-relaxed text-[var(--c-sub)]">{ind.reply.closing}</p>
+                </div>
+              </Card>
+
+              <Note tone="ok">
+                この受付は、③の管理画面の一覧に「{result.no}」として追加されています。タブを切り替えて確認できます。
+              </Note>
+            </React.Fragment>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ==================================================================
+   画面③ 管理画面（社内側）
+================================================================== */
+function ChannelBadge({ ind, k }) {
+  const c = ind.channels.filter((x) => x.key === k)[0] || ind.channels[0];
+  return (
+    <span className="rounded border border-[var(--c-line-s)] bg-[var(--c-bg)] px-1.5 py-px text-[10px] font-bold text-[var(--c-sub)]">
+      {c.label}
+    </span>
+  );
+}
+
+function Stepper({ stages, current }) {
+  return (
+    <div className="-mx-1 overflow-x-auto pb-1">
+      <div className="flex min-w-max items-center gap-1 px-1">
+        {stages.map((s, i) => {
+          const done = i < current;
+          const now = i === current;
+          const style = now
+            ? { backgroundColor: "var(--c-primary)", borderColor: "var(--c-primary)", color: "#fff" }
+            : done
+            ? { backgroundColor: "var(--c-primary-l)", borderColor: "var(--c-primary)", color: "var(--c-primary-d)" }
+            : { backgroundColor: "#fff", borderColor: "var(--c-line)", color: "var(--c-muted)" };
+          return (
+            <React.Fragment key={s}>
+              {i > 0 && (
+                <div
+                  className="h-0.5 w-4 shrink-0 sm:w-6"
+                  style={{ backgroundColor: i <= current ? "var(--c-primary)" : "var(--c-line)" }}
+                />
+              )}
+              <div className="shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-bold" style={style}>
+                {done ? "✓ " : ""}{s}
+              </div>
+            </React.Fragment>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function AdminTab({ ind, cases, selectedId, setSelectedId, advance, addStaffNote }) {
+  const sel = cases.filter((c) => c.id === selectedId)[0] || cases[0];
+  const [memo, setMemo] = useState("");
+  const autoCount = sel ? sel.history.filter((h) => h.kind === "auto").length : 0;
+  const last = ind.stages.length - 1;
+
+  return (
+    <div>
+      <SectionTitle
+        n="③"
+        title="管理画面（社内側）"
+        desc="左が受付一覧、右が選択した1件です。「工程を進める」を押すと、その時点で自動連絡が送られ、対応履歴に1行残ります。履歴の各行には「自動」「担当」のラベルを付け、担当者が動かなくても送られた連絡がどれかを見て分かるようにしています。"
+      />
+
+      <div className="grid gap-4 lg:grid-cols-[300px_minmax(0,1fr)]">
+        {/* 一覧 */}
+        <Card className="self-start overflow-hidden">
+          <div className="border-b border-[var(--c-line)] bg-[var(--c-bg)] px-3 py-2.5">
+            <p className="text-xs font-bold text-[var(--c-sub)]">受付一覧（{cases.length}件）</p>
+            <p className="mt-0.5 text-[10px] text-[var(--c-muted)]">入口が違っても同じ一覧に並びます</p>
+          </div>
+          <div className="max-h-[460px] divide-y divide-[var(--c-line)] overflow-y-auto">
+            {cases.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => setSelectedId(c.id)}
+                className="block w-full px-3 py-2.5 text-left"
+                style={sel && c.id === sel.id ? { backgroundColor: "var(--c-primary-l)" } : undefined}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="truncate text-[13px] font-bold text-[var(--c-ink)]">{c.name}</span>
+                  {c.urgent && (
+                    <span className="shrink-0 rounded bg-[var(--c-alert)] px-1.5 py-px text-[10px] font-bold text-white">緊急</span>
+                  )}
+                </div>
+                <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                  <ChannelBadge ind={ind} k={c.channel} />
+                  <span className="text-[10px] tabular-nums text-[var(--c-muted)]">{c.no}</span>
+                  <span className="text-[10px] text-[var(--c-muted)]">{c.at}</span>
+                </div>
+                <div className="mt-1.5 flex items-center gap-2">
+                  <span
+                    className="rounded-full px-2 py-px text-[10px] font-bold"
+                    style={{
+                      backgroundColor: c.stage >= last ? "var(--c-ok-l)" : "var(--c-accent-l)",
+                      color: c.stage >= last ? "var(--c-ok)" : "var(--c-accent-d)",
+                    }}
+                  >
+                    {ind.stages[c.stage]}
+                  </span>
+                  <span className="text-[10px] tabular-nums text-[var(--c-muted)]">
+                    {c.stage + 1} / {ind.stages.length}
+                  </span>
+                </div>
+              </button>
+            ))}
+          </div>
+        </Card>
+
+        {/* 詳細 */}
+        {sel && (
+          <div className="space-y-4">
+            <Card className="overflow-hidden">
+              <div className="border-b border-[var(--c-line)] px-4 py-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-base font-bold text-[var(--c-ink)]">{sel.name}</h3>
+                      {sel.urgent && (
+                        <span className="rounded bg-[var(--c-alert)] px-1.5 py-0.5 text-[10px] font-bold text-white">緊急</span>
+                      )}
+                    </div>
+                    <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-[var(--c-muted)]">
+                      <ChannelBadge ind={ind} k={sel.channel} />
+                      <span className="tabular-nums">{sel.no}</span>
+                      <span>受付 {sel.at}</span>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[10px] font-bold text-[var(--c-muted)]">自動連絡</p>
+                    <p className="text-lg font-bold tabular-nums text-[var(--c-primary)]">
+                      {autoCount}
+                      <span className="text-xs font-normal">件</span>
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-b border-[var(--c-line)] px-4 py-3">
+                <dl className="grid gap-x-4 gap-y-1.5 sm:grid-cols-2">
+                  {sel.summary.map((kv) => (
+                    <div key={kv[0]} className="flex gap-2">
+                      <dt className="w-24 shrink-0 text-[11px] text-[var(--c-muted)]">{kv[0]}</dt>
+                      <dd className="min-w-0 break-words text-[12px] font-semibold text-[var(--c-ink)]">{kv[1]}</dd>
+                    </div>
+                  ))}
+                </dl>
+                <p className="mt-2 whitespace-pre-wrap rounded-lg bg-[var(--c-bg)] p-2.5 text-[12px] leading-relaxed text-[var(--c-sub)]">
+                  {sel.body}
+                </p>
+              </div>
+
+              {/* 工程 */}
+              <div className="px-4 py-3">
+                <p className="mb-2 text-[11px] font-bold text-[var(--c-muted)]">工程</p>
+                <Stepper stages={ind.stages} current={sel.stage} />
+                <div className="mt-3 flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    disabled={sel.stage >= last}
+                    onClick={() => advance(sel.id)}
+                    className="rounded-lg bg-[var(--c-primary)] px-4 py-2.5 text-sm font-bold text-white hover:bg-[var(--c-primary-d)] disabled:cursor-not-allowed disabled:bg-[var(--c-line-s)] disabled:text-[var(--c-muted)]"
+                  >
+                    {sel.stage >= last ? "最終工程です" : `工程を進める → ${ind.stages[sel.stage + 1]}`}
+                  </button>
+                  <p className="text-[11px] leading-snug text-[var(--c-muted)]">
+                    押した時点で{ind.customerWord}へ自動連絡が送られ、履歴に1行増えます
+                  </p>
+                </div>
+              </div>
+            </Card>
+
+            {/* 履歴 */}
+            <Card className="overflow-hidden">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--c-line)] bg-[var(--c-bg)] px-4 py-2.5">
+                <p className="text-xs font-bold text-[var(--c-sub)]">対応履歴</p>
+                <div className="flex flex-wrap items-center gap-3 text-[10px] text-[var(--c-muted)]">
+                  <span className="flex items-center gap-1">
+                    <span className="rounded bg-[var(--c-primary)] px-1.5 py-px font-bold text-white">自動</span>
+                    担当者の操作なしに送信
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="rounded border border-[var(--c-human)] bg-white px-1.5 py-px font-bold text-[var(--c-human)]">担当</span>
+                    人が対応
+                  </span>
+                </div>
+              </div>
+              <ol className="divide-y divide-[var(--c-line)]">
+                {sel.history.map((h, i) => (
+                  <li key={i} className="flex gap-3 px-4 py-2.5">
+                    <span className="w-16 shrink-0 pt-0.5 text-[11px] tabular-nums text-[var(--c-muted)]">{h.t}</span>
+                    <span
+                      className={`h-fit shrink-0 rounded px-1.5 py-px text-[10px] font-bold ${
+                        h.kind === "auto"
+                          ? "bg-[var(--c-primary)] text-white"
+                          : "border border-[var(--c-human)] bg-white text-[var(--c-human)]"
+                      }`}
+                    >
+                      {h.kind === "auto" ? "自動" : "担当"}
+                    </span>
+                    <span className="text-[12px] leading-relaxed text-[var(--c-ink)]">{h.text}</span>
+                  </li>
+                ))}
+              </ol>
+              <div className="border-t border-[var(--c-line)] bg-[var(--c-bg)] px-4 py-3">
+                <p className="mb-1.5 text-[11px] font-bold text-[var(--c-sub)]">担当者メモを追加（「担当」として記録されます）</p>
+                <div className="flex flex-wrap gap-2">
+                  <input
+                    type="text"
+                    value={memo}
+                    onChange={(e) => setMemo(e.target.value)}
+                    placeholder="例：電話で日程を再調整。8/22 14:00で仮押さえ"
+                    className="min-w-[200px] flex-1 rounded-lg border border-[var(--c-line-s)] bg-white px-3 py-2 text-[13px] text-[var(--c-ink)] focus:border-[var(--c-primary)] focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    disabled={!memo.trim()}
+                    onClick={() => {
+                      addStaffNote(sel.id, memo.trim());
+                      setMemo("");
+                    }}
+                    className="rounded-lg border border-[var(--c-human)] bg-white px-4 py-2 text-[13px] font-bold text-[var(--c-human)] hover:bg-[var(--c-bg)] disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    追加
+                  </button>
+                </div>
+              </div>
+            </Card>
+
+            <Note>
+              自動と担当を分けて記録する理由は2つあります。1つは、{ind.customerWord}に何が届いているかを担当者が把握できること。
+              もう1つは、「連絡していないのに連絡したことになっている」状態を作らないことです。
+              自動送信のラベルが付いた行は、送信時刻と文面がそのまま残ります。
+            </Note>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ==================================================================
+   画面④ 導入後の数字
+================================================================== */
+function ResultsTab({ ind, wage }) {
+  const rows = ind.tasks.filter((t) => t.group === "office").map((t) => ({ ...t, total: t.min * t.cnt }));
+  const officeTotal = rows.reduce((s, r) => s + r.total, 0);
+  const saved = rows.reduce((s, r) => s + r.total * CONFIG.kinds[r.kind].cut, 0);
+
+  return (
+    <div>
+      <SectionTitle
+        n="④"
+        title="導入後の数字"
+        desc="①の棚卸しで決めた対象に、②③の仕組みを入れた場合の比較です。すべてデモ用の想定値で、実在の企業の実績ではありません。実際の案件では、導入前に同じ4項目を1か月測ってから着手します。測っていない項目は、あとから効果を説明できないためです。"
+      />
+
+      {/* 4指標 */}
+      <div className="mb-6 grid gap-3 sm:grid-cols-2">
+        {ind.metrics.map((m) => (
+          <Card key={m.label} className="overflow-hidden">
+            <div className="border-b border-[var(--c-line)] bg-[var(--c-bg)] px-4 py-2.5">
+              <p className="text-[13px] font-bold text-[var(--c-ink)]">{m.label}</p>
+            </div>
+            <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-4 py-4">
+              <div className="text-center">
+                <p className="text-[10px] font-bold text-[var(--c-muted)]">導入前</p>
+                <p className="mt-1 text-base font-bold tabular-nums text-[var(--c-muted)] line-through decoration-1 sm:text-lg">
+                  {m.before}
+                </p>
+              </div>
+              <div className="text-lg text-[var(--c-line-s)]">→</div>
+              <div className="text-center">
+                <p className="text-[10px] font-bold text-[var(--c-accent-d)]">導入後</p>
+                <p className="mt-1 text-lg font-bold tabular-nums text-[var(--c-accent-d)] sm:text-xl">{m.after}</p>
+              </div>
+            </div>
+            <p className="border-t border-[var(--c-line)] px-4 py-2.5 text-[11px] leading-relaxed text-[var(--c-muted)]">
+              {m.note}
+            </p>
+          </Card>
+        ))}
+      </div>
+
+      {/* 時間と人件費 */}
+      <Card className="mb-6 overflow-hidden">
+        <div className="border-b border-[var(--c-line)] bg-[var(--c-primary)] px-4 py-3">
+          <p className="text-sm font-bold text-white">削減時間の合計と人件費換算</p>
+          <p className="mt-0.5 text-[11px] text-white/80">①の棚卸しの分類と削減率から計算。時給は①のスライダーと連動します</p>
+        </div>
+        <div className="grid divide-y divide-[var(--c-line)] sm:grid-cols-4 sm:divide-x sm:divide-y-0">
+          <div className="p-4">
+            <p className="text-[11px] font-bold text-[var(--c-muted)]">対象業務（導入前）</p>
+            <p className="mt-1 text-xl font-bold tabular-nums text-[var(--c-ink)]">
+              {fmtH(officeTotal)}
+              <span className="ml-1 text-xs font-normal">時間/月</span>
+            </p>
+          </div>
+          <div className="p-4">
+            <p className="text-[11px] font-bold text-[var(--c-muted)]">残る時間（導入後）</p>
+            <p className="mt-1 text-xl font-bold tabular-nums text-[var(--c-ink)]">
+              {fmtH(officeTotal - saved)}
+              <span className="ml-1 text-xs font-normal">時間/月</span>
+            </p>
+          </div>
+          <div className="p-4">
+            <p className="text-[11px] font-bold text-[var(--c-accent-d)]">削減時間</p>
+            <p className="mt-1 text-xl font-bold tabular-nums text-[var(--c-accent-d)]">
+              {fmtH(saved)}
+              <span className="ml-1 text-xs font-normal">時間/月</span>
+            </p>
+            <p className="mt-0.5 text-[10px] text-[var(--c-muted)]">年 {fmtH(saved * 12)}時間</p>
+          </div>
+          <div className="p-4">
+            <p className="text-[11px] font-bold text-[var(--c-muted)]">人件費換算（{fmtYen(wage)}/時）</p>
+            <p className="mt-1 text-xl font-bold tabular-nums text-[var(--c-ink)]">
+              {fmtYen(hoursOf(saved) * wage)}
+              <span className="ml-1 text-xs font-normal">/月</span>
+            </p>
+            <p className="mt-0.5 text-[10px] text-[var(--c-muted)]">年 {fmtYen(hoursOf(saved) * wage * 12)}</p>
+          </div>
+        </div>
+        <div className="border-t border-[var(--c-line)] px-4 py-3">
+          <div className="mb-2 flex h-6 w-full overflow-hidden rounded-md">
+            <div
+              className="flex items-center justify-center text-[10px] font-bold text-white"
+              style={{ width: `${((officeTotal - saved) / officeTotal) * 100}%`, backgroundColor: "var(--c-human)" }}
+            >
+              残る
+            </div>
+            <div
+              className="flex items-center justify-center text-[10px] font-bold text-white"
+              style={{ width: `${(saved / officeTotal) * 100}%`, backgroundColor: "var(--c-accent)" }}
+            >
+              削減 {Math.round((saved / officeTotal) * 100)}%
+            </div>
+          </div>
+          <p className="text-[11px] leading-relaxed text-[var(--c-muted)]">
+            {ind.coreWord}などの中核業務は、この計算に含めていません（①で「人がやるべき」に分類し、自動化の対象外にしています）。
+            削減した時間は人員削減ではなく、中核業務と、いま後回しになっている{ind.customerWord}対応に充てる前提で計算しています。
+          </p>
+        </div>
+      </Card>
+
+      {/* なぜ効くのか */}
+      <div className="grid gap-3 lg:grid-cols-2">
+        <Card className="p-4">
+          <p className="text-xs font-bold text-[var(--c-primary)]">低評価の口コミに出ていた2つの言葉</p>
+          <div className="mt-3 space-y-2">
+            <div className="rounded-lg border border-[var(--c-alert)] bg-[var(--c-alert-l)] px-3 py-2.5">
+              <p className="text-[13px] font-bold text-[var(--c-alert)]">「連絡が来ない」</p>
+              <p className="mt-1 text-[11px] leading-relaxed text-[var(--c-sub)]">
+                → 工程が進むたびに自動連絡（③の履歴の「自動」の行）
+              </p>
+            </div>
+            <div className="rounded-lg border border-[var(--c-alert)] bg-[var(--c-alert-l)] px-3 py-2.5">
+              <p className="text-[13px] font-bold text-[var(--c-alert)]">「ネット予約と窓口予約が重複した」</p>
+              <p className="mt-1 text-[11px] leading-relaxed text-[var(--c-sub)]">
+                → 4つの入口を1つの台帳に集約（②のチャネル図）
+              </p>
+            </div>
+          </div>
+          <p className="mt-3 text-[11px] leading-relaxed text-[var(--c-muted)]">
+            {FACTS.reviewSource}では、低評価の最大の要因はこの2つでした。
+            どちらも技術的に難しい問題ではなく、{ind.customerWord}が催促するまで情報が出てこない状態が失注につながっています。
+            ②と③は、その2つだけを狙って作っています。
+          </p>
+        </Card>
+
+        <Card className="p-4">
+          <p className="text-xs font-bold text-[var(--c-primary)]">この数字の出し方</p>
+          <ul className="mt-3 space-y-2 text-[12px] leading-relaxed text-[var(--c-sub)]">
+            <li className="flex gap-2">
+              <span className="font-bold text-[var(--c-accent)]">1.</span>
+              <span>導入前に①の棚卸しを行い、工程ごとの所要時間と月間件数を確定させる（実際は30〜50工程）</span>
+            </li>
+            <li className="flex gap-2">
+              <span className="font-bold text-[var(--c-accent)]">2.</span>
+              <span>上の4項目を、着手前に1か月そのまま測る。測っていない項目は効果を説明できない</span>
+            </li>
+            <li className="flex gap-2">
+              <span className="font-bold text-[var(--c-accent)]">3.</span>
+              <span>「自動化できる」工程から順に入れ、1か月ごとに同じ4項目を測り直す</span>
+            </li>
+            <li className="flex gap-2">
+              <span className="font-bold text-[var(--c-accent)]">4.</span>
+              <span>中核業務は対象外のまま維持する。ここを削ると、短期の時間削減と引き換えに売上が落ちる</span>
+            </li>
+          </ul>
+          <p className="mt-3 text-[11px] leading-relaxed text-[var(--c-muted)]">
+            この画面の数値はすべてデモ用の想定値です。実際の削減幅は、現状の運用と件数によって変わります。
+            棚卸しの結果によっては「いまは自動化しないほうがよい」という結論もあり得ます。
+          </p>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+/* ==================================================================
+   アプリ本体
+================================================================== */
+const TABS = [
+  { key: "inv",    label: "① 業務棚卸し" },
+  { key: "intake", label: "② 受付" },
+  { key: "admin",  label: "③ 管理画面" },
+  { key: "result", label: "④ 導入後の数字" },
+];
+
+function App() {
+  const indKeys = Object.keys(INDUSTRIES);
+  const [indKey, setIndKey] = useState(indKeys[0]);
+  const [tab, setTab] = useState("inv");
+  const [wage, setWage] = useState(CONFIG.defaultWage);
+  const [showAbout, setShowAbout] = useState(false);
+
+  // 業種ごとに受付台帳を持ちます（切り替えても、それぞれの進み具合は保たれます）
+  const [ledger, setLedger] = useState(() => {
+    const o = {};
+    indKeys.forEach((k) => { o[k] = seedCases(k); });
+    return o;
+  });
+  const [selectedId, setSelectedId] = useState(null);
+  const [seq, setSeq] = useState(201);
+
+  const ind = INDUSTRIES[indKey];
+  const cases = ledger[indKey];
+  const selId = cases.filter((c) => c.id === selectedId).length ? selectedId : (cases[0] && cases[0].id);
+
+  const t = CONFIG.theme;
+  const cssVars = `
+:root{
+  --c-bg:${t.bg}; --c-surface:${t.surface}; --c-ink:${t.ink}; --c-sub:${t.sub};
+  --c-muted:${t.muted}; --c-line:${t.line}; --c-line-s:${t.lineStrong};
+  --c-primary:${t.primary}; --c-primary-d:${t.primaryDark}; --c-primary-l:${t.primaryLight};
+  --c-accent:${t.accent}; --c-accent-d:${t.accentDark}; --c-accent-l:${t.accentLight};
+  --c-human:${t.human}; --c-alert:${t.alert}; --c-alert-l:${t.alertLight};
+  --c-ok:${t.ok}; --c-ok-l:${t.okLight};
+}
+body{ background:${t.bg}; color:${t.ink}; -webkit-text-size-adjust:100%; }
+`;
+
+  const advance = (id) => {
+    setLedger((prev) => {
+      const list = prev[indKey].map((c) => {
+        if (c.id !== id || c.stage >= ind.stages.length - 1) return c;
+        const next = c.stage + 1;
+        const way = c.summary.filter((kv) => kv[0] === "連絡方法")[0];
+        return {
+          ...c,
+          stage: next,
+          history: c.history.concat([
+            {
+              t: nowLabel(),
+              kind: "auto",
+              text: `「${ind.stages[next]}」に進んだことを自動連絡（${way ? way[1] : "登録済みの連絡先"}へ送信）`,
+            },
+          ]),
+        };
+      });
+      return { ...prev, [indKey]: list };
+    });
+  };
+
+  const addStaffNote = (id, text) => {
+    setLedger((prev) => ({
+      ...prev,
+      [indKey]: prev[indKey].map((c) =>
+        c.id === id ? { ...c, history: c.history.concat([{ t: nowLabel(), kind: "staff", text: text }]) } : c
+      ),
+    }));
+  };
+
+  // ②のフォーム送信 → 台帳の先頭に追加（ブラウザのメモリ上のみ）
+  const handleIntake = (values, urgent, hits) => {
+    const no = `R-2026-${seq}`;
+    const id = `${indKey}-new-${seq}`;
+    setSeq((s) => s + 1);
+    const at = nowLabel();
+    const summary = ind.form.fields
+      .filter((f) => f.type !== "textarea" && f.key !== "name")
+      .map((f) => [f.key === "reply" ? "連絡方法" : f.label, values[f.key]]);
+    const history = [
+      { t: at, kind: "auto", text: `受付完了の自動返信を送信（${values.reply || "登録済みの連絡先"}）` },
+    ];
+    if (urgent) {
+      history.push({ t: at, kind: "auto", text: `緊急語「${hits.join("」「")}」を検知。担当者へ通知` });
+    }
+    const rec = {
+      id: id, no: no, name: values.name, channel: "web", urgent: urgent, stage: 0, at: at,
+      summary: summary, body: values.body || "", history: history,
+    };
+    setLedger((prev) => ({ ...prev, [indKey]: [rec].concat(prev[indKey]) }));
+    setSelectedId(id);
+    return no;
+  };
+
+  return (
+    <div className="min-h-screen">
+      <style>{cssVars}</style>
+
+      {/* ヘッダー */}
+      <header className="border-b border-[var(--c-line)] bg-[var(--c-surface)]">
+        <div className="mx-auto max-w-6xl px-4 py-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h1 className="text-lg font-bold tracking-tight text-[var(--c-ink)] sm:text-xl">
+                {CONFIG.siteTitle}
+                <span className="ml-2 rounded bg-[var(--c-accent)] px-1.5 py-0.5 align-middle text-[10px] font-bold text-white">
+                  デモ
+                </span>
+              </h1>
+              <p className="mt-1 text-[12px] text-[var(--c-sub)]">{CONFIG.siteSubtitle}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowAbout((v) => !v)}
+              className="rounded-lg border border-[var(--c-line-s)] px-3 py-1.5 text-[11px] font-bold text-[var(--c-sub)] hover:border-[var(--c-primary)] hover:text-[var(--c-primary)]"
+            >
+              {showAbout ? "閉じる" : "このデモについて"}
+            </button>
+          </div>
+
+          {showAbout && (
+            <div className="mt-3 rounded-lg border border-[var(--c-line)] bg-[var(--c-bg)] p-4">
+              <p className="text-[12px] leading-relaxed text-[var(--c-sub)]">
+                中小企業のAI導入率は{FACTS.adoption[0].value}にとどまり、最大の障壁は「具体的な活用場面が不明」
+                {FACTS.adoption[1].value}、「導入を推進する人材がいない」{FACTS.adoption[2].value}でした（{FACTS.adoptionSource}）。
+                このデモは、その2つに対する具体的な答えを1つ示すものです。順番は固定で、
+                <span className="font-bold text-[var(--c-ink)]">①業務棚卸し → ②受付の一元化 → ③進捗の自動連絡 → ④測り直し</span>。
+                ツールを先に入れて失敗する事例は、①を飛ばしたケースに集中しています。
+              </p>
+              <ul className="mt-3 space-y-1 text-[11px] leading-relaxed text-[var(--c-muted)]">
+                <li>・所要時間・件数・導入後の数字は、すべてデモ用の想定値です。実在の企業の実績ではありません。</li>
+                <li>・受付フォームの入力内容は、どこにも保存・送信されません。リロードすると消えます。</li>
+                <li>・localStorage・Cookie・外部への通信は使っていません。1ファイルのHTMLで完結しています。</li>
+              </ul>
+            </div>
+          )}
+        </div>
+
+        {/* 業種切替 */}
+        <div className="border-t border-[var(--c-line)] bg-[var(--c-bg)]">
+          <div className="mx-auto max-w-6xl px-4 py-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[11px] font-bold text-[var(--c-muted)]">業種</span>
+              {indKeys.map((k) => (
+                <button
+                  key={k}
+                  type="button"
+                  onClick={() => setIndKey(k)}
+                  className="rounded-full border px-3 py-1.5 text-[12px] font-bold"
+                  style={
+                    k === indKey
+                      ? { backgroundColor: "var(--c-primary)", borderColor: "var(--c-primary)", color: "#fff" }
+                      : { backgroundColor: "#fff", borderColor: "var(--c-line-s)", color: "var(--c-sub)" }
+                  }
+                >
+                  {INDUSTRIES[k].label}
+                </button>
+              ))}
+            </div>
+            <p className="mt-2 text-[11px] leading-relaxed text-[var(--c-muted)]">
+              切り替えると、工程名・所要時間・月間件数・受付項目・ステージ名・緊急語が変わります。
+              <span className="font-bold text-[var(--c-sub)]">画面の構造とコードは完全に同じです。</span>
+              変えているのは、ファイル冒頭の <code className="rounded bg-white px-1 py-px text-[10px] ring-1 ring-[var(--c-line)]">INDUSTRIES</code> の1オブジェクトだけです。
+            </p>
+          </div>
+        </div>
+
+        {/* タブ */}
+        <div className="border-t border-[var(--c-line)] bg-[var(--c-surface)]">
+          <div className="mx-auto max-w-6xl px-2">
+            <div className="flex overflow-x-auto">
+              {TABS.map((tb) => (
+                <button
+                  key={tb.key}
+                  type="button"
+                  onClick={() => setTab(tb.key)}
+                  className="shrink-0 whitespace-nowrap px-3 py-3 text-[12px] font-bold sm:px-4 sm:text-[13px]"
+                  style={
+                    tab === tb.key
+                      ? { color: "var(--c-primary)", borderBottom: "3px solid var(--c-primary)" }
+                      : { color: "var(--c-muted)", borderBottom: "3px solid transparent" }
+                  }
+                >
+                  {tb.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main className="mx-auto max-w-6xl px-4 py-6">
+        {tab === "inv" && <InventoryTab ind={ind} wage={wage} setWage={setWage} />}
+        {tab === "intake" && <IntakeTab ind={ind} indKey={indKey} onSubmit={handleIntake} />}
+        {tab === "admin" && (
+          <AdminTab
+            ind={ind}
+            cases={cases}
+            selectedId={selId}
+            setSelectedId={setSelectedId}
+            advance={advance}
+            addStaffNote={addStaffNote}
+          />
+        )}
+        {tab === "result" && <ResultsTab ind={ind} wage={wage} />}
+      </main>
+
+      <footer className="mt-6 border-t border-[var(--c-line)] bg-[var(--c-surface)]">
+        <div className="mx-auto max-w-6xl px-4 py-5">
+          <p className="text-[11px] leading-relaxed text-[var(--c-muted)]">
+            所要時間・件数・導入後の数字は、すべてデモ用の想定値です。実在の企業の実績を示すものではありません。
+            受付フォームに入力した内容は、どこにも保存・送信されません（localStorage・Cookie・外部通信のいずれも使用していません）。
+            ページを再読み込みすると、すべて初期状態に戻ります。
+          </p>
+          <p className="mt-2 text-[11px] leading-relaxed text-[var(--c-muted)]">
+            引用した調査：{FACTS.adoptionSource}／{FACTS.jobsSource}／{FACTS.reviewSource}。
+          </p>
+          <p className="mt-2 text-[10px] text-[var(--c-muted)]">
+            React + Tailwind CSS の1ファイル構成（CDN読み込み・ビルド不要）
+          </p>
+        </div>
+      </footer>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>

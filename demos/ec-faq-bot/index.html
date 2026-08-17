@@ -3,17 +3,892 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ECカスタマーサポート自動化 デモ | 選択式FAQ → AI BOT → 有人対応</title>
-<meta name="description" content="選択式FAQ BOT・AI BOT・LINE/Gmail/フォームの一元管理・AI下書きまでを通しで確認できるデモ。有人問い合わせを62%削減する内訳を画面上で可視化します。">
+<title>EC向け問い合わせ自動応答 デモ | 定型は自動で片づけ、判断が要るものだけ人に残す</title>
+<meta name="description" content="選択式の自動応答・AIの自動応答・有人対応の3段階で問い合わせを切り分けるデモです。どこまでが自動で片づき、何が人に残るのかを画面上で確認できます。掲載データはすべてデモ用の想定値です。">
 <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <script src="https://cdn.tailwindcss.com"></script>
+<style>
+/* ------------------------------------------------------------------
+   :root のトークンは索引ページ（リポジトリ直下の index.html）から
+   そのまま持ってきています。ここで新しい色や寸法は作っていません。
+------------------------------------------------------------------ */
+:root {
+  --c-base:         #ffffff;
+  --c-paper:        #f5f1e8;
+  --c-ink:          #1b1c1e;
+  --c-ink-2:        #4c4f54;
+  --c-ink-3:        #7d8087;
+  --c-rule:         #ddd7c8;
+  --c-rule-strong:  #b3ab98;
+  --c-accent:       #2d4257;
+  --c-accent-tint:  #eef1f3;
+  --c-caution:      #9c463b;
+  --c-caution-tint: #f3e9e6;
+  --font-mincho: "Hiragino Mincho ProN","Yu Mincho","YuMincho","MS PMincho","Noto Serif JP",serif;
+  --font-gothic: "Hiragino Kaku Gothic ProN","Hiragino Sans","Yu Gothic","YuGothic",Meiryo,"Noto Sans JP",sans-serif;
+  --fs-note:  13px;  --fs-body: 15px;  --fs-sub: 18px;  --fs-head: 24px;  --fs-title: 33px;
+  --lh-body: 1.9;  --lh-head: 1.45;  --ls-body: 0.04em;  --ls-head: 0.06em;
+  --sp-1: 4px;  --sp-2: 8px;  --sp-3: 16px;  --sp-4: 32px;  --sp-5: 64px;
+  --rule-1: 1px;  --rule-2: 2px;
+}
+
+html { -webkit-text-size-adjust: 100%; }
+
+/* Tailwind の preflight は実行時に head の末尾へ挿入されるため、
+   body と a はセレクタの詳細度を上げて上書きされないようにしています。 */
+html body {
+  margin: 0;
+  background: var(--c-base);
+  color: var(--c-ink);
+  font-family: var(--font-gothic);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  letter-spacing: var(--ls-body);
+  text-align: left;
+}
+
+*, *::before, *::after { border-radius: 0; box-shadow: none; }
+
+body a {
+  color: var(--c-accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+body a:hover { text-decoration-thickness: 2px; }
+
+:focus-visible { outline: var(--rule-2) solid var(--c-accent); outline-offset: 2px; }
+
+/* ------------------------------------------------------------------
+   版面
+------------------------------------------------------------------ */
+.p-topbar { border-top: 3px solid var(--c-accent); }
+
+.p-sheet {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 0 var(--sp-3);
+}
+
+.p-section { padding-top: var(--sp-5); }
+.p-section:last-of-type { padding-bottom: var(--sp-5); }
+
+/* ------------------------------------------------------------------
+   ヘッダー
+------------------------------------------------------------------ */
+.p-masthead { padding-top: var(--sp-4); padding-bottom: var(--sp-4); }
+
+.p-masthead__kicker {
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-head);
+  color: var(--c-ink-3);
+  margin: 0 0 var(--sp-2);
+}
+
+.p-masthead__title {
+  font-family: var(--font-mincho);
+  font-size: var(--fs-title);
+  line-height: var(--lh-head);
+  letter-spacing: var(--ls-head);
+  font-weight: 600;
+  color: var(--c-ink);
+  margin: 0;
+  padding-bottom: var(--sp-3);
+  border-bottom: var(--rule-2) solid var(--c-accent);
+}
+
+.p-masthead__lead {
+  margin: var(--sp-3) 0 0;
+  max-width: 42em;
+  color: var(--c-ink-2);
+}
+
+.p-masthead__meta {
+  margin: var(--sp-3) 0 0;
+  font-size: var(--fs-note);
+  color: var(--c-ink-3);
+}
+
+.p-masthead__meta a { margin-left: var(--sp-2); }
+
+/* ------------------------------------------------------------------
+   注記帯
+------------------------------------------------------------------ */
+.p-notice {
+  margin-top: var(--sp-4);
+  background: var(--c-caution-tint);
+  border-left: 3px solid var(--c-caution);
+  padding: var(--sp-3);
+}
+
+.p-notice__title {
+  margin: 0 0 var(--sp-1);
+  font-size: var(--fs-note);
+  font-weight: 700;
+  letter-spacing: var(--ls-head);
+  color: var(--c-caution);
+}
+
+.p-notice__body {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-note);
+  line-height: 1.8;
+  color: var(--c-ink-2);
+}
+
+.p-notice__body:last-child { margin-bottom: 0; }
+
+/* ------------------------------------------------------------------
+   節見出し
+------------------------------------------------------------------ */
+.p-heading {
+  margin: 0 0 var(--sp-3);
+  padding-bottom: var(--sp-2);
+  border-bottom: var(--rule-2) solid var(--c-rule-strong);
+}
+
+.p-heading__no {
+  display: block;
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-head);
+  color: var(--c-accent);
+  margin-bottom: var(--sp-1);
+}
+
+.p-heading__text {
+  font-family: var(--font-mincho);
+  font-size: var(--fs-head);
+  line-height: var(--lh-head);
+  letter-spacing: var(--ls-head);
+  font-weight: 600;
+  margin: 0;
+}
+
+.p-lead {
+  margin: 0 0 var(--sp-3);
+  max-width: 44em;
+  color: var(--c-ink-2);
+}
+
+.p-note {
+  margin: var(--sp-2) 0 0;
+  font-size: var(--fs-note);
+  line-height: 1.8;
+  color: var(--c-ink-3);
+}
+
+/* ------------------------------------------------------------------
+   切り分けの要約
+------------------------------------------------------------------ */
+.p-scope {
+  border-left: 3px solid var(--c-accent);
+  background: var(--c-accent-tint);
+  padding: var(--sp-3);
+  margin-bottom: var(--sp-3);
+}
+
+.p-scope p { margin: 0; }
+.p-scope__sub { margin-top: var(--sp-1) !important; font-size: var(--fs-note); color: var(--c-ink-2); }
+.p-scope strong { font-weight: 700; color: var(--c-accent); }
+
+/* ------------------------------------------------------------------
+   画面の切り替え（罫線で下線を引くだけの札）
+------------------------------------------------------------------ */
+.p-tabs {
+  display: flex;
+  overflow-x: auto;
+  border-top: var(--rule-1) solid var(--c-rule);
+  border-bottom: var(--rule-2) solid var(--c-rule-strong);
+}
+
+.p-tab {
+  flex: 0 0 auto;
+  font-family: var(--font-gothic);
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-body);
+  white-space: nowrap;
+  padding: var(--sp-2) var(--sp-3);
+  margin-bottom: -2px;
+  color: var(--c-ink-2);
+  background: transparent;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  cursor: pointer;
+}
+
+.p-tab:hover { background: var(--c-accent-tint); }
+
+.p-tab[aria-current="page"] {
+  color: var(--c-accent);
+  font-weight: 700;
+  border-bottom-color: var(--c-accent);
+}
+
+/* ------------------------------------------------------------------
+   ボタン
+------------------------------------------------------------------ */
+.p-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.p-actions__spacer { flex: 1 1 auto; }
+
+.p-btn {
+  font-family: var(--font-gothic);
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-body);
+  color: var(--c-accent);
+  background: var(--c-accent-tint);
+  border: var(--rule-1) solid var(--c-rule-strong);
+  padding: var(--sp-1) var(--sp-2);
+  cursor: pointer;
+}
+
+.p-btn:hover { background: var(--c-base); }
+.p-btn:disabled { color: var(--c-ink-3); background: var(--c-base); border-color: var(--c-rule); cursor: not-allowed; }
+
+.p-btn--main {
+  font-size: var(--fs-body);
+  font-weight: 700;
+  background: var(--c-base);
+  border: var(--rule-2) solid var(--c-accent);
+  padding: var(--sp-2) var(--sp-3);
+}
+
+.p-btn--main:hover { background: var(--c-accent-tint); }
+
+.p-btn--quiet { color: var(--c-ink-2); background: var(--c-base); }
+
+.p-choice {
+  font-family: var(--font-gothic);
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-body);
+  color: var(--c-ink-2);
+  background: var(--c-base);
+  border: var(--rule-1) solid var(--c-rule-strong);
+  padding: var(--sp-1) var(--sp-2);
+  cursor: pointer;
+}
+
+.p-choice:hover { background: var(--c-accent-tint); }
+
+.p-choice[aria-pressed="true"] {
+  color: var(--c-accent);
+  font-weight: 700;
+  background: var(--c-accent-tint);
+  border-color: var(--c-accent);
+}
+
+.p-choice__n { margin-left: var(--sp-1); font-feature-settings: "tnum" 1; }
+
+/* ------------------------------------------------------------------
+   お客さま画面（やり取りと、段階の表）
+------------------------------------------------------------------ */
+.p-split {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  gap: var(--sp-4);
+  align-items: start;
+}
+
+.p-chat {
+  border-top: var(--rule-2) solid var(--c-accent);
+  border-bottom: var(--rule-2) solid var(--c-rule-strong);
+  min-width: 0;
+}
+
+.p-chat__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-2);
+  padding: var(--sp-2) 0 var(--sp-3);
+  border-bottom: var(--rule-1) solid var(--c-rule);
+}
+
+.p-chat__shop {
+  font-family: var(--font-mincho);
+  font-size: var(--fs-sub);
+  line-height: var(--lh-head);
+  letter-spacing: var(--ls-head);
+  font-weight: 600;
+  margin: 0;
+}
+
+.p-chat__hours { font-size: var(--fs-note); color: var(--c-ink-3); }
+
+/* 紙色を地にして、やり取りの枠であることを罫線だけで示します */
+.p-chat__log {
+  height: 26rem;
+  overflow-y: auto;
+  padding: var(--sp-3);
+  background: var(--c-paper);
+  border-bottom: var(--rule-1) solid var(--c-rule);
+}
+
+.p-chat__ctrl { padding: var(--sp-3) 0; }
+
+.p-msg { margin-bottom: var(--sp-3); }
+.p-msg:last-child { margin-bottom: 0; }
+
+.p-msg__who {
+  display: block;
+  margin-bottom: var(--sp-1);
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-head);
+  color: var(--c-ink-3);
+}
+
+.p-msg__body {
+  display: block;
+  max-width: 44em;
+  padding: var(--sp-2) var(--sp-3);
+  font-size: var(--fs-body);
+  line-height: 1.85;
+  white-space: pre-wrap;
+  border: var(--rule-1) solid var(--c-rule);
+  background: var(--c-base);
+  color: var(--c-ink);
+}
+
+/* お客さまの発言は右に寄せ、罫線も右側に置きます */
+.p-msg--user { text-align: right; }
+.p-msg--user .p-msg__body {
+  display: inline-block;
+  text-align: left;
+  border: var(--rule-1) solid var(--c-rule-strong);
+  border-right: 3px solid var(--c-accent);
+  background: var(--c-accent-tint);
+}
+
+.p-msg--bot .p-msg__body { border-left: 3px solid var(--c-rule-strong); }
+.p-msg--closing .p-msg__body { border-left-color: var(--c-accent); background: var(--c-accent-tint); }
+.p-msg--system .p-msg__body { border-left-color: var(--c-rule); color: var(--c-ink-2); }
+
+.p-msg__ai {
+  display: block;
+  margin-bottom: var(--sp-1);
+  font-size: var(--fs-note);
+  font-weight: 700;
+  letter-spacing: var(--ls-head);
+  color: var(--c-accent);
+}
+
+/* 選択肢 */
+.p-opts { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+
+.p-opt {
+  font-family: var(--font-gothic);
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-body);
+  text-align: left;
+  color: var(--c-ink);
+  background: var(--c-base);
+  border: var(--rule-1) solid var(--c-rule-strong);
+  border-left: 3px solid var(--c-accent);
+  padding: var(--sp-2);
+  cursor: pointer;
+}
+
+.p-opt:hover { background: var(--c-accent-tint); }
+.p-opt__more { margin-left: var(--sp-2); color: var(--c-ink-3); }
+
+.p-ask { display: flex; gap: var(--sp-2); margin-bottom: var(--sp-2); }
+
+.p-ask__input {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--font-gothic);
+  font-size: var(--fs-body);
+  color: var(--c-ink);
+  background: var(--c-base);
+  border: var(--rule-1) solid var(--c-rule-strong);
+  padding: var(--sp-1) var(--sp-2);
+}
+
+.p-ask__input:focus { border-color: var(--c-accent); }
+
+/* 段階の表 */
+.p-rail {
+  border-top: var(--rule-2) solid var(--c-accent);
+  border-bottom: var(--rule-1) solid var(--c-rule-strong);
+  min-width: 0;
+}
+
+.p-rail__head { padding: var(--sp-2) 0 var(--sp-3); border-bottom: var(--rule-1) solid var(--c-rule); }
+
+.p-rail__title {
+  margin: 0;
+  font-size: var(--fs-note);
+  font-weight: 700;
+  letter-spacing: var(--ls-head);
+  color: var(--c-accent);
+}
+
+.p-rail__note { margin: var(--sp-1) 0 0; font-size: var(--fs-note); color: var(--c-ink-3); }
+
+.p-rail__list { margin: 0; padding: 0; list-style: none; }
+
+.p-rail__item {
+  padding: var(--sp-3) 0;
+  border-bottom: var(--rule-1) solid var(--c-rule);
+  border-left: 3px solid transparent;
+  padding-left: var(--sp-2);
+}
+
+.p-rail__item.is-active { border-left-color: var(--c-accent); background: var(--c-accent-tint); }
+
+.p-rail__row { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-2); }
+
+.p-rail__label { font-size: var(--fs-note); font-weight: 700; color: var(--c-ink); }
+.p-rail__item.is-active .p-rail__label { color: var(--c-accent); }
+
+.p-rail__pct {
+  flex: 0 0 auto;
+  font-size: var(--fs-sub);
+  font-weight: 700;
+  color: var(--c-accent);
+  font-feature-settings: "tnum" 1;
+}
+
+.p-rail__item--human .p-rail__pct { color: var(--c-ink-2); }
+
+.p-rail__cum { margin: var(--sp-1) 0 0; font-size: var(--fs-note); color: var(--c-ink-3); }
+.p-rail__desc { margin: var(--sp-1) 0 0; font-size: var(--fs-note); line-height: 1.8; color: var(--c-ink-2); }
+
+.p-rail__foot { padding: var(--sp-3) var(--sp-2); }
+.p-rail__foot p { margin: 0; }
+
+.p-rail__big {
+  font-size: var(--fs-title);
+  line-height: 1.25;
+  font-weight: 700;
+  color: var(--c-accent);
+  font-feature-settings: "tnum" 1;
+}
+
+/* ------------------------------------------------------------------
+   集計
+------------------------------------------------------------------ */
+.p-tiles {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-4);
+}
+
+.p-tile {
+  border-top: var(--rule-2) solid var(--c-accent);
+  border-bottom: var(--rule-1) solid var(--c-rule-strong);
+  padding: var(--sp-2) 0 var(--sp-3);
+  min-width: 0;
+}
+
+.p-tile--human { border-top-color: var(--c-rule-strong); }
+
+.p-tile__label {
+  margin: 0 0 var(--sp-1);
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-head);
+  color: var(--c-ink-2);
+}
+
+.p-tile__num {
+  margin: 0;
+  font-size: var(--fs-title);
+  line-height: 1.25;
+  font-weight: 700;
+  color: var(--c-accent);
+  font-feature-settings: "tnum" 1;
+}
+
+.p-tile--human .p-tile__num { color: var(--c-ink-2); }
+.p-tile__unit { font-size: var(--fs-sub); font-weight: 500; margin-left: 2px; }
+
+.p-tile__sub {
+  margin: var(--sp-1) 0 0;
+  font-size: var(--fs-note);
+  line-height: 1.7;
+  color: var(--c-ink-3);
+}
+
+/* 積み上げの帯 */
+.p-bar {
+  display: flex;
+  height: 34px;
+  border: var(--rule-1) solid var(--c-rule-strong);
+}
+
+.p-bar__seg {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: var(--fs-note);
+  font-feature-settings: "tnum" 1;
+}
+
+.p-bar__seg--faq { background: var(--c-accent); color: var(--c-base); }
+.p-bar__seg--ai { background: var(--c-ink-2); color: var(--c-base); }
+.p-bar__seg--human { background: var(--c-paper); color: var(--c-ink); }
+
+/* 目標帯といまの位置 */
+.p-scale { position: relative; height: 4.4em; margin-top: var(--sp-1); }
+
+.p-scale__band {
+  position: absolute;
+  top: 0;
+  height: 8px;
+  border-left: var(--rule-2) solid var(--c-rule-strong);
+  border-right: var(--rule-2) solid var(--c-rule-strong);
+  border-bottom: var(--rule-1) solid var(--c-rule-strong);
+}
+
+.p-scale__band-label {
+  position: absolute;
+  top: 10px;
+  font-size: var(--fs-note);
+  color: var(--c-ink-3);
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.p-scale__now { position: absolute; top: 0; height: 26px; border-left: var(--rule-2) solid var(--c-accent); }
+
+.p-scale__now-label {
+  position: absolute;
+  top: 28px;
+  font-size: var(--fs-note);
+  font-weight: 700;
+  color: var(--c-accent);
+  white-space: nowrap;
+  font-feature-settings: "tnum" 1;
+}
+
+.p-verdict {
+  margin-top: var(--sp-3);
+  border-left: 3px solid var(--c-accent);
+  background: var(--c-accent-tint);
+  padding: var(--sp-2) var(--sp-3);
+  font-size: var(--fs-note);
+  color: var(--c-ink-2);
+}
+
+.p-verdict--miss { border-left-color: var(--c-caution); background: var(--c-caution-tint); color: var(--c-caution); }
+
+/* ------------------------------------------------------------------
+   表
+------------------------------------------------------------------ */
+.p-scroll {
+  overflow-x: auto;
+  border-top: var(--rule-2) solid var(--c-rule-strong);
+  border-bottom: var(--rule-2) solid var(--c-rule-strong);
+}
+
+.p-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-note);
+  line-height: 1.75;
+}
+
+.p-table--flow { min-width: 620px; }
+
+.p-table th, .p-table td {
+  padding: var(--sp-2);
+  border-bottom: var(--rule-1) solid var(--c-rule);
+  text-align: left;
+  vertical-align: top;
+}
+
+.p-table thead th {
+  background: var(--c-paper);
+  border-bottom: var(--rule-1) solid var(--c-rule-strong);
+  font-weight: 700;
+  color: var(--c-ink-2);
+  letter-spacing: var(--ls-head);
+  white-space: nowrap;
+}
+
+.p-table tbody tr:last-child td { border-bottom: 0; }
+
+.p-table .is-num { text-align: right; white-space: nowrap; font-feature-settings: "tnum" 1; }
+.p-table .is-name { font-weight: 700; color: var(--c-ink); }
+.p-table .is-plain { color: var(--c-ink-2); }
+.p-table .is-total { font-weight: 700; color: var(--c-accent); }
+
+/* 札 */
+.p-mark {
+  display: inline-block;
+  white-space: nowrap;
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-head);
+  padding: 0 var(--sp-2);
+  border: var(--rule-1) solid var(--c-rule-strong);
+  background: var(--c-base);
+  color: var(--c-ink-2);
+}
+
+.p-mark--strong { background: var(--c-accent-tint); border-color: var(--c-accent); color: var(--c-accent); font-weight: 700; }
+.p-mark--watch { background: var(--c-paper); color: var(--c-ink); font-weight: 700; }
+.p-mark--alert { background: var(--c-caution-tint); border-color: var(--c-caution); color: var(--c-caution); font-weight: 700; }
+.p-mark--muted { border-color: var(--c-rule); color: var(--c-ink-3); }
+
+.p-empty {
+  padding: var(--sp-4) var(--sp-2);
+  border-top: var(--rule-2) solid var(--c-rule-strong);
+  border-bottom: var(--rule-2) solid var(--c-rule-strong);
+  color: var(--c-ink-2);
+}
+
+.p-empty p { margin: 0; }
+
+/* ------------------------------------------------------------------
+   受信トレイ
+------------------------------------------------------------------ */
+.p-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-2);
+  padding: var(--sp-3) 0;
+  border-top: var(--rule-2) solid var(--c-rule-strong);
+  border-bottom: var(--rule-1) solid var(--c-rule);
+  font-size: var(--fs-note);
+  color: var(--c-ink-3);
+}
+
+.p-filters__label { flex: 0 0 auto; width: 5em; letter-spacing: var(--ls-head); color: var(--c-ink-2); }
+
+.p-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: var(--rule-2) solid var(--c-rule-strong);
+  border-bottom: var(--rule-2) solid var(--c-rule-strong);
+}
+
+.p-item { border-bottom: var(--rule-1) solid var(--c-rule); }
+.p-item:last-child { border-bottom: 0; }
+
+.p-item__btn {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: var(--c-base);
+  border: 0;
+  padding: var(--sp-3) var(--sp-2);
+  cursor: pointer;
+  font-family: inherit;
+  color: inherit;
+}
+
+.p-item__btn:hover { background: var(--c-accent-tint); }
+.p-item__btn[aria-expanded="true"] { background: var(--c-accent-tint); }
+
+.p-item__row { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-2); }
+
+.p-item__src { flex: 0 0 auto; }
+
+.p-item__subject {
+  flex: 1 1 16em;
+  min-width: 0;
+  font-size: var(--fs-body);
+  font-weight: 700;
+  color: var(--c-ink);
+  line-height: var(--lh-head);
+}
+
+.p-item__time { flex: 0 0 auto; font-size: var(--fs-note); color: var(--c-ink-3); font-feature-settings: "tnum" 1; }
+
+.p-item__sub {
+  display: block;
+  margin: var(--sp-1) 0 0;
+  font-size: var(--fs-note);
+  line-height: 1.8;
+  color: var(--c-ink-2);
+}
+
+.p-item__why {
+  display: block;
+  margin: var(--sp-1) 0 0;
+  font-size: var(--fs-note);
+  line-height: 1.8;
+  color: var(--c-caution);
+}
+
+/* 開いた行では、理由を下の帯で読ませるため一覧側は畳みます */
+.p-item__btn[aria-expanded="true"] .p-item__why { display: none; }
+
+.p-item__new { font-size: var(--fs-note); font-weight: 700; color: var(--c-caution); }
+
+.p-panel {
+  background: var(--c-paper);
+  border-top: var(--rule-1) solid var(--c-rule);
+  padding: var(--sp-3) var(--sp-2);
+}
+
+.p-quote {
+  border-left: 3px solid var(--c-rule-strong);
+  background: var(--c-base);
+  padding: var(--sp-2) var(--sp-3);
+  margin: 0 0 var(--sp-3);
+}
+
+.p-quote__meta { margin: 0 0 var(--sp-1); font-size: var(--fs-note); color: var(--c-ink-3); }
+.p-quote__body { margin: 0; white-space: pre-wrap; line-height: 1.85; }
+
+.p-hint { margin: 0 0 var(--sp-3); font-size: var(--fs-note); line-height: 1.8; color: var(--c-ink-2); }
+
+.p-reason {
+  margin: 0 0 var(--sp-3);
+  border-left: 3px solid var(--c-caution);
+  background: var(--c-caution-tint);
+  padding: var(--sp-2) var(--sp-3);
+  font-size: var(--fs-note);
+  line-height: 1.8;
+  color: var(--c-ink-2);
+}
+
+.p-reason strong { font-weight: 700; color: var(--c-caution); }
+
+.p-draft__label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-2);
+  margin: 0 0 var(--sp-1);
+  font-size: var(--fs-note);
+  font-weight: 700;
+  letter-spacing: var(--ls-head);
+  color: var(--c-ink-2);
+}
+
+.p-draft__tag { font-weight: 400; color: var(--c-accent); }
+
+/* ------------------------------------------------------------------
+   入力
+------------------------------------------------------------------ */
+.p-form {
+  border-top: var(--rule-2) solid var(--c-accent);
+  border-bottom: var(--rule-2) solid var(--c-rule-strong);
+  padding-bottom: var(--sp-3);
+  margin-bottom: var(--sp-3);
+  background: var(--c-base);
+}
+
+.p-form__head { padding: var(--sp-2) 0 var(--sp-3); border-bottom: var(--rule-1) solid var(--c-rule); }
+
+.p-form__title {
+  margin: 0;
+  font-family: var(--font-mincho);
+  font-size: var(--fs-sub);
+  line-height: var(--lh-head);
+  letter-spacing: var(--ls-head);
+  font-weight: 600;
+}
+
+.p-form__intro { margin: var(--sp-1) 0 0; font-size: var(--fs-note); color: var(--c-ink-3); }
+
+.p-field { margin-top: var(--sp-3); min-width: 0; }
+
+.p-field__label {
+  display: block;
+  margin-bottom: var(--sp-1);
+  font-size: var(--fs-note);
+  font-weight: 700;
+  letter-spacing: var(--ls-head);
+  color: var(--c-ink-2);
+}
+
+.p-field__req { margin-left: var(--sp-2); font-weight: 400; color: var(--c-caution); }
+
+.p-input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  font-family: var(--font-gothic);
+  font-size: var(--fs-body);
+  line-height: 1.7;
+  letter-spacing: var(--ls-body);
+  color: var(--c-ink);
+  background: var(--c-base);
+  border: var(--rule-1) solid var(--c-rule-strong);
+  padding: var(--sp-1) var(--sp-2);
+}
+
+.p-input:focus { border-color: var(--c-accent); }
+.p-input:read-only { background: var(--c-paper); color: var(--c-ink-2); }
+.p-input.is-error { border-color: var(--c-caution); border-width: var(--rule-2); }
+
+.p-field__err { margin: var(--sp-1) 0 0; font-size: var(--fs-note); color: var(--c-caution); }
+
+/* ------------------------------------------------------------------
+   説明
+------------------------------------------------------------------ */
+.p-def { margin: 0 0 var(--sp-4); }
+
+.p-def__label {
+  margin: 0 0 var(--sp-1);
+  font-size: var(--fs-note);
+  font-weight: 700;
+  letter-spacing: var(--ls-head);
+  color: var(--c-accent);
+}
+
+.p-def__body { margin: 0; color: var(--c-ink); max-width: 44em; }
+
+.p-def__body code {
+  font-family: "SFMono-Regular", Consolas, "Courier New", monospace;
+  font-size: var(--fs-note);
+  background: var(--c-paper);
+  padding: 0 var(--sp-1);
+}
+
+.p-colophon {
+  margin-top: var(--sp-4);
+  padding-top: var(--sp-3);
+  border-top: var(--rule-2) solid var(--c-rule-strong);
+  font-size: var(--fs-note);
+  color: var(--c-ink-3);
+}
+
+.p-colophon p { margin: 0 0 var(--sp-1); }
+.p-colophon p:last-child { margin-bottom: 0; }
+
+/* ------------------------------------------------------------------
+   スマートフォン
+------------------------------------------------------------------ */
+@media (max-width: 900px) {
+  .p-split { grid-template-columns: 1fr; gap: var(--sp-4); }
+  .p-tiles { grid-template-columns: 1fr 1fr; }
+}
+
+@media (max-width: 640px) {
+  :root {
+    --fs-title: 26px;
+    --fs-head: 20px;
+    --fs-sub: 17px;
+    --sp-5: 48px;
+  }
+
+  .p-sheet { padding: 0 var(--sp-2); }
+  .p-tiles { grid-template-columns: 1fr; }
+  .p-tile__num { font-size: 28px; }
+  .p-filters__label { width: 100%; }
+  .p-chat__log { height: 22rem; }
+  .p-opt { width: 100%; }
+  .p-msg__body { padding: var(--sp-2); }
+}
+</style>
 </head>
 <body>
-<p style="margin:0;padding:10px 16px;background:#f3e9e6;border-bottom:2px solid #9c463b;color:#4c4f54;font:13px/1.7 'Hiragino Kaku Gothic ProN','Hiragino Sans','Yu Gothic',YuGothic,Meiryo,'Noto Sans JP',sans-serif;letter-spacing:0.04em;">
-<span style="color:#9c463b;font-weight:700;">デモ用の想定値です。</span>この画面に表示される問い合わせ件数・削減率・注文情報は、動作確認のために用意した想定値であり、実在する企業の実績値ではありません。
-</p>
 <div id="root"></div>
 <script>Babel.registerPreset("react-classic", { presets: [[Babel.availablePresets["react"], { runtime: "classic" }]] });</script>
 <script type="text/babel" data-presets="react-classic">
@@ -35,8 +910,8 @@ const BRAND = {
    デモ画面で解決・エスカレーションが発生すると、この値に加算されます。 */
 const BASELINE = {
   total: 1000,        // 総問い合わせ数
-  faq: 430,           // 選択式FAQ BOTで解決
-  ai: 190,            // AI BOTで解決（自動返信のみで完結）
+  faq: 430,           // 選択式の自動応答で解決
+  ai: 190,            // AIの自動応答で解決（自動返信のみで完結）
   humanWithDraft: 250, // 有人対応のうち、AI下書きを使って返信したもの
 };
 
@@ -45,13 +920,13 @@ const TARGET = { min: 0.5, max: 0.7 };
 
 /* 各段階の説明。想定解決率は BASELINE から自動算出します。 */
 const STAGE_DEFS = [
-  { key: "faq",   label: "選択式FAQ BOT", desc: "定型的な質問はここで完結。ボタンを辿るだけで回答に到達します。" },
-  { key: "ai",    label: "AI BOT（自由入力）", desc: "言い回しが違っても意図を判定し、FAQに無い質問にも回答します。" },
+  { key: "faq",   label: "選択式の自動応答", desc: "定型的な質問はここで完結。選択肢を辿るだけで回答に到達します。" },
+  { key: "ai",    label: "AIの自動応答（自由入力）", desc: "言い回しが違っても意図を判定し、選択肢に無い質問にも回答します。" },
   { key: "human", label: "有人対応", desc: "返金・クレーム・例外対応のみ。AI下書きつきで受け取ります。" },
 ];
 
 /* ------------------------------------------------------------------
-   選択式FAQ の選択肢ツリー。
+   選択式の応答ツリー。
    children を持つノード = さらに絞り込む / answer を持つノード = 回答
    階層は何段でも入れ子にできます。
 ------------------------------------------------------------------ */
@@ -221,7 +1096,7 @@ const FAQ_TREE = [
 ];
 
 /* ------------------------------------------------------------------
-   AI BOT の応答。デモのため、キーワード一致であらかじめ用意した内容を返します。
+   AIの応答。デモのため、キーワード一致であらかじめ用意した内容を返します。
    実装時はこの部分をサーバー側のAI応答（社内ナレッジを参照）に置き換えます。
 ------------------------------------------------------------------ */
 const AI_RESPONSES = [
@@ -279,7 +1154,7 @@ const AI_SUGGESTIONS = [
   "在庫切れの商品はいつ入荷しますか",
 ];
 
-/* AI BOT で「解決しない」が何回続いたら、有人対応フォームを出すか */
+/* AIの応答で「解決しない」が何回続いたら、有人対応フォームを出すか */
 const ESCALATE_AFTER = 2;
 
 /* ------------------------------------------------------------------
@@ -298,51 +1173,49 @@ const ESCALATION_FORM = {
 /* ------------------------------------------------------------------
    流入元。実装時は LINE Messaging API / Gmail API / フォームPOST を
    サーバー側で受け取り、同じ1つのテーブルに正規化して保存します。
+   意匠は紺1色のため、経路は色ではなく名前で見分けます。
 ------------------------------------------------------------------ */
 const SOURCES = {
-  line: { label: "LINE", short: "L", tone: "bg-green-600 text-white", chip: "bg-green-50 text-green-700 ring-green-200" },
-  gmail: { label: "Gmail", short: "G", tone: "bg-rose-500 text-white", chip: "bg-rose-50 text-rose-700 ring-rose-200" },
-  form: { label: "問い合わせフォーム", short: "F", tone: "bg-indigo-500 text-white", chip: "bg-indigo-50 text-indigo-700 ring-indigo-200" },
+  line: { label: "LINE" },
+  gmail: { label: "Gmail" },
+  form: { label: "問い合わせフォーム" },
 };
 
 /* ------------------------------------------------------------------
    ステータス定義。
    counts: 削減率の集計上、どの区分に数えるか（ai = 自動解決 / human = 有人）
+   tone:   札の濃淡の区分名。臙脂を使うのは alert（人の判断が要る）だけです。
 ------------------------------------------------------------------ */
 const STATUSES = {
   ai_resolved: {
-    label: "AI解決済み",
+    label: "自動で解決済み",
     counts: "ai",
-    chip: "bg-teal-50 text-teal-800 ring-teal-200",
-    dot: "bg-teal-600",
+    tone: "strong",
     hint: "AIが自動返信し、そのまま完結しました。人の対応は発生していません。",
   },
   ai_draft: {
-    label: "AI下書きあり・要確認",
+    label: "下書きあり・要確認",
     counts: "human",
-    chip: "bg-amber-50 text-amber-800 ring-amber-200",
-    dot: "bg-amber-500",
+    tone: "watch",
     hint: "AIが返信文を用意済みです。内容を確認して送信してください。",
   },
   human: {
-    label: "人間対応必要",
+    label: "人の判断が必要",
     counts: "human",
-    chip: "bg-rose-50 text-rose-700 ring-rose-200",
-    dot: "bg-rose-500",
+    tone: "alert",
     hint: "返金・クレーム・例外対応のため、AIの自動返信対象から除外しています。",
   },
   done: {
     label: "対応済み",
     counts: "human",
-    chip: "bg-stone-100 text-stone-600 ring-stone-300",
-    dot: "bg-stone-400",
+    tone: "muted",
     hint: "返信を送信し、クローズしました。",
   },
 };
 
 const STATUS_ORDER = ["ai_draft", "human", "ai_resolved", "done"];
 
-/* 人間対応の行に対して「AI下書きを作成」を押したときの雛形 */
+/* 人の判断が必要な行に対して「AI下書きを作成」を押したときの雛形 */
 const DRAFT_TEMPLATE = (row) =>
   `${row.customer} 様\n\nいつも${BRAND.name}をご利用いただきありがとうございます。\n${BRAND.supportName}でございます。\n\nこのたびは${row.subject}の件でご不便をおかけし、申し訳ございません。\n担当にて内容を確認のうえ、改めてご案内いたします。\n\n恐れ入りますが、ご注文番号と該当箇所のお写真をお送りいただけますでしょうか。\n\n────────────\n${BRAND.name} ${BRAND.supportName}\n${BRAND.hours}`;
 
@@ -460,6 +1333,7 @@ const INBOX_SEED = [
 
 const pct = (n) => `${(n * 100).toFixed(1)}%`;
 const pctShort = (n) => `${Math.round(n * 100)}%`;
+const markClass = (tone) => (tone && tone !== "plain" ? `p-mark p-mark--${tone}` : "p-mark");
 
 /* 現在の集計。BASELINE にデモ操作分を加算します。 */
 function useStats(live) {
@@ -502,7 +1376,7 @@ function App() {
         subject: payload.orderNo ? `${payload.orderNo} について` : "チャットからのお問い合わせ",
         body: payload.body,
         status: "human",
-        reason: "FAQ・AI BOTで解決しなかったため、有人対応にエスカレーションされました。",
+        reason: "選択式・AIの自動応答で解決しなかったため、有人対応に引き渡されました。",
         autoDraft: DRAFT_TEMPLATE({ customer: payload.name || "お客", subject: "お問い合わせ" }),
         isNew: true,
       },
@@ -511,71 +1385,162 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen bg-stone-100 text-stone-800">
-      <header className="sticky top-0 z-30 border-b border-teal-900/20 bg-teal-900 text-teal-50">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-3 px-4 py-3">
-          <div className="flex items-baseline gap-2">
-            <span className="text-sm font-semibold tracking-tight">{BRAND.name}</span>
-            <span className="text-xs text-teal-300">サポート自動化デモ</span>
-          </div>
+    <React.Fragment>
+      <div className="p-topbar" />
 
-          <div className="flex rounded-md bg-teal-950/40 p-0.5 text-xs">
-            {[
-              { key: "customer", label: "お客様側チャット" },
-              { key: "admin", label: "運営側 一元管理" },
-            ].map((t) => (
-              <button
-                key={t.key}
-                onClick={() => setView(t.key)}
-                className={`rounded px-3 py-1.5 transition ${
-                  view === t.key ? "bg-teal-50 font-semibold text-teal-900" : "text-teal-100 hover:bg-teal-800"
-                }`}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
+      <div className="p-sheet">
+        {/* ---------------- ヘッダー ---------------- */}
+        <header className="p-masthead">
+          <p className="p-masthead__kicker">中小企業向け　業務改善・自動化サンプル　問い合わせ対応</p>
+          <h1 className="p-masthead__title">EC向け問い合わせ自動応答 デモ</h1>
+          <p className="p-masthead__lead">
+            問い合わせを、選択式の自動応答・AIの自動応答・有人対応の3段階に分けて受けます。
+            狙いは問い合わせを減らすことではなく、<strong>定型の質問を自動応答に回して、
+            判断が要るものだけを人の手元に残す</strong>ことです。
+            この画面では、お客さま側でやり取りを進めながら、それが運営側の一覧でどう仕分けられるかを確認できます。
+          </p>
+          <p className="p-masthead__meta">
+            画面：お客さま側の画面／運営側の一元管理
+            {"　"}段階：{STAGE_DEFS.map((s) => s.label).join("／")}
+            {"　"}流入元：{Object.keys(SOURCES).map((k) => SOURCES[k].label).join("／")}
+            <a href="../../index.html">業務の悩み 索引へ戻る</a>
+          </p>
 
-          <div className="ml-auto flex items-baseline gap-2 rounded-md bg-teal-950/40 px-3 py-1.5">
-            <span className="text-[11px] text-teal-300">有人対応 削減率</span>
-            <span className="text-lg font-bold tabular-nums text-white">{pct(stats.rate)}</span>
-            <span className="text-[11px] text-teal-300">目標 {pctShort(TARGET.min)}–{pctShort(TARGET.max)}</span>
+          <div className="p-notice">
+            <p className="p-notice__title">数値の扱いについて</p>
+            <p className="p-notice__body">
+              この画面に表示される問い合わせ件数・削減率・お客さまの氏名・注文情報は、
+              すべて動作確認のために用意したデモ用の想定値です。実在する企業・人物・実績とは関係ありません。
+            </p>
+            <p className="p-notice__body">
+              AIの応答も、デモのためあらかじめ用意した文面をキーワード一致で返しています。
+              画面上の操作内容はブラウザの中だけに保持され、どこにも保存・送信されません
+              （localStorage・Cookie・外部通信のいずれも使っていません）。ページを開き直すと最初の状態に戻ります。
+            </p>
           </div>
+        </header>
+
+        {/* ---------------- 切り分けの要約 ---------------- */}
+        <div className="p-scope">
+          <p>
+            いま <strong>{stats.total.toLocaleString()}件</strong>のうち
+            <strong>{(stats.faq + stats.ai).toLocaleString()}件（{pct(stats.rate)}）</strong>
+            が人の手を介さずに完結し、人に残っているのは
+            <strong>{stats.human.toLocaleString()}件（{pct(stats.humanShare)}）</strong>です。
+          </p>
+          <p className="p-scope__sub">
+            人に残っているのは、返金・クレーム・法人取引・配送事故など、判断や決裁が要るものです。
+            自動応答で片づく質問は、何度同じものが来ても人の時間を使いません。
+          </p>
         </div>
-      </header>
 
-      <main className="mx-auto max-w-6xl px-4 py-6">
+        {/* ---------------- 画面の切り替え ---------------- */}
+        <nav className="p-tabs" aria-label="画面の切り替え">
+          <button
+            type="button"
+            className="p-tab"
+            aria-current={view === "customer" ? "page" : undefined}
+            onClick={() => setView("customer")}
+          >
+            お客さま側の画面
+          </button>
+          <button
+            type="button"
+            className="p-tab"
+            aria-current={view === "admin" ? "page" : undefined}
+            onClick={() => setView("admin")}
+          >
+            運営側の一元管理
+          </button>
+        </nav>
+
+        {/* ---------------- 本体 ---------------- */}
         {view === "customer" ? (
           <CustomerChat stats={stats} onResolve={bump} onEscalate={escalate} />
         ) : (
           <AdminConsole stats={stats} inbox={inbox} setInbox={setInbox} />
         )}
-      </main>
 
-      <footer className="mx-auto max-w-6xl px-4 pb-12">
-        <div className="rounded-lg border border-stone-300 bg-white/70 p-4 text-xs leading-relaxed text-stone-500">
-          <p className="mb-1 font-semibold text-stone-600">この画面について</p>
-          <p>
-            本デモはブラウザだけで動く画面確認用のため、AI BOTの応答はあらかじめ用意した内容を返しています。
-            実装時は、<span className="font-medium text-stone-700">AIによる回答生成・返信下書きの作成はすべてサーバー側で処理</span>し、
-            APIキーがブラウザに露出しない構成にします。
-          </p>
-          <p className="mt-1">
-            <span className="font-medium text-stone-700">LINE（Messaging API）・Gmail（Gmail API）・問い合わせフォームからの受信も同様にサーバー側</span>で行います。
-            各チャネルのWebhookを受け取り、共通のスキーマに正規化して1つのテーブルに保存することで、この一元管理画面が成り立ちます。
-            送信も同じ経路を逆にたどるため、担当者はチャネルを意識せず返信できます。
-          </p>
-          <p className="mt-1">
-            FAQの選択肢ツリー・AI応答・ステータス定義は、ファイル冒頭の設定オブジェクトにまとめています。ブランドごとの差し替えはこの部分だけで完結します。
-          </p>
-        </div>
-      </footer>
-    </div>
+        {/* ---------------- 実装と運用について ---------------- */}
+        <section className="p-section">
+          <div className="p-heading">
+            <span className="p-heading__no">実装と運用について</span>
+            <h2 className="p-heading__text">同じ返信を二度書かないために</h2>
+          </div>
+
+          <div className="p-def">
+            <p className="p-def__label">定型かどうかは、質問の側で決まります</p>
+            <p className="p-def__body">
+              同じ返信を毎回書いてしまうのは、質問の大半が定型だからです。
+              定型の質問に定型の答えを返す作業は、人がやっても機械がやっても中身が変わりません。
+              先に選択肢で受けて、そこから漏れたものだけをAIが受け、
+              それでも解決しないものだけが人に届く形にしています。
+            </p>
+          </div>
+
+          <div className="p-def">
+            <p className="p-def__label">自動返信を止める線は、こちらで引きます</p>
+            <p className="p-def__body">
+              返金・クレーム・法人取引など、判断や決裁が要るものはAIの自動返信の対象から外しています。
+              運営側の一覧では、外した行に<strong>その理由を1件ずつ表示</strong>しています。
+              なぜ人に回ってきたのか説明できない状態を作らないためです。
+            </p>
+          </div>
+
+          <div className="p-def">
+            <p className="p-def__label">人に残った分も、文面作成だけは肩代わりします</p>
+            <p className="p-def__body">
+              人に残る問い合わせにも、AIが返信の下書きを用意します。
+              判断は人が行い、文章を書く手間だけをAIが引き受ける形です。
+              下書きによる時短分は削減率には含めていません。数字を大きく見せないためです。
+            </p>
+          </div>
+
+          <div className="p-def">
+            <p className="p-def__label">AIの処理はすべてサーバー側で行います</p>
+            <p className="p-def__body">
+              この画面はブラウザだけで動く確認用のため、AIの応答はあらかじめ用意した内容を返しています。
+              実装時は、回答生成も返信下書きの作成もすべてサーバー側で処理し、
+              APIキーがブラウザに露出しない構成にします。
+            </p>
+          </div>
+
+          <div className="p-def">
+            <p className="p-def__label">流入元をまとめる方法</p>
+            <p className="p-def__body">
+              {Object.keys(SOURCES).map((k) => SOURCES[k].label).join("・")}
+              からの受信も、サーバー側で行います。各チャネルのWebhookを受け取り、
+              共通のスキーマに正規化して1つのテーブルに保存することで、この一元管理画面が成り立ちます。
+              送信も同じ経路を逆にたどるため、担当者はチャネルを意識せず返信できます。
+            </p>
+          </div>
+
+          <div className="p-def">
+            <p className="p-def__label">設定の置き場所</p>
+            <p className="p-def__body">
+              選択肢のツリー・AIの応答・ステータス定義は、ファイル冒頭の設定オブジェクト
+              （<code>FAQ_TREE</code> / <code>AI_RESPONSES</code> / <code>STATUSES</code>）にまとめています。
+              ブランドごとの差し替えはこの部分だけで完結します。
+            </p>
+          </div>
+
+          <div className="p-colophon">
+            <p>掲載しているデータは、すべてデモ用の想定値です。実在する企業・人物・実績とは関係ありません。</p>
+            <p>React ＋ Tailwind CSS の1ファイル構成（CDN読み込み・ビルド不要）。意匠は索引ページと共通です。</p>
+            <p>
+              ほかのサンプルは
+              <a href="../../index.html">業務の悩み 索引</a>
+              から見られます。
+            </p>
+          </div>
+        </section>
+      </div>
+    </React.Fragment>
   );
 }
 
 /* ==================================================================
-   【1】お客様側のチャット画面
+   【1】お客さま側の画面
 ================================================================== */
 
 function CustomerChat({ stats, onResolve, onEscalate }) {
@@ -690,164 +1655,138 @@ function CustomerChat({ stats, onResolve, onEscalate }) {
     setStage("closed");
   };
 
+  const stageLabel =
+    stage === "faq" ? "選択式の自動応答"
+    : stage === "ai" ? "AIの自動応答"
+    : stage === "escalate" ? "有人対応へ引き渡し"
+    : "対応完了";
+
   return (
-    <div className="grid gap-5 lg:grid-cols-[1fr_240px]">
-      {/* チャット本体 */}
-      <div className="overflow-hidden rounded-xl border border-stone-300 bg-white shadow-sm">
-        <div className="flex items-center gap-3 border-b border-stone-200 bg-stone-50 px-4 py-3">
-          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-teal-700 text-xs font-bold text-white">
-            CS
-          </span>
-          <div className="leading-tight">
-            <p className="text-sm font-semibold text-stone-800">{BRAND.name} {BRAND.supportName}</p>
-            <p className="text-[11px] text-stone-500">{BRAND.hours}</p>
-          </div>
-          <span
-            className={`ml-auto rounded-full px-2 py-0.5 text-[11px] ring-1 ${
-              stage === "faq"
-                ? "bg-teal-50 text-teal-700 ring-teal-200"
-                : stage === "ai"
-                ? "bg-sky-50 text-sky-700 ring-sky-200"
-                : stage === "escalate"
-                ? "bg-amber-50 text-amber-700 ring-amber-200"
-                : "bg-stone-100 text-stone-500 ring-stone-300"
-            }`}
-          >
-            {stage === "faq" ? "選択式FAQ" : stage === "ai" ? "AI BOT 応対中" : stage === "escalate" ? "有人対応へ" : "対応完了"}
-          </span>
-        </div>
-
-        <div ref={scroller} className="h-[26rem] space-y-3 overflow-y-auto bg-stone-50/60 px-4 py-4 sm:h-[30rem]">
-          {log.map((m, i) => (
-            <Bubble key={i} m={m} />
-          ))}
-
-          {stage === "escalate" && <EscalationForm onSubmit={submitEscalation} />}
-        </div>
-
-        {/* 操作エリア */}
-        <div className="border-t border-stone-200 bg-white px-4 py-3">
-          {pending && (
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={pending === "faq" ? faqSolved : aiSolved}
-                className="rounded-md bg-teal-700 px-4 py-2 text-sm font-medium text-white hover:bg-teal-800"
-              >
-                解決しました
-              </button>
-              <button
-                onClick={pending === "faq" ? toAi : aiFailed}
-                className="rounded-md border border-stone-300 px-4 py-2 text-sm text-stone-700 hover:bg-stone-100"
-              >
-                {pending === "faq" ? "解決しなかった" : "まだ解決していません"}
-              </button>
-            </div>
-          )}
-
-          {!pending && stage === "faq" && options.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {options.map((o) => (
-                <button
-                  key={o.id}
-                  onClick={() => chooseFaq(o)}
-                  className="rounded-md border border-teal-200 bg-teal-50 px-3 py-2 text-left text-sm text-teal-900 hover:border-teal-400 hover:bg-teal-100"
-                >
-                  {o.label}
-                  {o.children && <span className="ml-1 text-teal-500">›</span>}
-                </button>
-              ))}
-              {trail.length > 0 && (
-                <button onClick={reset} className="rounded-md px-3 py-2 text-sm text-stone-500 underline underline-offset-4 hover:text-stone-700">
-                  最初から選び直す
-                </button>
-              )}
-            </div>
-          )}
-
-          {!pending && stage === "ai" && (
-            <div className="space-y-2">
-              <div className="flex gap-2">
-                <input
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") askAi(input); }}
-                  placeholder="お困りの内容をご記入ください"
-                  className="flex-1 rounded-md border border-stone-300 px-3 py-2 text-sm outline-none focus:border-teal-500"
-                />
-                <button
-                  onClick={() => askAi(input)}
-                  className="rounded-md bg-teal-700 px-4 py-2 text-sm font-medium text-white hover:bg-teal-800"
-                >
-                  送信
-                </button>
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {AI_SUGGESTIONS.map((s) => (
-                  <button
-                    key={s}
-                    onClick={() => askAi(s)}
-                    className="rounded-full border border-stone-300 px-2.5 py-1 text-[11px] text-stone-600 hover:border-teal-400 hover:text-teal-800"
-                  >
-                    {s}
-                  </button>
-                ))}
-                <button
-                  onClick={() => { say("user", "担当者につないでほしい"); setStage("escalate"); }}
-                  className="rounded-full border border-amber-300 bg-amber-50 px-2.5 py-1 text-[11px] text-amber-800 hover:bg-amber-100"
-                >
-                  担当者につなぐ
-                </button>
-              </div>
-            </div>
-          )}
-
-          {stage === "closed" && (
-            <button
-              onClick={reset}
-              className="rounded-md border border-stone-300 px-4 py-2 text-sm text-stone-700 hover:bg-stone-100"
-            >
-              最初からやり直す
-            </button>
-          )}
-
-          {stage === "escalate" && (
-            <p className="text-xs text-stone-500">上のフォームにご記入のうえ、送信してください。</p>
-          )}
-        </div>
+    <section className="p-section">
+      <div className="p-heading">
+        <span className="p-heading__no">一</span>
+        <h2 className="p-heading__text">お客さまから見たやり取り</h2>
       </div>
 
-      {/* 端に小さく：どの段階までで何割が解決するか */}
-      <StageRail stage={stage} stats={stats} />
-    </div>
+      <p className="p-lead">
+        まず選択肢で受けます。ここで片づけば人は動きません。
+        選択肢で解決しなければAIが自由入力で受け、それでも解決しなければ担当者に引き渡します。
+        引き渡された分は、運営側の一覧に「人の判断が必要」として1件増えます。
+      </p>
+
+      <div className="p-split">
+        <div className="p-chat">
+          <div className="p-chat__head">
+            <p className="p-chat__shop">{BRAND.name} {BRAND.supportName}</p>
+            <span className="p-chat__hours">{BRAND.hours}</span>
+            <span className="p-actions__spacer" />
+            <span className={stage === "escalate" ? "p-mark p-mark--alert" : stage === "closed" ? "p-mark p-mark--muted" : "p-mark p-mark--strong"}>
+              {stageLabel}
+            </span>
+          </div>
+
+          <div className="p-chat__log" ref={scroller}>
+            {log.map((m, i) => (
+              <Bubble key={i} m={m} />
+            ))}
+
+            {stage === "escalate" ? <EscalationForm onSubmit={submitEscalation} /> : null}
+          </div>
+
+          <div className="p-chat__ctrl">
+            {pending ? (
+              <div className="p-actions">
+                <button
+                  type="button"
+                  className="p-btn p-btn--main"
+                  onClick={pending === "faq" ? faqSolved : aiSolved}
+                >
+                  解決しました
+                </button>
+                <button
+                  type="button"
+                  className="p-btn"
+                  onClick={pending === "faq" ? toAi : aiFailed}
+                >
+                  {pending === "faq" ? "解決しなかった" : "まだ解決していません"}
+                </button>
+              </div>
+            ) : null}
+
+            {!pending && stage === "faq" && options.length > 0 ? (
+              <div className="p-opts">
+                {options.map((o) => (
+                  <button key={o.id} type="button" className="p-opt" onClick={() => chooseFaq(o)}>
+                    {o.label}
+                    {o.children ? <span className="p-opt__more">さらに選ぶ</span> : null}
+                  </button>
+                ))}
+                {trail.length > 0 ? (
+                  <button type="button" className="p-btn p-btn--quiet" onClick={reset}>
+                    最初から選び直す
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+
+            {!pending && stage === "ai" ? (
+              <div>
+                <div className="p-ask">
+                  <input
+                    className="p-ask__input"
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") askAi(input); }}
+                    placeholder="お困りの内容をご記入ください"
+                    aria-label="お困りの内容"
+                  />
+                  <button type="button" className="p-btn p-btn--main" onClick={() => askAi(input)}>送信</button>
+                </div>
+                <div className="p-actions">
+                  {AI_SUGGESTIONS.map((s) => (
+                    <button key={s} type="button" className="p-choice" onClick={() => askAi(s)}>{s}</button>
+                  ))}
+                  <button
+                    type="button"
+                    className="p-btn p-btn--quiet"
+                    onClick={() => { say("user", "担当者につないでほしい"); setStage("escalate"); }}
+                  >
+                    担当者につなぐ
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
+            {stage === "closed" ? (
+              <button type="button" className="p-btn p-btn--main" onClick={reset}>最初からやり直す</button>
+            ) : null}
+
+            {stage === "escalate" ? (
+              <p className="p-note" style={{ margin: 0 }}>上のフォームにご記入のうえ、送信してください。</p>
+            ) : null}
+          </div>
+        </div>
+
+        <StageRail stage={stage} stats={stats} />
+      </div>
+    </section>
   );
 }
 
 function Bubble({ m }) {
-  if (m.from === "user") {
-    return (
-      <div className="flex justify-end">
-        <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-sm bg-teal-700 px-3.5 py-2 text-sm text-white">
-          {m.text}
-        </div>
-      </div>
-    );
-  }
+  const cls =
+    m.from === "user" ? "p-msg p-msg--user"
+    : m.closing ? "p-msg p-msg--bot p-msg--closing"
+    : m.system ? "p-msg p-msg--bot p-msg--system"
+    : "p-msg p-msg--bot";
+
   return (
-    <div className="flex justify-start">
-      <div
-        className={`max-w-[88%] whitespace-pre-wrap rounded-2xl rounded-bl-sm border px-3.5 py-2 text-sm leading-relaxed ${
-          m.closing
-            ? "border-teal-200 bg-teal-50 text-teal-900"
-            : m.system
-            ? "border-stone-200 bg-stone-100 text-stone-600"
-            : "border-stone-200 bg-white text-stone-800"
-        }`}
-      >
-        {m.ai && (
-          <span className="mb-1 block text-[10px] font-medium tracking-wide text-sky-600">AI BOT（サーバー側で生成）</span>
-        )}
+    <div className={cls}>
+      <span className="p-msg__who">{m.from === "user" ? "お客さま" : BRAND.supportName}</span>
+      <span className="p-msg__body">
+        {m.ai ? <span className="p-msg__ai">AIの自動応答（サーバー側で生成）</span> : null}
         {m.text}
-      </div>
+      </span>
     </div>
   );
 }
@@ -866,129 +1805,123 @@ function EscalationForm({ onSubmit }) {
   };
 
   return (
-    <div className="rounded-xl border border-amber-300 bg-white p-4">
-      <p className="mb-1 text-sm font-semibold text-stone-800">担当者へのお問い合わせ</p>
-      <p className="mb-3 text-xs text-stone-500">{ESCALATION_FORM.intro}</p>
+    <div className="p-form">
+      <div className="p-form__head">
+        <h3 className="p-form__title">担当者へのお問い合わせ</h3>
+        <p className="p-form__intro">{ESCALATION_FORM.intro}</p>
+      </div>
 
-      <div className="space-y-3">
-        {ESCALATION_FORM.fields.map((f) => {
-          const bad = touched && f.required && !String(draft[f.key]).trim();
-          const base = `w-full rounded-md border px-3 py-2 text-sm outline-none focus:border-teal-500 ${
-            bad ? "border-rose-400" : "border-stone-300"
-          }`;
-          return (
-            <div key={f.key}>
-              <label className="mb-1 block text-xs text-stone-500">
-                {f.label}
-                {f.required && <span className="ml-1 text-rose-500">必須</span>}
-              </label>
-              {f.type === "textarea" ? (
-                <textarea
-                  rows={3}
-                  value={draft[f.key]}
-                  placeholder={f.placeholder}
-                  onChange={(e) => setDraft((p) => ({ ...p, [f.key]: e.target.value }))}
-                  className={base}
-                />
-              ) : (
-                <input
-                  value={draft[f.key]}
-                  placeholder={f.placeholder}
-                  onChange={(e) => setDraft((p) => ({ ...p, [f.key]: e.target.value }))}
-                  className={base}
-                />
-              )}
-              {bad && <p className="mt-1 text-xs text-rose-600">{f.label}をご記入ください。</p>}
-            </div>
-          );
-        })}
-
-        <div>
-          <label className="mb-1 block text-xs text-stone-500">ご希望の連絡方法</label>
-          <div className="flex flex-wrap gap-2">
-            {Object.entries(SOURCES).map(([k, s]) => (
-              <button
-                key={k}
-                onClick={() => setSource(k)}
-                className={`rounded-md border px-3 py-1.5 text-xs ${
-                  source === k ? "border-teal-600 bg-teal-50 text-teal-800" : "border-stone-300 text-stone-600 hover:bg-stone-50"
-                }`}
-              >
-                {s.label}
-              </button>
-            ))}
+      {ESCALATION_FORM.fields.map((f) => {
+        const bad = touched && f.required && !String(draft[f.key]).trim();
+        const id = `esc-${f.key}`;
+        return (
+          <div className="p-field" key={f.key}>
+            <label className="p-field__label" htmlFor={id}>
+              {f.label}
+              {f.required ? <span className="p-field__req">必須</span> : null}
+            </label>
+            {f.type === "textarea" ? (
+              <textarea
+                id={id}
+                className={`p-input${bad ? " is-error" : ""}`}
+                rows={3}
+                value={draft[f.key]}
+                placeholder={f.placeholder}
+                onChange={(e) => setDraft((p) => ({ ...p, [f.key]: e.target.value }))}
+              />
+            ) : (
+              <input
+                id={id}
+                className={`p-input${bad ? " is-error" : ""}`}
+                value={draft[f.key]}
+                placeholder={f.placeholder}
+                onChange={(e) => setDraft((p) => ({ ...p, [f.key]: e.target.value }))}
+              />
+            )}
+            {bad ? <p className="p-field__err">{f.label}をご記入ください。</p> : null}
           </div>
+        );
+      })}
+
+      <div className="p-field">
+        <span className="p-field__label">ご希望の連絡方法</span>
+        <div className="p-actions">
+          {Object.keys(SOURCES).map((k) => (
+            <button
+              key={k}
+              type="button"
+              className="p-choice"
+              aria-pressed={source === k}
+              onClick={() => setSource(k)}
+            >
+              {SOURCES[k].label}
+            </button>
+          ))}
         </div>
       </div>
 
-      <button
-        onClick={submit}
-        className="mt-4 w-full rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700"
-      >
-        この内容で担当者に送信する
-      </button>
-      <p className="mt-2 text-[11px] leading-relaxed text-stone-500">
-        送信すると、運営側の一元管理画面に「人間対応必要」として追加されます。上部のタブから確認できます。
-      </p>
+      <div className="p-field">
+        <button type="button" className="p-btn p-btn--main" onClick={submit}>
+          この内容で担当者に送信する
+        </button>
+        <p className="p-note">
+          送信すると、運営側の一元管理画面に「{STATUSES.human.label}」として追加されます。
+          上のタブから確認できます。
+        </p>
+      </div>
     </div>
   );
 }
 
-/* 画面の端に小さく出す、段階ごとの想定解決率 */
+/* 段階ごとの想定解決率 */
 function StageRail({ stage, stats }) {
   const shares = { faq: stats.faqShare, ai: stats.aiShare, human: stats.humanShare };
   const active = stage === "faq" ? "faq" : stage === "ai" ? "ai" : stage === "escalate" ? "human" : null;
   let cum = 0;
 
   return (
-    <aside className="lg:sticky lg:top-20 lg:self-start">
-      <div className="rounded-xl border border-stone-300 bg-white p-3">
-        <p className="mb-0.5 text-[11px] font-semibold text-stone-600">この段階までで解決する割合</p>
-        <p className="mb-3 text-[10px] leading-relaxed text-stone-400">直近30日の実績にもとづく想定値</p>
+    <aside className="p-rail">
+      <div className="p-rail__head">
+        <p className="p-rail__title">この段階までで片づく割合</p>
+        <p className="p-rail__note">直近30日の実績にもとづく想定値です。</p>
+      </div>
 
-        <ol className="space-y-2">
-          {STAGE_DEFS.map((s) => {
-            const share = shares[s.key];
-            if (s.key !== "human") cum += share;
-            const isActive = active === s.key;
-            return (
-              <li
-                key={s.key}
-                className={`rounded-lg border px-2.5 py-2 ${
-                  isActive ? "border-teal-400 bg-teal-50" : "border-stone-200 bg-stone-50"
-                }`}
-              >
-                <div className="flex items-baseline justify-between gap-2">
-                  <span className={`text-[11px] font-medium ${isActive ? "text-teal-900" : "text-stone-600"}`}>
-                    {s.label}
-                  </span>
-                  <span className={`text-sm font-bold tabular-nums ${s.key === "human" ? "text-stone-500" : "text-teal-700"}`}>
-                    {pctShort(share)}
-                  </span>
-                </div>
-                {s.key !== "human" ? (
-                  <p className="mt-0.5 text-[10px] text-stone-400">累計 {pctShort(cum)} がここまでで完結</p>
-                ) : (
-                  <p className="mt-0.5 text-[10px] text-stone-400">ここに到達するのは全体の{pctShort(share)}</p>
-                )}
-                <p className="mt-1 text-[10px] leading-relaxed text-stone-500">{s.desc}</p>
-              </li>
-            );
-          })}
-        </ol>
+      <ol className="p-rail__list">
+        {STAGE_DEFS.map((s) => {
+          const share = shares[s.key];
+          if (s.key !== "human") cum += share;
+          const isActive = active === s.key;
+          return (
+            <li
+              key={s.key}
+              className={`p-rail__item${s.key === "human" ? " p-rail__item--human" : ""}${isActive ? " is-active" : ""}`}
+            >
+              <div className="p-rail__row">
+                <span className="p-rail__label">{s.label}</span>
+                <span className="p-rail__pct">{pctShort(share)}</span>
+              </div>
+              {s.key !== "human" ? (
+                <p className="p-rail__cum">ここまでで累計 {pctShort(cum)} が完結</p>
+              ) : (
+                <p className="p-rail__cum">ここに到達するのは全体の {pctShort(share)}</p>
+              )}
+              <p className="p-rail__desc">{s.desc}</p>
+            </li>
+          );
+        })}
+      </ol>
 
-        <div className="mt-3 rounded-lg bg-teal-900 px-2.5 py-2 text-center text-teal-50">
-          <p className="text-[10px] text-teal-300">有人対応 削減率</p>
-          <p className="text-xl font-bold tabular-nums">{pct(stats.rate)}</p>
-          <p className="text-[10px] text-teal-300">目標 {pctShort(TARGET.min)}–{pctShort(TARGET.max)}</p>
-        </div>
+      <div className="p-rail__foot">
+        <p className="p-rail__title">有人対応の削減率</p>
+        <p className="p-rail__big">{pct(stats.rate)}</p>
+        <p className="p-rail__note">目標 {pctShort(TARGET.min)}〜{pctShort(TARGET.max)}</p>
       </div>
     </aside>
   );
 }
 
 /* ==================================================================
-   【2】運営側の一元管理画面
+   【2】運営側の一元管理
 ================================================================== */
 
 function AdminConsole({ stats, inbox, setInbox }) {
@@ -1016,187 +1949,208 @@ function AdminConsole({ stats, inbox, setInbox }) {
     setInbox((p) => p.map((r) => (r.id === id ? { ...r, ...patch } : r)));
 
   return (
-    <div className="space-y-5">
+    <React.Fragment>
       <KpiPanel stats={stats} />
 
-      {/* 絞り込み */}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-stone-300 bg-white px-4 py-3">
-        <span className="text-xs font-semibold text-stone-600">受信トレイ</span>
+      <section className="p-section">
+        <div className="p-heading">
+          <span className="p-heading__no">二</span>
+          <h2 className="p-heading__text">受信トレイ</h2>
+        </div>
 
-        <div className="flex flex-wrap gap-1.5">
-          <FilterChip active={filterStatus === "all"} onClick={() => setFilterStatus("all")}>
-            すべて <span className="tabular-nums">{counts.all}</span>
-          </FilterChip>
+        <p className="p-lead">
+          {Object.keys(SOURCES).map((k) => SOURCES[k].label).join("・")}
+          は、サーバー側で受信した時点で同じ形式に変換しているため、担当者はこの1画面だけを見れば足ります。
+          返信もこの画面から、届いた経路にそのまま返します。
+          「{STATUSES.human.label}」の行には、<strong>なぜ自動返信を止めたのかを1件ずつ書いています</strong>。
+        </p>
+
+        <div className="p-filters">
+          <span className="p-filters__label">状態</span>
+          <button type="button" className="p-choice" aria-pressed={filterStatus === "all"} onClick={() => setFilterStatus("all")}>
+            すべて<span className="p-choice__n">{counts.all}</span>
+          </button>
           {STATUS_ORDER.map((k) => (
-            <FilterChip key={k} active={filterStatus === k} onClick={() => setFilterStatus(k)} dot={STATUSES[k].dot}>
-              {STATUSES[k].label} <span className="tabular-nums">{counts[k]}</span>
-            </FilterChip>
+            <button
+              key={k}
+              type="button"
+              className="p-choice"
+              aria-pressed={filterStatus === k}
+              onClick={() => setFilterStatus(k)}
+            >
+              {STATUSES[k].label}<span className="p-choice__n">{counts[k]}</span>
+            </button>
           ))}
         </div>
 
-        <div className="ml-auto flex flex-wrap items-center gap-1.5">
-          <span className="text-[11px] text-stone-400">流入元</span>
-          <FilterChip active={filterSource === "all"} onClick={() => setFilterSource("all")}>すべて</FilterChip>
-          {Object.entries(SOURCES).map(([k, s]) => (
-            <FilterChip key={k} active={filterSource === k} onClick={() => setFilterSource(k)}>
-              {s.label}
-            </FilterChip>
+        <div className="p-filters">
+          <span className="p-filters__label">流入元</span>
+          <button type="button" className="p-choice" aria-pressed={filterSource === "all"} onClick={() => setFilterSource("all")}>
+            すべて
+          </button>
+          {Object.keys(SOURCES).map((k) => (
+            <button
+              key={k}
+              type="button"
+              className="p-choice"
+              aria-pressed={filterSource === k}
+              onClick={() => setFilterSource(k)}
+            >
+              {SOURCES[k].label}
+            </button>
           ))}
         </div>
-      </div>
 
-      {/* 一覧 */}
-      <div className="overflow-hidden rounded-xl border border-stone-300 bg-white">
-        {rows.length === 0 && (
-          <p className="px-4 py-10 text-center text-sm text-stone-400">該当する問い合わせはありません。</p>
+        {rows.length === 0 ? (
+          <div className="p-empty" style={{ marginTop: "var(--sp-3)" }}>
+            <p>該当する問い合わせはありません。</p>
+          </div>
+        ) : (
+          <ul className="p-list" style={{ marginTop: "var(--sp-3)" }}>
+            {rows.map((r) => (
+              <InboxRow
+                key={r.id}
+                row={r}
+                open={openId === r.id}
+                onToggle={() => setOpenId(openId === r.id ? null : r.id)}
+                onUpdate={(patch) => update(r.id, patch)}
+              />
+            ))}
+          </ul>
         )}
-        {rows.map((r) => (
-          <InboxRow
-            key={r.id}
-            row={r}
-            open={openId === r.id}
-            onToggle={() => setOpenId(openId === r.id ? null : r.id)}
-            onUpdate={(patch) => update(r.id, patch)}
-          />
-        ))}
-      </div>
 
-      <p className="text-xs leading-relaxed text-stone-500">
-        LINE・Gmail・問い合わせフォームは、サーバー側で受信した時点で同じ形式に変換しているため、
-        担当者はこの1画面だけを見れば足ります。返信もこの画面から、届いた経路にそのまま返します。
-      </p>
-    </div>
+        <p className="p-note">
+          行を開くと、届いた本文と、AIが用意した返信文を確認できます。
+          「{STATUSES.human.label}」の行では、下書きを作るところまでをAIに任せ、送るかどうかは人が決めます。
+        </p>
+      </section>
+    </React.Fragment>
   );
 }
 
-function FilterChip({ active, onClick, children, dot }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] transition ${
-        active ? "border-teal-600 bg-teal-700 text-white" : "border-stone-300 bg-white text-stone-600 hover:bg-stone-50"
-      }`}
-    >
-      {dot && <span className={`h-1.5 w-1.5 rounded-full ${active ? "bg-white" : dot}`} />}
-      {children}
-    </button>
-  );
-}
-
-/* 削減率パネル：どの段階で何件減るかを見せる中心 */
+/* 削減率のパネル：どの段階で何件減るかを見せる中心 */
 function KpiPanel({ stats }) {
   const remaining = stats.total - stats.faq;
 
   return (
-    <section className="overflow-hidden rounded-xl border border-teal-900/30 bg-teal-900 text-teal-50 shadow-sm">
-      <div className="grid gap-6 p-5 lg:grid-cols-[1fr_260px]">
-        {/* 左：内訳と段階ごとの減り方 */}
-        <div>
-          <div className="mb-4 flex flex-wrap items-end gap-x-8 gap-y-3">
-            <Kpi label="総問い合わせ数" value={stats.total.toLocaleString()} unit="件" note="直近30日" />
-            <Kpi label="FAQ BOTで解決" value={stats.faq.toLocaleString()} unit="件" note={pct(stats.faqShare)} tone="text-teal-200" />
-            <Kpi label="AI BOTで解決" value={stats.ai.toLocaleString()} unit="件" note={pct(stats.aiShare)} tone="text-teal-200" />
-            <Kpi
-              label="有人対応"
-              value={stats.human.toLocaleString()}
-              unit="件"
-              note={`${pct(stats.humanShare)}／うちAI下書きあり ${stats.withDraft.toLocaleString()}件`}
-              tone="text-amber-200"
-            />
-          </div>
+    <section className="p-section">
+      <div className="p-heading">
+        <span className="p-heading__no">一</span>
+        <h2 className="p-heading__text">どこで何件が片づいているか</h2>
+      </div>
 
-          {/* 積み上げバー */}
-          <div className="relative mb-2">
-            <div className="flex h-9 w-full overflow-hidden rounded-md bg-teal-950/50 text-[11px] font-medium">
-              <div className="flex items-center justify-center bg-teal-500 text-teal-950" style={{ width: pct(stats.faqShare) }}>
-                FAQ {stats.faq.toLocaleString()}
-              </div>
-              <div className="flex items-center justify-center bg-teal-300 text-teal-950" style={{ width: pct(stats.aiShare) }}>
-                AI {stats.ai.toLocaleString()}
-              </div>
-              <div className="flex items-center justify-center bg-amber-300/90 text-amber-950" style={{ width: pct(stats.humanShare) }}>
-                有人 {stats.human.toLocaleString()}
-              </div>
-            </div>
-            {/* 目標帯 50〜70% */}
-            <div
-              className="pointer-events-none absolute inset-y-0 border-x-2 border-dashed border-white/70"
-              style={{ left: pct(TARGET.min), width: pct(TARGET.max - TARGET.min) }}
-            />
-          </div>
-          <div className="relative h-4 text-[10px] text-teal-300">
-            <span className="absolute -translate-x-1/2" style={{ left: pct(TARGET.min) }}>{pctShort(TARGET.min)}</span>
-            <span className="absolute -translate-x-1/2" style={{ left: pct(TARGET.max) }}>{pctShort(TARGET.max)}</span>
-            <span className="absolute right-0">目標帯（点線の内側）</span>
-          </div>
+      <p className="p-lead">
+        直近30日の内訳です。この画面で解決・引き渡しの操作をすると、その分がここに加算されます。
+      </p>
 
-          {/* 段階ごとに何件減るか */}
-          <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
-            <Step value={`${stats.total.toLocaleString()}件`} caption="全問い合わせ" />
-            <Drop text={`FAQ BOT で −${stats.faq.toLocaleString()}`} />
-            <Step value={`${remaining.toLocaleString()}件`} caption="AI BOTへ" />
-            <Drop text={`AI BOT で −${stats.ai.toLocaleString()}`} />
-            <Step value={`${stats.human.toLocaleString()}件`} caption="有人対応" strong />
-          </div>
+      <div className="p-tiles">
+        <div className="p-tile">
+          <p className="p-tile__label">総問い合わせ数</p>
+          <p className="p-tile__num">{stats.total.toLocaleString()}<span className="p-tile__unit">件</span></p>
+          <p className="p-tile__sub">直近30日</p>
         </div>
-
-        {/* 右：削減率 */}
-        <div className="flex flex-col justify-center rounded-lg bg-teal-950/60 p-4 text-center">
-          <p className="text-xs text-teal-300">有人問い合わせ 削減率</p>
-          <p className="my-1 text-5xl font-bold tabular-nums text-white">{pct(stats.rate)}</p>
-          <p className="text-[11px] text-teal-300">
-            （FAQ解決 {stats.faq.toLocaleString()} + AI解決 {stats.ai.toLocaleString()}）÷ {stats.total.toLocaleString()}
-          </p>
-          <p
-            className={`mt-3 rounded-md px-2 py-1.5 text-[11px] font-medium ${
-              stats.inTarget ? "bg-teal-500/20 text-teal-100" : "bg-amber-500/20 text-amber-100"
-            }`}
-          >
-            {stats.inTarget
-              ? `目標 ${pctShort(TARGET.min)}–${pctShort(TARGET.max)} を達成`
-              : `目標 ${pctShort(TARGET.min)}–${pctShort(TARGET.max)} に対して未達`}
-          </p>
-          <p className="mt-2 text-[10px] leading-relaxed text-teal-400">
-            AI下書きを使った{stats.withDraft.toLocaleString()}件は有人対応に数えています。下書きによる時短分は削減率に含めていません。
+        <div className="p-tile">
+          <p className="p-tile__label">選択式で解決</p>
+          <p className="p-tile__num">{stats.faq.toLocaleString()}<span className="p-tile__unit">件</span></p>
+          <p className="p-tile__sub">{pct(stats.faqShare)}／人の対応なし</p>
+        </div>
+        <div className="p-tile">
+          <p className="p-tile__label">AIで解決</p>
+          <p className="p-tile__num">{stats.ai.toLocaleString()}<span className="p-tile__unit">件</span></p>
+          <p className="p-tile__sub">{pct(stats.aiShare)}／人の対応なし</p>
+        </div>
+        <div className="p-tile p-tile--human">
+          <p className="p-tile__label">人に残る</p>
+          <p className="p-tile__num">{stats.human.toLocaleString()}<span className="p-tile__unit">件</span></p>
+          <p className="p-tile__sub">
+            {pct(stats.humanShare)}／うちAI下書きあり {stats.withDraft.toLocaleString()}件
           </p>
         </div>
       </div>
-    </section>
-  );
-}
 
-function Kpi({ label, value, unit, note, tone }) {
-  return (
-    <div>
-      <p className="text-[11px] text-teal-300">{label}</p>
-      <p className={`text-2xl font-bold tabular-nums ${tone || "text-white"}`}>
-        {value}
-        <span className="ml-0.5 text-xs font-normal text-teal-300">{unit}</span>
+      <div className="p-bar">
+        <div className="p-bar__seg p-bar__seg--faq" style={{ width: pct(stats.faqShare) }}>
+          選択式 {stats.faq.toLocaleString()}
+        </div>
+        <div className="p-bar__seg p-bar__seg--ai" style={{ width: pct(stats.aiShare) }}>
+          AI {stats.ai.toLocaleString()}
+        </div>
+        <div className="p-bar__seg p-bar__seg--human" style={{ width: pct(stats.humanShare) }}>
+          人 {stats.human.toLocaleString()}
+        </div>
+      </div>
+
+      <div className="p-scale">
+        <span
+          className="p-scale__band"
+          style={{ left: pct(TARGET.min), width: pct(TARGET.max - TARGET.min) }}
+        />
+        <span
+          className="p-scale__band-label"
+          style={{ left: pct((TARGET.min + TARGET.max) / 2) }}
+        >
+          目標帯 {pctShort(TARGET.min)}〜{pctShort(TARGET.max)}
+        </span>
+        <span className="p-scale__now" style={{ left: pct(stats.rate) }} />
+        <span
+          className="p-scale__now-label"
+          style={stats.rate > 0.75 ? { right: 0 } : { left: pct(stats.rate) }}
+        >
+          いま {pct(stats.rate)}
+        </span>
+      </div>
+
+      <p className={stats.inTarget ? "p-verdict" : "p-verdict p-verdict--miss"}>
+        {stats.inTarget
+          ? `目標 ${pctShort(TARGET.min)}〜${pctShort(TARGET.max)} を満たしています。`
+          : `目標 ${pctShort(TARGET.min)}〜${pctShort(TARGET.max)} に対して外れています。`}
+        {" "}削減率は（選択式 {stats.faq.toLocaleString()} ＋ AI {stats.ai.toLocaleString()}）÷ {stats.total.toLocaleString()} で計算しています。
       </p>
-      {note && <p className="text-[10px] text-teal-400">{note}</p>}
-    </div>
-  );
-}
 
-function Step({ value, caption, strong }) {
-  return (
-    <span
-      className={`rounded-md px-2.5 py-1.5 leading-tight ${
-        strong ? "bg-amber-300/90 text-amber-950" : "bg-teal-950/50 text-teal-100"
-      }`}
-    >
-      <span className="font-bold tabular-nums">{value}</span>
-      <span className="ml-1.5 text-[10px] opacity-80">{caption}</span>
-    </span>
-  );
-}
+      <div className="p-scroll" style={{ marginTop: "var(--sp-4)" }}>
+        <table className="p-table p-table--flow">
+          <thead>
+            <tr>
+              <th>段階</th>
+              <th className="is-num">ここで片づく</th>
+              <th className="is-num">次に残る</th>
+              <th>この段階が受けるもの</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td className="is-name">受け付けた全件</td>
+              <td className="is-num is-plain">—</td>
+              <td className="is-num is-total">{stats.total.toLocaleString()}件</td>
+              <td className="is-plain">直近30日に届いたすべての問い合わせ</td>
+            </tr>
+            <tr>
+              <td className="is-name">{STAGE_DEFS[0].label}</td>
+              <td className="is-num is-total">{stats.faq.toLocaleString()}件</td>
+              <td className="is-num is-plain">{remaining.toLocaleString()}件</td>
+              <td className="is-plain">{STAGE_DEFS[0].desc}</td>
+            </tr>
+            <tr>
+              <td className="is-name">{STAGE_DEFS[1].label}</td>
+              <td className="is-num is-total">{stats.ai.toLocaleString()}件</td>
+              <td className="is-num is-plain">{stats.human.toLocaleString()}件</td>
+              <td className="is-plain">{STAGE_DEFS[1].desc}</td>
+            </tr>
+            <tr>
+              <td className="is-name">{STAGE_DEFS[2].label}</td>
+              <td className="is-num is-plain">—</td>
+              <td className="is-num is-total">{stats.human.toLocaleString()}件</td>
+              <td className="is-plain">{STAGE_DEFS[2].desc}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
 
-function Drop({ text }) {
-  return (
-    <span className="text-[11px] text-teal-300">
-      <span className="mr-1">→</span>
-      {text}
-    </span>
+      <p className="p-note">
+        AI下書きを使った {stats.withDraft.toLocaleString()}件は、人が確認して送っているため有人対応に数えています。
+        下書きによる時短分は削減率に含めていません。
+      </p>
+    </section>
   );
 }
 
@@ -1219,123 +2173,97 @@ function InboxRow({ row, open, onToggle, onUpdate }) {
   const makeDraft = () => onUpdate({ status: "ai_draft", draft: row.autoDraft || DRAFT_TEMPLATE(row) });
 
   return (
-    <div className={`border-b border-stone-200 last:border-b-0 ${row.isNew ? "bg-amber-50/40" : ""}`}>
-      <button onClick={onToggle} className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-stone-50">
-        <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[11px] font-bold ${src.tone}`}>
-          {src.short}
-        </span>
-        <span className="hidden w-28 shrink-0 text-[11px] text-stone-400 sm:block">{src.label}</span>
-
-        <span className="min-w-0 flex-1">
-          <span className="flex items-baseline gap-2">
-            <span className="truncate text-sm font-medium text-stone-800">{row.subject}</span>
-            {row.isNew && (
-              <span className="shrink-0 rounded bg-amber-500 px-1.5 py-0.5 text-[10px] font-medium text-white">NEW</span>
-            )}
+    <li className="p-item">
+      <button type="button" className="p-item__btn" aria-expanded={open} onClick={onToggle}>
+        <span className="p-item__row">
+          <span className="p-item__src"><span className="p-mark">{src.label}</span></span>
+          <span className="p-item__subject">
+            {row.subject}
+            {row.isNew ? <span className="p-item__new">　新着</span> : null}
           </span>
-          <span className="mt-0.5 block truncate text-xs text-stone-500">
-            {row.customer}／{row.body}
-          </span>
+          <span className={markClass(st.tone)}>{st.label}</span>
+          <span className="p-item__time">{row.receivedAt}</span>
         </span>
-
-        <span className={`hidden shrink-0 rounded-full px-2 py-0.5 text-[11px] ring-1 md:inline ${st.chip}`}>
-          {st.label}
-        </span>
-        <span className="hidden w-20 shrink-0 text-right text-[11px] text-stone-400 sm:block">{row.receivedAt}</span>
-        <span className="shrink-0 text-stone-400">{open ? "▾" : "▸"}</span>
+        <span className="p-item__sub">{row.customer}／{row.body}</span>
+        {row.status === "human" && row.reason ? (
+          <span className="p-item__why">自動返信を止めている理由：{row.reason}</span>
+        ) : null}
       </button>
 
-      {open && (
-        <div className="space-y-4 border-t border-stone-200 bg-stone-50 px-4 py-4">
-          <div className="flex flex-wrap items-center gap-2 md:hidden">
-            <span className={`rounded-full px-2 py-0.5 text-[11px] ring-1 ${st.chip}`}>{st.label}</span>
-            <span className="text-[11px] text-stone-400">{row.receivedAt}</span>
+      {open ? (
+        <div className="p-panel">
+          <div className="p-quote">
+            <p className="p-quote__meta">{src.label}／{row.customer}／{row.receivedAt}</p>
+            <p className="p-quote__body">{row.body}</p>
           </div>
 
-          <div className="rounded-lg border border-stone-200 bg-white p-3">
-            <p className="mb-1 text-[11px] text-stone-400">
-              {src.label} / {row.customer} / {row.receivedAt}
-            </p>
-            <p className="whitespace-pre-wrap text-sm leading-relaxed text-stone-700">{row.body}</p>
-          </div>
+          <p className="p-hint">{st.hint}</p>
 
-          <p className="text-[11px] leading-relaxed text-stone-500">{st.hint}</p>
-
-          {row.status === "human" && (
-            <div className="space-y-3">
-              <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs leading-relaxed text-rose-800">
-                <span className="font-semibold">自動返信を止めている理由：</span>
-                {row.reason}
-              </div>
-              <button
-                onClick={makeDraft}
-                className="rounded-md bg-teal-700 px-4 py-2 text-sm font-medium text-white hover:bg-teal-800"
-              >
-                AI下書きを作成する
-              </button>
-              <p className="text-[11px] text-stone-500">
-                下書きを作ると「AI下書きあり・要確認」に変わります。判断は人が行い、文面作成だけをAIが肩代わりします。
+          {row.status === "human" ? (
+            <React.Fragment>
+              <p className="p-reason">
+                <strong>自動返信を止めている理由：</strong>{row.reason}
               </p>
-            </div>
-          )}
+              <p className="p-actions" style={{ margin: 0 }}>
+                <button type="button" className="p-btn p-btn--main" onClick={makeDraft}>
+                  AI下書きを作成する
+                </button>
+              </p>
+              <p className="p-note">
+                下書きを作ると「{STATUSES.ai_draft.label}」に変わります。
+                判断は人が行い、文面作成だけをAIが肩代わりします。
+              </p>
+            </React.Fragment>
+          ) : null}
 
-          {(row.status === "ai_draft" || row.status === "ai_resolved" || row.status === "done") && (
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <p className="text-xs font-semibold text-stone-600">
-                  {row.status === "ai_draft" ? "AIが用意した返信文（編集できます）" : "送信済みの返信文"}
-                </p>
-                {row.status === "ai_draft" && (
-                  <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[10px] text-sky-700">サーバー側でAIが生成</span>
-                )}
-              </div>
+          {row.status === "ai_draft" || row.status === "ai_resolved" || row.status === "done" ? (
+            <div>
+              <p className="p-draft__label">
+                {row.status === "ai_draft" ? "AIが用意した返信文（編集できます）" : "送信済みの返信文"}
+                {row.status === "ai_draft" ? <span className="p-draft__tag">サーバー側でAIが生成</span> : null}
+              </p>
 
               <textarea
+                className="p-input"
                 rows={8}
                 value={text}
                 readOnly={row.status !== "ai_draft"}
+                aria-label="返信文"
                 onChange={(e) => setText(e.target.value)}
-                className={`w-full rounded-lg border px-3 py-2 text-sm leading-relaxed outline-none ${
-                  row.status === "ai_draft"
-                    ? "border-stone-300 bg-white focus:border-teal-500"
-                    : "border-stone-200 bg-stone-100 text-stone-500"
-                }`}
               />
 
-              {row.status === "ai_draft" && (
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    onClick={send}
-                    className="rounded-md bg-teal-700 px-4 py-2 text-sm font-medium text-white hover:bg-teal-800"
-                  >
-                    この内容で{src.label}に返信する
-                  </button>
-                  <button
-                    onClick={() => onUpdate({ status: "human", reason: "担当者の判断で、AI下書きの利用を取りやめました。" })}
-                    className="rounded-md border border-stone-300 px-4 py-2 text-sm text-stone-700 hover:bg-stone-100"
-                  >
-                    人間対応に戻す
-                  </button>
-                  <span className="text-[11px] text-stone-400">返信は届いた経路（{src.label}）にそのまま返します。</span>
-                </div>
-              )}
+              {row.status === "ai_draft" ? (
+                <React.Fragment>
+                  <div className="p-actions" style={{ marginTop: "var(--sp-3)" }}>
+                    <button type="button" className="p-btn p-btn--main" onClick={send}>
+                      この内容で{src.label}に返信する
+                    </button>
+                    <button
+                      type="button"
+                      className="p-btn"
+                      onClick={() => onUpdate({ status: "human", reason: "担当者の判断で、AI下書きの利用を取りやめました。" })}
+                    >
+                      人の判断に戻す
+                    </button>
+                  </div>
+                  <p className="p-note">返信は届いた経路（{src.label}）にそのまま返します。</p>
+                </React.Fragment>
+              ) : null}
 
-              {row.status === "done" && (
-                <p className="text-[11px] text-stone-500">
-                  対応者：{row.handledBy || "—"}{sent && " ／ 送信しました"}
-                </p>
-              )}
+              {row.status === "done" ? (
+                <p className="p-note">対応者：{row.handledBy || "—"}{sent ? "／送信しました" : ""}</p>
+              ) : null}
 
-              {row.status === "ai_resolved" && (
-                <p className="text-[11px] text-teal-700">
+              {row.status === "ai_resolved" ? (
+                <p className="p-note">
                   この問い合わせはAIが自動で返信し、人の手を介さずに完結しました。削減率に算入されています。
                 </p>
-              )}
+              ) : null}
             </div>
-          )}
+          ) : null}
         </div>
-      )}
-    </div>
+      ) : null}
+    </li>
   );
 }
 

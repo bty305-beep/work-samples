@@ -3,26 +3,778 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>予約・受付システム デモ | サロン・飲食店・教室で使える予約管理</title>
-<meta name="description" content="お客さま向けの予約画面と店舗向けの管理画面。重複予約の防止、時間軸での空き状況表示、CSV出力に対応。">
+<title>予約・受付システム デモ | ネット予約と電話予約を1つの台帳にまとめる</title>
+<meta name="description" content="お客さま向けの予約画面と店舗向けの管理画面を持つ予約システムのデモです。ネットからの予約も電話で受けた予約も同じ台帳に入るため、二重予約が起きません。サロン・飲食店・教室に切り替えられます。掲載データはすべてデモ用の想定値です。">
 <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <script src="https://cdn.tailwindcss.com"></script>
+<style>
+/* ------------------------------------------------------------------
+   :root のトークンは索引ページ（リポジトリ直下の index.html）から
+   そのまま持ってきています。ここで新しい色や寸法は作っていません。
+------------------------------------------------------------------ */
+:root {
+  --c-base:         #ffffff;
+  --c-paper:        #f5f1e8;
+  --c-ink:          #1b1c1e;
+  --c-ink-2:        #4c4f54;
+  --c-ink-3:        #7d8087;
+  --c-rule:         #ddd7c8;
+  --c-rule-strong:  #b3ab98;
+  --c-accent:       #2d4257;
+  --c-accent-tint:  #eef1f3;
+  --c-caution:      #9c463b;
+  --c-caution-tint: #f3e9e6;
+  --font-mincho: "Hiragino Mincho ProN","Yu Mincho","YuMincho","MS PMincho","Noto Serif JP",serif;
+  --font-gothic: "Hiragino Kaku Gothic ProN","Hiragino Sans","Yu Gothic","YuGothic",Meiryo,"Noto Sans JP",sans-serif;
+  --fs-note:  13px;  --fs-body: 15px;  --fs-sub: 18px;  --fs-head: 24px;  --fs-title: 33px;
+  --lh-body: 1.9;  --lh-head: 1.45;  --ls-body: 0.04em;  --ls-head: 0.06em;
+  --sp-1: 4px;  --sp-2: 8px;  --sp-3: 16px;  --sp-4: 32px;  --sp-5: 64px;
+  --rule-1: 1px;  --rule-2: 2px;
+}
+
+html { -webkit-text-size-adjust: 100%; }
+
+/* Tailwind の preflight は実行時に head の末尾へ挿入されるため、
+   body と a はセレクタの詳細度を上げて上書きされないようにしています。 */
+html body {
+  margin: 0;
+  background: var(--c-base);
+  color: var(--c-ink);
+  font-family: var(--font-gothic);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  letter-spacing: var(--ls-body);
+  text-align: left;
+}
+
+*, *::before, *::after { border-radius: 0; box-shadow: none; }
+
+body a {
+  color: var(--c-accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+body a:hover { text-decoration-thickness: 2px; }
+
+:focus-visible { outline: var(--rule-2) solid var(--c-accent); outline-offset: 2px; }
+
+/* ------------------------------------------------------------------
+   版面
+------------------------------------------------------------------ */
+.p-topbar { border-top: 3px solid var(--c-accent); }
+
+.p-sheet {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 0 var(--sp-3);
+}
+
+.p-section { padding-top: var(--sp-5); }
+.p-section:last-of-type { padding-bottom: var(--sp-5); }
+
+/* ------------------------------------------------------------------
+   ヘッダー
+------------------------------------------------------------------ */
+.p-masthead { padding-top: var(--sp-4); padding-bottom: var(--sp-4); }
+
+.p-masthead__kicker {
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-head);
+  color: var(--c-ink-3);
+  margin: 0 0 var(--sp-2);
+}
+
+.p-masthead__title {
+  font-family: var(--font-mincho);
+  font-size: var(--fs-title);
+  line-height: var(--lh-head);
+  letter-spacing: var(--ls-head);
+  font-weight: 600;
+  color: var(--c-ink);
+  margin: 0;
+  padding-bottom: var(--sp-3);
+  border-bottom: var(--rule-2) solid var(--c-accent);
+}
+
+.p-masthead__lead {
+  margin: var(--sp-3) 0 0;
+  max-width: 42em;
+  color: var(--c-ink-2);
+}
+
+.p-masthead__meta {
+  margin: var(--sp-3) 0 0;
+  font-size: var(--fs-note);
+  color: var(--c-ink-3);
+}
+
+.p-masthead__meta a { margin-left: var(--sp-2); }
+
+/* ------------------------------------------------------------------
+   注記帯
+------------------------------------------------------------------ */
+.p-notice {
+  margin-top: var(--sp-4);
+  background: var(--c-caution-tint);
+  border-left: 3px solid var(--c-caution);
+  padding: var(--sp-3);
+}
+
+.p-notice__title {
+  margin: 0 0 var(--sp-1);
+  font-size: var(--fs-note);
+  font-weight: 700;
+  letter-spacing: var(--ls-head);
+  color: var(--c-caution);
+}
+
+.p-notice__body {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-note);
+  line-height: 1.8;
+  color: var(--c-ink-2);
+}
+
+.p-notice__body:last-child { margin-bottom: 0; }
+
+/* ------------------------------------------------------------------
+   節見出し
+------------------------------------------------------------------ */
+.p-heading {
+  margin: 0 0 var(--sp-3);
+  padding-bottom: var(--sp-2);
+  border-bottom: var(--rule-2) solid var(--c-rule-strong);
+}
+
+.p-heading__no {
+  display: block;
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-head);
+  color: var(--c-accent);
+  margin-bottom: var(--sp-1);
+}
+
+.p-heading__text {
+  font-family: var(--font-mincho);
+  font-size: var(--fs-head);
+  line-height: var(--lh-head);
+  letter-spacing: var(--ls-head);
+  font-weight: 600;
+  margin: 0;
+}
+
+.p-lead {
+  margin: 0 0 var(--sp-3);
+  max-width: 44em;
+  color: var(--c-ink-2);
+}
+
+.p-note {
+  margin: var(--sp-2) 0 0;
+  font-size: var(--fs-note);
+  line-height: 1.8;
+  color: var(--c-ink-3);
+}
+
+/* ------------------------------------------------------------------
+   業種の切り替え
+------------------------------------------------------------------ */
+.p-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-2);
+  padding-bottom: var(--sp-3);
+  font-size: var(--fs-note);
+  color: var(--c-ink-3);
+}
+
+.p-toolbar__label {
+  flex: 0 0 auto;
+  width: 4em;
+  letter-spacing: var(--ls-head);
+  color: var(--c-ink-2);
+}
+
+.p-choice {
+  font-family: var(--font-gothic);
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-body);
+  color: var(--c-ink-2);
+  background: var(--c-base);
+  border: var(--rule-1) solid var(--c-rule-strong);
+  padding: var(--sp-1) var(--sp-2);
+  cursor: pointer;
+}
+
+.p-choice:hover { background: var(--c-accent-tint); }
+
+.p-choice[aria-pressed="true"] {
+  color: var(--c-accent);
+  font-weight: 700;
+  background: var(--c-accent-tint);
+  border-color: var(--c-accent);
+}
+
+/* ------------------------------------------------------------------
+   画面の切り替え（罫線で下線を引くだけの札）
+------------------------------------------------------------------ */
+.p-tabs {
+  display: flex;
+  overflow-x: auto;
+  border-top: var(--rule-1) solid var(--c-rule);
+  border-bottom: var(--rule-2) solid var(--c-rule-strong);
+}
+
+.p-tab {
+  flex: 0 0 auto;
+  font-family: var(--font-gothic);
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-body);
+  white-space: nowrap;
+  padding: var(--sp-2) var(--sp-3);
+  margin-bottom: -2px;
+  color: var(--c-ink-2);
+  background: transparent;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  cursor: pointer;
+}
+
+.p-tab:hover { background: var(--c-accent-tint); }
+
+.p-tab[aria-current="page"] {
+  color: var(--c-accent);
+  font-weight: 700;
+  border-bottom-color: var(--c-accent);
+}
+
+/* ------------------------------------------------------------------
+   台帳が1つであることの説明
+------------------------------------------------------------------ */
+.p-scope {
+  border-left: 3px solid var(--c-accent);
+  background: var(--c-accent-tint);
+  padding: var(--sp-3);
+  margin-bottom: var(--sp-3);
+}
+
+.p-scope p { margin: 0; }
+.p-scope__sub { margin-top: var(--sp-1) !important; font-size: var(--fs-note); color: var(--c-ink-2); }
+.p-scope strong { font-weight: 700; color: var(--c-accent); }
+
+/* 集計 */
+.p-tiles {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-4);
+}
+
+.p-tile {
+  border-top: var(--rule-2) solid var(--c-accent);
+  border-bottom: var(--rule-1) solid var(--c-rule-strong);
+  padding: var(--sp-2) 0 var(--sp-3);
+  min-width: 0;
+}
+
+.p-tile__label {
+  margin: 0 0 var(--sp-1);
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-head);
+  color: var(--c-ink-2);
+}
+
+.p-tile__num {
+  margin: 0;
+  font-size: var(--fs-title);
+  line-height: 1.25;
+  font-weight: 700;
+  color: var(--c-accent);
+  font-feature-settings: "tnum" 1;
+}
+
+.p-tile__unit { font-size: var(--fs-sub); font-weight: 500; margin-left: 2px; }
+
+.p-tile__sub {
+  margin: var(--sp-1) 0 0;
+  font-size: var(--fs-note);
+  line-height: 1.7;
+  color: var(--c-ink-3);
+}
+
+/* ------------------------------------------------------------------
+   ボタン
+------------------------------------------------------------------ */
+.p-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+}
+
+.p-actions__spacer { flex: 1 1 auto; }
+
+.p-btn {
+  font-family: var(--font-gothic);
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-body);
+  color: var(--c-accent);
+  background: var(--c-accent-tint);
+  border: var(--rule-1) solid var(--c-rule-strong);
+  padding: var(--sp-1) var(--sp-2);
+  cursor: pointer;
+}
+
+.p-btn:hover { background: var(--c-base); }
+.p-btn:disabled { color: var(--c-ink-3); background: var(--c-base); border-color: var(--c-rule); cursor: not-allowed; }
+
+.p-btn--main {
+  font-size: var(--fs-body);
+  font-weight: 700;
+  background: var(--c-base);
+  border: var(--rule-2) solid var(--c-accent);
+  padding: var(--sp-2) var(--sp-3);
+}
+
+.p-btn--main:hover { background: var(--c-accent-tint); }
+
+.p-btn--quiet { color: var(--c-ink-2); background: var(--c-base); }
+
+/* ------------------------------------------------------------------
+   選ぶ（メニュー・日付・時間）
+------------------------------------------------------------------ */
+.p-picks {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--sp-2);
+}
+
+.p-pick {
+  font-family: var(--font-gothic);
+  font-size: var(--fs-body);
+  letter-spacing: var(--ls-body);
+  text-align: left;
+  color: var(--c-ink-2);
+  background: var(--c-base);
+  border: var(--rule-1) solid var(--c-rule-strong);
+  padding: var(--sp-2);
+  cursor: pointer;
+  min-width: 0;
+}
+
+.p-pick:hover { background: var(--c-accent-tint); }
+
+.p-pick[aria-pressed="true"] {
+  background: var(--c-accent-tint);
+  border-color: var(--c-accent);
+}
+
+.p-pick__name { display: block; font-weight: 700; color: var(--c-ink); line-height: var(--lh-head); }
+.p-pick[aria-pressed="true"] .p-pick__name { color: var(--c-accent); }
+
+.p-pick__meta {
+  display: block;
+  margin-top: var(--sp-1);
+  font-size: var(--fs-note);
+  color: var(--c-ink-2);
+  font-feature-settings: "tnum" 1;
+}
+
+.p-slots { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+
+.p-slot {
+  font-family: var(--font-gothic);
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-body);
+  min-width: 4.6em;
+  text-align: center;
+  color: var(--c-ink-2);
+  background: var(--c-base);
+  border: var(--rule-1) solid var(--c-rule-strong);
+  padding: var(--sp-1) var(--sp-2);
+  cursor: pointer;
+  font-feature-settings: "tnum" 1;
+}
+
+.p-slot:hover:not(:disabled) { background: var(--c-accent-tint); }
+
+.p-slot[aria-pressed="true"] {
+  color: var(--c-accent);
+  font-weight: 700;
+  background: var(--c-accent-tint);
+  border-color: var(--c-accent);
+}
+
+.p-slot:disabled {
+  color: var(--c-ink-3);
+  background: var(--c-paper);
+  border-color: var(--c-rule);
+  cursor: not-allowed;
+  text-decoration: line-through;
+}
+
+.p-slot--closed:disabled { text-decoration: none; }
+
+.p-slot__d1 { display: block; }
+.p-slot__d2 { display: block; font-size: var(--fs-note); }
+
+/* ------------------------------------------------------------------
+   受付の完了
+------------------------------------------------------------------ */
+.p-done {
+  border-top: var(--rule-2) solid var(--c-accent);
+  border-bottom: var(--rule-1) solid var(--c-rule-strong);
+  padding: var(--sp-2) 0 var(--sp-3);
+  margin-bottom: var(--sp-4);
+}
+
+.p-done__label {
+  margin: 0 0 var(--sp-1);
+  font-size: var(--fs-note);
+  font-weight: 700;
+  letter-spacing: var(--ls-head);
+  color: var(--c-accent);
+}
+
+.p-done__when {
+  margin: 0;
+  font-family: var(--font-mincho);
+  font-size: var(--fs-head);
+  line-height: var(--lh-head);
+  letter-spacing: var(--ls-head);
+  font-weight: 600;
+  color: var(--c-ink);
+  font-feature-settings: "tnum" 1;
+}
+
+.p-done__body { margin: var(--sp-1) 0 0; color: var(--c-ink-2); }
+.p-done__note { margin: var(--sp-2) 0 0; font-size: var(--fs-note); color: var(--c-ink-3); }
+
+/* ------------------------------------------------------------------
+   時間軸
+------------------------------------------------------------------ */
+.p-scroll {
+  overflow-x: auto;
+  border-top: var(--rule-2) solid var(--c-rule-strong);
+  border-bottom: var(--rule-2) solid var(--c-rule-strong);
+}
+
+/* 右端の目盛りは中央揃えで置くため、はみ出さないよう右に余白を取ります */
+.p-chart { min-width: 640px; padding: var(--sp-3) 2em var(--sp-3) 0; }
+
+.p-chart__axis { display: flex; align-items: flex-end; }
+
+.p-chart__gutter { flex: 0 0 auto; width: 7em; }
+
+.p-chart__ticks {
+  position: relative;
+  flex: 1 1 auto;
+  height: 1.6em;
+  font-size: var(--fs-note);
+  color: var(--c-ink-3);
+  font-feature-settings: "tnum" 1;
+}
+
+.p-chart__tick { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+
+.p-chart__row {
+  display: flex;
+  align-items: center;
+  padding: var(--sp-1) 0;
+  border-top: var(--rule-1) solid var(--c-rule);
+}
+
+.p-chart__name {
+  flex: 0 0 auto;
+  width: 7em;
+  padding-right: var(--sp-2);
+  box-sizing: border-box;
+  font-size: var(--fs-note);
+  color: var(--c-ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.p-chart__track {
+  position: relative;
+  flex: 1 1 auto;
+  height: 30px;
+  background: var(--c-paper);
+  border: var(--rule-1) solid var(--c-rule);
+}
+
+.p-chart__bar {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  padding: 0 var(--sp-1);
+  box-sizing: border-box;
+  font-size: var(--fs-note);
+  line-height: 1.3;
+  color: var(--c-base);
+  background: var(--c-accent);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.p-chart__bar--visited { background: var(--c-ink-2); }
+.p-chart__bar--noshow { background: var(--c-caution); }
+
+.p-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  margin: var(--sp-2) 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-note);
+  color: var(--c-ink-2);
+}
+
+.p-legend__swatch {
+  display: inline-block;
+  width: 1.6em;
+  height: 0.8em;
+  margin-right: var(--sp-1);
+  vertical-align: -1px;
+  background: var(--c-accent);
+  border: var(--rule-1) solid var(--c-rule-strong);
+}
+
+.p-legend__swatch--visited { background: var(--c-ink-2); }
+.p-legend__swatch--noshow { background: var(--c-caution); }
+.p-legend__swatch--free { background: var(--c-paper); }
+
+/* ------------------------------------------------------------------
+   表
+------------------------------------------------------------------ */
+.p-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-note);
+  line-height: 1.75;
+}
+
+.p-table--ledger { min-width: 820px; }
+
+.p-table th, .p-table td {
+  padding: var(--sp-2);
+  border-bottom: var(--rule-1) solid var(--c-rule);
+  text-align: left;
+  vertical-align: top;
+}
+
+.p-table thead th {
+  background: var(--c-paper);
+  border-bottom: var(--rule-1) solid var(--c-rule-strong);
+  font-weight: 700;
+  color: var(--c-ink-2);
+  letter-spacing: var(--ls-head);
+  white-space: nowrap;
+}
+
+.p-table tbody tr:last-child td { border-bottom: 0; }
+.p-table tbody tr:hover td { background: var(--c-accent-tint); }
+
+.p-table .is-time { white-space: nowrap; font-feature-settings: "tnum" 1; font-weight: 700; color: var(--c-ink); }
+.p-table .is-plain { color: var(--c-ink-2); }
+.p-table .is-act { text-align: right; white-space: nowrap; }
+
+.p-table__name { display: block; color: var(--c-ink); }
+.p-table__tel { display: block; font-size: var(--fs-note); color: var(--c-ink-3); font-feature-settings: "tnum" 1; }
+.p-table__note { display: block; margin-top: 2px; font-size: var(--fs-note); color: var(--c-ink-2); white-space: normal; }
+
+/* 札（受付経路・状態） */
+.p-mark {
+  display: inline-block;
+  white-space: nowrap;
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-head);
+  padding: 0 var(--sp-2);
+  border: var(--rule-1) solid var(--c-rule-strong);
+  background: var(--c-base);
+  color: var(--c-ink-2);
+}
+
+.p-mark--strong { background: var(--c-accent-tint); border-color: var(--c-accent); color: var(--c-accent); font-weight: 700; }
+.p-mark--muted { border-color: var(--c-rule); color: var(--c-ink-3); }
+.p-mark--alert { background: var(--c-caution-tint); border-color: var(--c-caution); color: var(--c-caution); font-weight: 700; }
+
+.p-empty {
+  padding: var(--sp-4) var(--sp-2);
+  border-top: var(--rule-2) solid var(--c-rule-strong);
+  border-bottom: var(--rule-2) solid var(--c-rule-strong);
+  color: var(--c-ink-2);
+}
+
+.p-empty p { margin: 0; }
+.p-empty p + p { margin-top: var(--sp-1); font-size: var(--fs-note); color: var(--c-ink-3); }
+
+/* ------------------------------------------------------------------
+   入力
+------------------------------------------------------------------ */
+.p-form {
+  border-top: var(--rule-2) solid var(--c-accent);
+  border-bottom: var(--rule-2) solid var(--c-rule-strong);
+  padding-bottom: var(--sp-3);
+}
+
+.p-form__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-2);
+  padding: var(--sp-2) 0 var(--sp-3);
+  border-bottom: var(--rule-1) solid var(--c-rule);
+}
+
+.p-form__title {
+  font-family: var(--font-mincho);
+  font-size: var(--fs-sub);
+  line-height: var(--lh-head);
+  letter-spacing: var(--ls-head);
+  font-weight: 600;
+  margin: 0;
+}
+
+.p-form__when {
+  font-size: var(--fs-note);
+  color: var(--c-ink-2);
+  font-feature-settings: "tnum" 1;
+}
+
+.p-form__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-3);
+  padding-top: var(--sp-3);
+}
+
+.p-field { min-width: 0; }
+.p-field--wide { grid-column: 1 / -1; }
+
+.p-field__label {
+  display: block;
+  margin-bottom: var(--sp-1);
+  font-size: var(--fs-note);
+  font-weight: 700;
+  letter-spacing: var(--ls-head);
+  color: var(--c-ink-2);
+}
+
+.p-field__req { margin-left: var(--sp-2); font-weight: 400; color: var(--c-caution); }
+
+.p-input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  font-family: var(--font-gothic);
+  font-size: var(--fs-body);
+  line-height: 1.7;
+  letter-spacing: var(--ls-body);
+  color: var(--c-ink);
+  background: var(--c-base);
+  border: var(--rule-1) solid var(--c-rule-strong);
+  padding: var(--sp-1) var(--sp-2);
+}
+
+.p-input:focus { border-color: var(--c-accent); }
+.p-input.is-error { border-color: var(--c-caution); border-width: var(--rule-2); }
+
+.p-field__err { margin: var(--sp-1) 0 0; font-size: var(--fs-note); color: var(--c-caution); }
+
+.p-form__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  padding-top: var(--sp-3);
+}
+
+/* ------------------------------------------------------------------
+   説明
+------------------------------------------------------------------ */
+.p-def { margin: 0 0 var(--sp-4); }
+
+.p-def__label {
+  margin: 0 0 var(--sp-1);
+  font-size: var(--fs-note);
+  font-weight: 700;
+  letter-spacing: var(--ls-head);
+  color: var(--c-accent);
+}
+
+.p-def__body { margin: 0; color: var(--c-ink); max-width: 44em; }
+
+.p-def__body code {
+  font-family: "SFMono-Regular", Consolas, "Courier New", monospace;
+  font-size: var(--fs-note);
+  background: var(--c-paper);
+  padding: 0 var(--sp-1);
+}
+
+.p-colophon {
+  margin-top: var(--sp-4);
+  padding-top: var(--sp-3);
+  border-top: var(--rule-2) solid var(--c-rule-strong);
+  font-size: var(--fs-note);
+  color: var(--c-ink-3);
+}
+
+.p-colophon p { margin: 0 0 var(--sp-1); }
+.p-colophon p:last-child { margin-bottom: 0; }
+
+/* ------------------------------------------------------------------
+   スマートフォン
+------------------------------------------------------------------ */
+@media (max-width: 860px) {
+  .p-tiles { grid-template-columns: 1fr 1fr; }
+}
+
+@media (max-width: 640px) {
+  :root {
+    --fs-title: 26px;
+    --fs-head: 20px;
+    --fs-sub: 17px;
+    --sp-5: 48px;
+  }
+
+  .p-sheet { padding: 0 var(--sp-2); }
+  .p-toolbar__label { width: 100%; }
+  .p-picks { grid-template-columns: 1fr; }
+  .p-form__grid { grid-template-columns: 1fr; }
+  .p-tiles { grid-template-columns: 1fr; }
+  .p-tile__num { font-size: 28px; }
+}
+</style>
 </head>
 <body>
-<p style="margin:0;padding:10px 16px;background:#f3e9e6;border-bottom:2px solid #9c463b;color:#4c4f54;font:13px/1.7 'Hiragino Kaku Gothic ProN','Hiragino Sans','Yu Gothic',YuGothic,Meiryo,'Noto Sans JP',sans-serif;letter-spacing:0.04em;">
-<span style="color:#9c463b;font-weight:700;">デモ用の想定値です。</span>この画面に表示される予約・売上・お客さまの情報は、動作確認のために用意した想定値であり、実在する店舗の実績値ではありません。
-</p>
 <div id="root"></div>
 <script>Babel.registerPreset("react-classic", { presets: [[Babel.availablePresets["react"], { runtime: "classic" }]] });</script>
 <script type="text/babel" data-presets="react-classic">
 const { useState, useMemo } = React;
 
-/* ------------------------------------------------------------------
+/* ==================================================================
    業種定義。ここを差し替えるだけで別業種の予約システムになります。
    実案件では管理画面から編集できるようにし、DBに持たせます。
------------------------------------------------------------------- */
+
+   例：
+     ・自動車整備（resourceLabel = ピット、menus = 車検／オイル交換）
+     ・写真スタジオ（resourceLabel = スタジオ、menus = 七五三／証明写真）
+
+   画面のコードはメニュー名も担当名も直接持っていません。すべて下の
+   menus / resources / open / close / closedDays / askFields を見て、
+   選択肢・空き枠・入力欄・時間軸を組み立てています。
+================================================================== */
+
 const BUSINESSES = {
   salon: {
     label: "サロン・整体",
@@ -77,11 +829,18 @@ const BUSINESSES = {
   },
 };
 
+/* 受付の入口。入口は複数ありますが、行き先の台帳は1つだけです。 */
+const CHANNELS = {
+  net: { label: "ネット", desc: "お客さま画面から入った予約" },
+  phone: { label: "電話", desc: "店舗が電話で受けて台帳に入れた予約" },
+};
+
+/* 状態。tone は濃淡の区分名です。臙脂を使うのは alert だけにしています。 */
 const STATUS = {
-  reserved: { label: "予約済み", tone: "bg-emerald-50 text-emerald-800 ring-emerald-200" },
-  visited: { label: "来店済み", tone: "bg-stone-100 text-stone-600 ring-stone-300" },
-  canceled: { label: "キャンセル", tone: "bg-stone-50 text-stone-400 ring-stone-200" },
-  noshow: { label: "無断キャンセル", tone: "bg-rose-50 text-rose-700 ring-rose-200" },
+  reserved: { label: "予約済み", tone: "strong" },
+  visited: { label: "来店済み", tone: "plain" },
+  canceled: { label: "キャンセル", tone: "muted" },
+  noshow: { label: "無断キャンセル", tone: "alert" },
 };
 
 const toMin = (hhmm) => {
@@ -89,8 +848,17 @@ const toMin = (hhmm) => {
   return h * 60 + m;
 };
 const toHHMM = (min) => `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
-const ymd = (d) => d.toISOString().slice(0, 10);
+// 端末の暦日で組み立てます（協定世界時に寄せると、日付の表示と鍵がずれます）
+const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const jpDay = ["日", "月", "火", "水", "木", "金", "土"];
+const mdLabel = (dateStr) => {
+  const [, m, d] = dateStr.split("-").map(Number);
+  return `${m}月${d}日`;
+};
+const dayOfWeek = (dateStr) => {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return new Date(y, m - 1, d).getDay();
+};
 
 const today = new Date();
 const dayAfter = (n) => {
@@ -99,33 +867,73 @@ const dayAfter = (n) => {
   return d;
 };
 
+// 今日から7日のうち、営業している日だけを拾います。
+// 定休日は曜日で決まるため、いつ開いても画面が定休日から始まらないようにしています。
+const openOffsets = (biz) => [0, 1, 2, 3, 4, 5, 6].filter((n) => !biz.closedDays.includes(dayAfter(n).getDay()));
+const firstOpenOffset = (biz) => (openOffsets(biz)[0] ?? 0);
+const firstOpenDate = (biz) => ymd(dayAfter(firstOpenOffset(biz)));
+// 見本の予約を置く日。n番目に営業している日を返します。
+const seedDate = (bizKey, n) => {
+  const offs = openOffsets(BUSINESSES[bizKey]);
+  return ymd(dayAfter(offs[Math.min(n, offs.length - 1)] ?? 0));
+};
+
 const SEED = {
   salon: [
-    { id: 1, date: ymd(today), start: "11:00", menuId: "m1", resource: "高梨", name: "村瀬 咲", tel: "090-1234-5678", status: "visited", note: "腰の張り" },
-    { id: 2, date: ymd(today), start: "14:30", menuId: "m2", resource: "白石", name: "堀内 亮太", tel: "080-2222-1111", status: "reserved", note: "" },
-    { id: 3, date: ymd(dayAfter(1)), start: "10:00", menuId: "m3", resource: "高梨", name: "斉藤 みか", tel: "070-3333-4444", status: "reserved", note: "産後4ヶ月" },
+    { id: 1, date: seedDate("salon", 0), start: "11:00", menuId: "m1", resource: "高梨", name: "村瀬 咲", tel: "090-1234-5678", status: "visited", channel: "net", note: "腰の張り" },
+    { id: 2, date: seedDate("salon", 0), start: "14:30", menuId: "m2", resource: "白石", name: "堀内 亮太", tel: "080-2222-1111", status: "reserved", channel: "phone", note: "" },
+    { id: 3, date: seedDate("salon", 1), start: "10:00", menuId: "m3", resource: "高梨", name: "斉藤 みか", tel: "070-3333-4444", status: "reserved", channel: "net", note: "産後4ヶ月" },
   ],
   restaurant: [
-    { id: 1, date: ymd(today), start: "18:00", menuId: "m1", resource: "テーブルA", name: "金子", tel: "090-5555-6666", status: "reserved", people: 4, note: "甲殻類アレルギーあり" },
-    { id: 2, date: ymd(today), start: "19:30", menuId: "m2", resource: "カウンター", name: "山内", tel: "080-7777-8888", status: "reserved", people: 2, note: "" },
+    { id: 1, date: seedDate("restaurant", 0), start: "18:00", menuId: "m1", resource: "テーブルA", name: "金子", tel: "090-5555-6666", status: "reserved", channel: "phone", people: 4, note: "甲殻類アレルギーあり" },
+    { id: 2, date: seedDate("restaurant", 0), start: "19:30", menuId: "m2", resource: "カウンター", name: "山内", tel: "080-7777-8888", status: "reserved", channel: "net", people: 2, note: "" },
   ],
   school: [
-    { id: 1, date: ymd(today), start: "16:00", menuId: "m1", resource: "南 先生", name: "小林 楓", tel: "090-9999-0000", status: "reserved", note: "初めてです" },
+    { id: 1, date: seedDate("school", 0), start: "16:00", menuId: "m1", resource: "南 先生", name: "小林 楓", tel: "090-9999-0000", status: "reserved", channel: "net", note: "初めてです" },
   ],
 };
 
+/* ------------------------------------------------------------------
+   空き枠の計算。お客さま画面と、店舗が電話予約を入れる画面の両方が
+   この1つの関数を見ています。入口が違っても判定は同じです。
+------------------------------------------------------------------ */
+const buildSlots = (biz, rows, dateStr, menu) => {
+  const list = [];
+  const openMin = toMin(biz.open);
+  const closeMin = toMin(biz.close);
+  for (let t = openMin; t + menu.minutes <= closeMin; t += biz.slotMinutes) {
+    const free = biz.resources.filter((res) => {
+      return !rows.some((r) => {
+        if (r.date !== dateStr || r.resource !== res) return false;
+        if (r.status === "canceled") return false;
+        const rMenu = biz.menus.find((m) => m.id === r.menuId);
+        const rStart = toMin(r.start);
+        const rEnd = rStart + (rMenu?.minutes ?? biz.slotMinutes);
+        return t < rEnd && rStart < t + menu.minutes;
+      });
+    });
+    list.push({ start: toHHMM(t), free });
+  }
+  return list;
+};
+
+const markClass = (tone) => (tone && tone !== "plain" ? `p-mark p-mark--${tone}` : "p-mark");
+
+/* ==================================================================
+   画面全体
+================================================================== */
 function App() {
   const [bizKey, setBizKey] = useState("salon");
   const [view, setView] = useState("customer");
   const [bookings, setBookings] = useState(SEED);
-  const [date, setDate] = useState(ymd(today));
+  const [date, setDate] = useState(() => firstOpenDate(BUSINESSES.salon));
 
   const biz = BUSINESSES[bizKey];
   const rows = bookings[bizKey];
 
   const switchBiz = (key) => {
     setBizKey(key);
-    setDate(ymd(today));
+    setDate(firstOpenDate(BUSINESSES[key]));
   };
 
   const addBooking = (b) =>
@@ -140,63 +948,159 @@ function App() {
       [bizKey]: prev[bizKey].map((r) => (r.id === id ? { ...r, status } : r)),
     }));
 
+  const bizKeys = Object.keys(BUSINESSES);
+  const liveRows = rows.filter((r) => r.status !== "canceled");
+
   return (
-    <div className="min-h-screen bg-stone-50 text-stone-900">
-      <div className="border-b border-stone-200 bg-white">
-        <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-5 gap-y-3 px-4 py-3">
-          <span className="text-sm font-semibold tracking-tight">予約・受付システム</span>
-          <span className="text-xs text-stone-400">デモ</span>
+    <React.Fragment>
+      <div className="p-topbar" />
 
-          <label className="flex items-center gap-2 text-xs text-stone-500">
-            業種
-            <select
-              value={bizKey}
-              onChange={(e) => switchBiz(e.target.value)}
-              className="rounded border border-stone-300 bg-white px-2 py-1 text-xs text-stone-900"
-            >
-              {Object.entries(BUSINESSES).map(([k, b]) => (
-                <option key={k} value={k}>{b.label}</option>
-              ))}
-            </select>
-          </label>
+      <div className="p-sheet">
+        {/* ---------------- ヘッダー ---------------- */}
+        <header className="p-masthead">
+          <p className="p-masthead__kicker">中小企業向け　業務改善・自動化サンプル　予約・受付</p>
+          <h1 className="p-masthead__title">予約・受付システム デモ</h1>
+          <p className="p-masthead__lead">
+            お客さまが自分で入れる予約画面と、店舗が見る管理画面です。
+            大事なのは画面が2つあることではなく、<strong>行き先の台帳が1つしかない</strong>ことです。
+            ネットから入った予約も、電話で受けて店舗が入れた予約も、同じ台帳の同じ行になります。
+            だから同じ枠が二度埋まりません。この画面では、両方の入口から実際に予約を入れて、
+            片方が埋めた枠がもう片方から消えることを確かめられます。
+          </p>
+          <p className="p-masthead__meta">
+            画面：お客さま画面／店舗の管理画面
+            {"　"}業種：{bizKeys.map((k) => BUSINESSES[k].label).join("／")}
+            {"　"}入口：{Object.keys(CHANNELS).map((k) => CHANNELS[k].label).join("／")}
+            <a href="../index.html">業務の悩み 索引へ戻る</a>
+          </p>
 
-          <div className="ml-auto flex rounded border border-stone-300 text-xs">
-            <button
-              onClick={() => setView("customer")}
-              className={`px-3 py-1.5 ${view === "customer" ? "bg-emerald-800 text-white" : "text-stone-600"}`}
-            >
-              お客さま画面
-            </button>
-            <button
-              onClick={() => setView("admin")}
-              className={`px-3 py-1.5 ${view === "admin" ? "bg-emerald-800 text-white" : "text-stone-600"}`}
-            >
-              店舗の管理画面
-            </button>
+          <div className="p-notice">
+            <p className="p-notice__title">数値の扱いについて</p>
+            <p className="p-notice__body">
+              この画面に表示される店舗名・お客さまの氏名・電話番号・予約・売上は、
+              すべて動作確認のために用意したデモ用の想定値です。実在する店舗・人物・実績とは関係ありません。
+            </p>
+            <p className="p-notice__body">
+              画面上で入れた予約は、ブラウザの中だけに保持されます。どこにも保存・送信されません
+              （localStorage・Cookie・外部通信のいずれも使っていません）。ページを開き直すと最初の状態に戻ります。
+            </p>
           </div>
+        </header>
+
+        {/* ---------------- 業種の切り替え ---------------- */}
+        <div className="p-toolbar">
+          <span className="p-toolbar__label">業種</span>
+          {bizKeys.map((k) => (
+            <button
+              key={k}
+              type="button"
+              className="p-choice"
+              aria-pressed={k === bizKey}
+              onClick={() => switchBiz(k)}
+            >
+              {BUSINESSES[k].label}
+            </button>
+          ))}
         </div>
+
+        <p className="p-note" style={{ margin: "0 0 var(--sp-4)" }}>
+          切り替えると、店名・メニュー・{biz.resourceLabel}・営業時間・定休日・入力項目が変わります。
+          画面の構造とコードは同じです。変えているのは、ファイル冒頭の BUSINESSES の1オブジェクトだけです。
+        </p>
+
+        {/* ---------------- 画面の切り替え ---------------- */}
+        <nav className="p-tabs" aria-label="画面の切り替え">
+          <button
+            type="button"
+            className="p-tab"
+            aria-current={view === "customer" ? "page" : undefined}
+            onClick={() => setView("customer")}
+          >
+            お客さま画面
+          </button>
+          <button
+            type="button"
+            className="p-tab"
+            aria-current={view === "admin" ? "page" : undefined}
+            onClick={() => setView("admin")}
+          >
+            店舗の管理画面（予約台帳）
+          </button>
+        </nav>
+
+        {/* ---------------- 本体 ---------------- */}
+        {view === "customer" ? (
+          <CustomerView key={bizKey} biz={biz} rows={rows} onBook={addBooking} />
+        ) : (
+          <AdminView key={bizKey} biz={biz} rows={rows} date={date} setDate={setDate} onStatus={setStatus} onBook={addBooking} />
+        )}
+
+        {/* ---------------- 実装と運用について ---------------- */}
+        <section className="p-section">
+          <div className="p-heading">
+            <span className="p-heading__no">実装と運用について</span>
+            <h2 className="p-heading__text">台帳を1つにするということ</h2>
+          </div>
+
+          <div className="p-def">
+            <p className="p-def__label">入口を減らすのではなく、行き先をそろえます</p>
+            <p className="p-def__body">
+              電話をやめる必要はありません。電話・ネット・窓口・LINE、入口はいくつあってもかまいません。
+              二重予約が起きるのは、入口ごとに紙やExcelの台帳が分かれていて、
+              どれが最新か誰にも分からなくなるからです。入口が何であれ、書き込む先を1つにすれば止まります。
+            </p>
+          </div>
+
+          <div className="p-def">
+            <p className="p-def__label">空き枠の判定は1か所にまとめます</p>
+            <p className="p-def__body">
+              この画面では、お客さま画面の時間選択と、管理画面の電話予約入力が、
+              <code>buildSlots</code> という同じ関数を見ています。
+              判定を2か所に書くと、いつか片方だけ直して食い違います。
+              実案件ではこの判定をサーバー側に置き、同時に押されたときも先着が勝つようにします。
+            </p>
+          </div>
+
+          <div className="p-def">
+            <p className="p-def__label">設定の置き場所</p>
+            <p className="p-def__body">
+              この画面ではファイル冒頭の <code>BUSINESSES</code> にメニュー・{biz.resourceLabel}・営業時間・
+              定休日・入力項目を持たせています。実案件ではこれを管理画面から編集できるようにし、
+              データベースに持たせます。
+            </p>
+          </div>
+
+          <div className="p-def">
+            <p className="p-def__label">この画面と納品物の違い</p>
+            <p className="p-def__body">
+              この画面はブラウザの中だけで動いており、予約の保存も、確認の連絡の送信も行っていません。
+              サンプルデータを埋め込んで、操作したときの動きだけをお見せしています。
+              ページを開き直すと最初の状態に戻ります。
+            </p>
+          </div>
+
+          <div className="p-colophon">
+            <p>掲載しているデータは、すべてデモ用の想定値です。実在する店舗・人物・実績とは関係ありません。</p>
+            <p>いま台帳に入っている予約：{liveRows.length}件（キャンセルを除く）。</p>
+            <p>React ＋ Tailwind CSS の1ファイル構成（CDN読み込み・ビルド不要）。意匠は索引ページと共通です。</p>
+            <p>
+              ほかのサンプルは
+              <a href="../index.html">業務の悩み 索引</a>
+              から見られます。
+            </p>
+          </div>
+        </section>
       </div>
-
-      {view === "customer" ? (
-        <CustomerView biz={biz} rows={rows} onBook={addBooking} />
-      ) : (
-        <AdminView biz={biz} rows={rows} date={date} setDate={setDate} onStatus={setStatus} />
-      )}
-
-      <p className="mx-auto max-w-5xl px-4 pb-10 text-xs leading-relaxed text-stone-400">
-        メニュー・{biz.resourceLabel}・営業時間・定休日を設定として外に出しているため、
-        上部の「業種」を切り替えると同じ仕組みがサロン・飲食店・教室に変わります。
-        実案件ではこの設定を管理画面から編集できるようにし、予約の重複判定はサーバー側で行います。
-      </p>
-    </div>
+    </React.Fragment>
   );
 }
 
-/* ----------------------------- お客さま画面 ----------------------------- */
-
+/* ==================================================================
+   お客さま画面
+================================================================== */
 function CustomerView({ biz, rows, onBook }) {
   const [menuId, setMenuId] = useState(biz.menus[0].id);
-  const [dayOffset, setDayOffset] = useState(0);
+  const [dayOffset, setDayOffset] = useState(() => firstOpenOffset(biz));
   const [picked, setPicked] = useState(null);
   const [done, setDone] = useState(null);
 
@@ -204,74 +1108,86 @@ function CustomerView({ biz, rows, onBook }) {
   const days = [0, 1, 2, 3, 4, 5, 6].map(dayAfter);
 
   const targetDate = days[dayOffset];
+  const dateStr = ymd(targetDate);
   const closed = biz.closedDays.includes(targetDate.getDay());
 
-  const slots = useMemo(() => {
-    if (closed) return [];
-    const list = [];
-    const openMin = toMin(biz.open);
-    const closeMin = toMin(biz.close);
-    for (let t = openMin; t + menu.minutes <= closeMin; t += biz.slotMinutes) {
-      const free = biz.resources.filter((res) => {
-        return !rows.some((r) => {
-          if (r.date !== ymd(targetDate) || r.resource !== res) return false;
-          if (r.status === "canceled") return false;
-          const rMenu = biz.menus.find((m) => m.id === r.menuId);
-          const rStart = toMin(r.start);
-          const rEnd = rStart + (rMenu?.minutes ?? biz.slotMinutes);
-          return t < rEnd && rStart < t + menu.minutes;
-        });
-      });
-      list.push({ start: toHHMM(t), free });
-    }
-    return list;
-  }, [biz, rows, menu, targetDate, closed]);
+  const slots = useMemo(
+    () => (closed ? [] : buildSlots(biz, rows, dateStr, menu)),
+    [biz, rows, menu, dateStr, closed]
+  );
+
+  const phoneCount = rows.filter((r) => r.channel === "phone" && r.status !== "canceled").length;
 
   if (done) {
+    const doneMenu = biz.menus.find((m) => m.id === done.menuId);
     return (
-      <main className="mx-auto max-w-5xl px-4 py-16">
-        <div className="mx-auto max-w-md rounded border border-emerald-200 bg-white px-6 py-10 text-center">
-          <p className="text-sm text-emerald-800">ご予約を受け付けました</p>
-          <p className="mt-4 text-2xl font-semibold tracking-tight">
-            {done.date} {done.start}
+      <section className="p-section">
+        <div className="p-heading">
+          <span className="p-heading__no">受付の完了</span>
+          <h2 className="p-heading__text">ご予約を受け付けました</h2>
+        </div>
+
+        <div className="p-done">
+          <p className="p-done__label">ご予約日時</p>
+          <p className="p-done__when">{mdLabel(done.date)}（{jpDay[dayOfWeek(done.date)]}） {done.start}</p>
+          <p className="p-done__body">
+            {doneMenu.name}（{doneMenu.minutes}分）／{biz.resourceLabel}：{done.resource}
           </p>
-          <p className="mt-2 text-sm text-stone-600">
-            {biz.menus.find((m) => m.id === done.menuId).name} ／ {biz.resourceLabel}：{done.resource}
+          <p className="p-done__note">確認のご連絡を {done.tel} 宛にお送りします。</p>
+        </div>
+
+        <div className="p-scope">
+          <p>
+            この予約は、<strong>店舗の台帳にそのまま入りました</strong>。
+            上の「店舗の管理画面（予約台帳）」を開くと、いま入れた予約が
+            <strong>受付：{CHANNELS.net.label}</strong>として1行増えています。
           </p>
-          <p className="mt-6 text-xs text-stone-500">
-            確認のご連絡を {done.tel} 宛にお送りします。
+          <p className="p-scope__sub">
+            店舗が電話で受けた予約と同じ台帳・同じ並びです。
+            {biz.resourceLabel}の{done.resource}はこの時間で埋まったので、
+            電話で同じ枠を取ることはできません。空いている{biz.resourceLabel}がなくなれば、
+            その時間はお客さま画面からも消えます。
           </p>
+        </div>
+
+        <p style={{ margin: "var(--sp-4) 0 0" }}>
           <button
+            type="button"
+            className="p-btn p-btn--main"
             onClick={() => { setDone(null); setPicked(null); }}
-            className="mt-8 rounded border border-stone-300 px-4 py-2 text-sm hover:bg-stone-100"
           >
             続けて予約する
           </button>
-        </div>
-      </main>
+        </p>
+      </section>
     );
   }
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-8">
-      <h1 className="text-2xl font-semibold tracking-tight">{biz.shopName}</h1>
-      <p className="mt-1 text-sm text-stone-500">
-        {biz.open}〜{biz.close}／定休日 {biz.closedDays.map((d) => jpDay[d]).join("・")}曜
-      </p>
+    <React.Fragment>
+      <section className="p-section">
+        <div className="p-heading">
+          <span className="p-heading__no">一</span>
+          <h2 className="p-heading__text">メニューを選ぶ</h2>
+        </div>
 
-      <section className="mt-8">
-        <h2 className="text-sm font-medium text-stone-500">1. メニューを選ぶ</h2>
-        <div className="mt-3 grid gap-3 sm:grid-cols-3">
+        <p className="p-lead">
+          {biz.shopName}　{biz.open}〜{biz.close}／定休日 {biz.closedDays.map((d) => jpDay[d]).join("・")}曜。
+          所要時間はメニューごとに違います。選んだメニューの長さで空き枠を計算するため、
+          90分のメニューでは、30分しか空いていない時間は選べません。
+        </p>
+
+        <div className="p-picks">
           {biz.menus.map((m) => (
             <button
               key={m.id}
+              type="button"
+              className="p-pick"
+              aria-pressed={m.id === menuId}
               onClick={() => { setMenuId(m.id); setPicked(null); }}
-              className={`rounded border px-4 py-3 text-left ${
-                m.id === menuId ? "border-emerald-800 bg-emerald-50" : "border-stone-300 bg-white hover:bg-stone-100"
-              }`}
             >
-              <span className="block text-sm font-medium">{m.name}</span>
-              <span className="mt-1 block text-xs text-stone-500">
+              <span className="p-pick__name">{m.name}</span>
+              <span className="p-pick__meta">
                 {m.minutes}分{m.price > 0 ? ` ／ ${m.price.toLocaleString()}円` : ""}
               </span>
             </button>
@@ -279,81 +1195,109 @@ function CustomerView({ biz, rows, onBook }) {
         </div>
       </section>
 
-      <section className="mt-8">
-        <h2 className="text-sm font-medium text-stone-500">2. 日付を選ぶ</h2>
-        <div className="mt-3 flex flex-wrap gap-2">
+      <section className="p-section">
+        <div className="p-heading">
+          <span className="p-heading__no">二</span>
+          <h2 className="p-heading__text">日付を選ぶ</h2>
+        </div>
+
+        <p className="p-lead">定休日は選べません。設定の定休日をそのまま反映しています。</p>
+
+        <div className="p-slots">
           {days.map((d, i) => {
             const isClosed = biz.closedDays.includes(d.getDay());
             return (
               <button
                 key={i}
+                type="button"
+                className={`p-slot${isClosed ? " p-slot--closed" : ""}`}
                 disabled={isClosed}
+                aria-pressed={i === dayOffset}
                 onClick={() => { setDayOffset(i); setPicked(null); }}
-                className={`w-16 rounded border py-2 text-center text-xs ${
-                  isClosed
-                    ? "cursor-not-allowed border-stone-200 bg-stone-100 text-stone-300"
-                    : i === dayOffset
-                    ? "border-emerald-800 bg-emerald-800 text-white"
-                    : "border-stone-300 bg-white hover:bg-stone-100"
-                }`}
               >
-                <span className="block">{d.getMonth() + 1}/{d.getDate()}</span>
-                <span className="block">{jpDay[d.getDay()]}</span>
+                <span className="p-slot__d1">{d.getMonth() + 1}/{d.getDate()}</span>
+                <span className="p-slot__d2">{jpDay[d.getDay()]}</span>
               </button>
             );
           })}
         </div>
       </section>
 
-      <section className="mt-8">
-        <h2 className="text-sm font-medium text-stone-500">3. 時間を選ぶ</h2>
+      <section className="p-section">
+        <div className="p-heading">
+          <span className="p-heading__no">三</span>
+          <h2 className="p-heading__text">時間を選ぶ</h2>
+        </div>
+
+        <p className="p-lead">
+          ここに出ている時間は、<strong>台帳の空きそのもの</strong>です。
+          店舗が電話で受けて台帳に入れた予約（現在{phoneCount}件）も同じ台帳にあるため、
+          その分だけ{biz.resourceLabel}の空きが減り、すべて埋まった時間は取り消し線が付いて選べません。
+          ネットと電話で別々の枠を持っていないので、同じ{biz.resourceLabel}の同じ時間が二度埋まることがありません。
+        </p>
+
         {closed ? (
-          <p className="mt-3 rounded border border-dashed border-stone-300 bg-white px-4 py-8 text-center text-sm text-stone-500">
-            この日は定休日です。別の日付を選んでください。
-          </p>
-        ) : (
-          <div className="mt-3 flex flex-wrap gap-2">
-            {slots.map((s) => {
-              const full = s.free.length === 0;
-              return (
-                <button
-                  key={s.start}
-                  disabled={full}
-                  onClick={() => setPicked({ start: s.start, resource: s.free[0] })}
-                  className={`w-20 rounded border py-2 text-center text-sm ${
-                    full
-                      ? "cursor-not-allowed border-stone-200 bg-stone-100 text-stone-300 line-through"
-                      : picked?.start === s.start
-                      ? "border-emerald-800 bg-emerald-800 text-white"
-                      : "border-stone-300 bg-white hover:bg-stone-100"
-                  }`}
-                >
-                  {s.start}
-                </button>
-              );
-            })}
+          <div className="p-empty">
+            <p>この日は定休日です。別の日付を選んでください。</p>
           </div>
-        )}
-        {!closed && slots.every((s) => s.free.length === 0) && (
-          <p className="mt-3 text-sm text-stone-500">この日は空きがありません。別の日付をお試しください。</p>
+        ) : (
+          <React.Fragment>
+            <div className="p-slots">
+              {slots.map((s) => {
+                const full = s.free.length === 0;
+                return (
+                  <button
+                    key={s.start}
+                    type="button"
+                    className="p-slot"
+                    disabled={full}
+                    aria-pressed={picked?.start === s.start}
+                    onClick={() => setPicked({ start: s.start, resource: s.free[0] })}
+                  >
+                    {s.start}
+                  </button>
+                );
+              })}
+            </div>
+            {slots.every((s) => s.free.length === 0) ? (
+              <p className="p-note">この日は空きがありません。別の日付をお試しください。</p>
+            ) : (
+              <p className="p-note">
+                取り消し線の付いた時間は、{biz.resourceLabel}がすべて埋まっている時間です。
+              </p>
+            )}
+          </React.Fragment>
         )}
       </section>
 
-      {picked && (
-        <BookingForm
-          biz={biz}
-          menu={menu}
-          date={ymd(targetDate)}
-          picked={picked}
-          onCancel={() => setPicked(null)}
-          onSubmit={(b) => { onBook(b); setDone(b); }}
-        />
-      )}
-    </main>
+      {picked ? (
+        <section className="p-section">
+          <div className="p-heading">
+            <span className="p-heading__no">四</span>
+            <h2 className="p-heading__text">お名前とご連絡先</h2>
+          </div>
+
+          <BookingForm
+            biz={biz}
+            menu={menu}
+            date={dateStr}
+            picked={picked}
+            channel="net"
+            submitLabel="この内容で予約する"
+            cancelLabel="時間を選び直す"
+            onCancel={() => setPicked(null)}
+            onSubmit={(b) => { onBook(b); setDone(b); setPicked(null); }}
+          />
+        </section>
+      ) : null}
+    </React.Fragment>
   );
 }
 
-function BookingForm({ biz, menu, date, picked, onCancel, onSubmit }) {
+/* ==================================================================
+   入力欄。お客さま画面と、店舗の電話予約入力の両方で使います。
+================================================================== */
+function BookingForm({ biz, menu, date, picked, channel, submitLabel, cancelLabel, onCancel, onSubmit }) {
   const [form, setForm] = useState({ name: "", tel: "", ...Object.fromEntries(biz.askFields.map((f) => [f.key, ""])) });
   const [touched, setTouched] = useState(false);
 
@@ -363,76 +1307,89 @@ function BookingForm({ biz, menu, date, picked, onCancel, onSubmit }) {
   const submit = () => {
     setTouched(true);
     if (hasError) return;
-    onSubmit({ ...form, date, start: picked.start, resource: picked.resource, menuId: menu.id, status: "reserved" });
+    onSubmit({ ...form, date, start: picked.start, resource: picked.resource, menuId: menu.id, status: "reserved", channel });
   };
 
   return (
-    <section className="mt-8 rounded border border-stone-300 bg-white p-5">
-      <h2 className="text-sm font-medium text-stone-500">4. お名前とご連絡先</h2>
-      <p className="mt-2 text-sm">
-        <span className="font-medium">{date} {picked.start}</span>
-        <span className="text-stone-500">　{menu.name}（{menu.minutes}分）／{biz.resourceLabel}：{picked.resource}</span>
-      </p>
+    <div className="p-form">
+      <div className="p-form__head">
+        <h3 className="p-form__title">
+          {mdLabel(date)}（{jpDay[dayOfWeek(date)]}） {picked.start}
+        </h3>
+        <span className="p-form__when">
+          {menu.name}（{menu.minutes}分）／{biz.resourceLabel}：{picked.resource}／受付：{CHANNELS[channel].label}
+        </span>
+      </div>
 
-      <div className="mt-4 grid gap-4 sm:grid-cols-2">
-        <div>
-          <label className="mb-1 block text-xs text-stone-500">お名前<span className="ml-1 text-rose-500">必須</span></label>
+      <div className="p-form__grid">
+        <div className="p-field">
+          <label className="p-field__label" htmlFor="fld-name">
+            お名前<span className="p-field__req">必須</span>
+          </label>
           <input
+            id="fld-name"
+            className={`p-input${touched && invalid.name ? " is-error" : ""}`}
             value={form.name}
             onChange={(e) => setForm({ ...form, name: e.target.value })}
-            className={`w-full rounded border px-3 py-2 text-sm ${touched && invalid.name ? "border-rose-400" : "border-stone-300"}`}
           />
-          {touched && invalid.name && <p className="mt-1 text-xs text-rose-600">お名前を入力してください。</p>}
+          {touched && invalid.name ? <p className="p-field__err">お名前を入力してください。</p> : null}
         </div>
-        <div>
-          <label className="mb-1 block text-xs text-stone-500">電話番号<span className="ml-1 text-rose-500">必須</span></label>
+
+        <div className="p-field">
+          <label className="p-field__label" htmlFor="fld-tel">
+            電話番号<span className="p-field__req">必須</span>
+          </label>
           <input
+            id="fld-tel"
+            className={`p-input${touched && invalid.tel ? " is-error" : ""}`}
             value={form.tel}
             inputMode="tel"
             placeholder="090-1234-5678"
             onChange={(e) => setForm({ ...form, tel: e.target.value })}
-            className={`w-full rounded border px-3 py-2 text-sm ${touched && invalid.tel ? "border-rose-400" : "border-stone-300"}`}
           />
-          {touched && invalid.tel && <p className="mt-1 text-xs text-rose-600">ハイフンを含む電話番号を入力してください。</p>}
+          {touched && invalid.tel ? <p className="p-field__err">ハイフンを含む電話番号を入力してください。</p> : null}
         </div>
 
         {biz.askFields.map((f) => (
-          <div key={f.key} className={f.type === "textarea" ? "sm:col-span-2" : ""}>
-            <label className="mb-1 block text-xs text-stone-500">{f.label}</label>
+          <div className={`p-field${f.type === "textarea" ? " p-field--wide" : ""}`} key={f.key}>
+            <label className="p-field__label" htmlFor={`fld-${f.key}`}>{f.label}</label>
             {f.type === "textarea" ? (
               <textarea
+                id={`fld-${f.key}`}
+                className="p-input"
                 rows={2}
                 value={form[f.key]}
                 onChange={(e) => setForm({ ...form, [f.key]: e.target.value })}
-                className="w-full rounded border border-stone-300 px-3 py-2 text-sm"
               />
             ) : (
               <input
+                id={`fld-${f.key}`}
+                className="p-input"
                 type="number"
                 value={form[f.key]}
                 onChange={(e) => setForm({ ...form, [f.key]: e.target.value })}
-                className="w-full rounded border border-stone-300 px-3 py-2 text-sm"
               />
             )}
           </div>
         ))}
       </div>
 
-      <div className="mt-5 flex gap-2">
-        <button onClick={submit} className="rounded bg-emerald-800 px-5 py-2 text-sm text-white hover:bg-emerald-700">
-          この内容で予約する
-        </button>
-        <button onClick={onCancel} className="rounded border border-stone-300 px-4 py-2 text-sm hover:bg-stone-100">
-          時間を選び直す
-        </button>
+      <div className="p-form__foot">
+        <button type="button" className="p-btn p-btn--main" onClick={submit}>{submitLabel}</button>
+        <button type="button" className="p-btn" onClick={onCancel}>{cancelLabel}</button>
       </div>
-    </section>
+    </div>
   );
 }
 
-/* ------------------------------ 管理画面 ------------------------------ */
+/* ==================================================================
+   店舗の管理画面（予約台帳）
+================================================================== */
+function AdminView({ biz, rows, date, setDate, onStatus, onBook }) {
+  const [phoneMenuId, setPhoneMenuId] = useState(biz.menus[0].id);
+  const [phonePicked, setPhonePicked] = useState(null);
+  const [justAdded, setJustAdded] = useState(null);
 
-function AdminView({ biz, rows, date, setDate, onStatus }) {
   const dayRows = rows
     .filter((r) => r.date === date)
     .sort((a, b) => toMin(a.start) - toMin(b.start));
@@ -441,15 +1398,26 @@ function AdminView({ biz, rows, date, setDate, onStatus }) {
   const closeMin = toMin(biz.close);
   const span = closeMin - openMin;
 
+  const live = dayRows.filter((r) => r.status !== "canceled");
+  const netCount = live.filter((r) => r.channel === "net").length;
+  const phoneCount = live.filter((r) => r.channel === "phone").length;
+
   const sales = dayRows
     .filter((r) => r.status === "visited")
     .reduce((sum, r) => sum + (biz.menus.find((m) => m.id === r.menuId)?.price ?? 0), 0);
 
+  const phoneMenu = biz.menus.find((m) => m.id === phoneMenuId) ?? biz.menus[0];
+  const closed = biz.closedDays.includes(dayOfWeek(date));
+  const phoneSlots = useMemo(
+    () => (closed ? [] : buildSlots(biz, rows, date, phoneMenu)),
+    [biz, rows, date, phoneMenu, closed]
+  );
+
   const exportCsv = () => {
-    const header = ["日付", "開始", "メニュー", biz.resourceLabel, "お名前", "電話番号", "状態", "備考"];
+    const header = ["日付", "開始", "メニュー", biz.resourceLabel, "お名前", "電話番号", "受付", "状態", "備考"];
     const body = dayRows.map((r) => [
       r.date, r.start, biz.menus.find((m) => m.id === r.menuId)?.name ?? "",
-      r.resource, r.name, r.tel, STATUS[r.status].label, r.note ?? "",
+      r.resource, r.name, r.tel, CHANNELS[r.channel]?.label ?? "", STATUS[r.status].label, r.note ?? "",
     ]);
     const csv = [header, ...body].map((l) => l.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\r\n");
     const url = URL.createObjectURL(new Blob(["\uFEFF" + csv], { type: "text/csv" }));
@@ -461,120 +1429,303 @@ function AdminView({ biz, rows, date, setDate, onStatus }) {
   };
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-8">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">予約台帳</h1>
-          <p className="mt-1 text-sm text-stone-500">
-            {dayRows.filter((r) => r.status !== "canceled").length}件の予約／来店済みの売上 {sales.toLocaleString()}円
+    <React.Fragment>
+      <section className="p-section">
+        <div className="p-heading">
+          <span className="p-heading__no">一</span>
+          <h2 className="p-heading__text">予約台帳</h2>
+        </div>
+
+        <div className="p-scope">
+          <p>
+            台帳は<strong>この1つだけ</strong>です。ネットから入った予約も、
+            電話で受けて店舗が入れた予約も、同じ台帳の同じ並びに入ります。
+          </p>
+          <p className="p-scope__sub">
+            入口ごとに台帳を分けないので、どちらが最新かを突き合わせる作業がありません。
+            ある枠が埋まれば、その時点で両方の入口から選べなくなります。
           </p>
         </div>
-        <div className="flex gap-2">
+
+        <div className="p-actions">
+          <label className="p-field__label" htmlFor="ledger-date" style={{ margin: 0 }}>日付</label>
           <input
+            id="ledger-date"
             type="date"
+            className="p-input"
+            style={{ width: "auto" }}
             value={date}
-            onChange={(e) => setDate(e.target.value)}
-            className="rounded border border-stone-300 px-3 py-2 text-sm"
+            onChange={(e) => { setDate(e.target.value); setPhonePicked(null); setJustAdded(null); }}
           />
-          <button onClick={exportCsv} className="rounded border border-stone-300 bg-white px-3 py-2 text-sm hover:bg-stone-100">
+          <button type="button" className="p-btn" onClick={exportCsv} disabled={dayRows.length === 0}>
             CSVで書き出す
           </button>
+          <span className="p-actions__spacer" />
+          <span className="p-note" style={{ margin: 0 }}>
+            {mdLabel(date)}（{jpDay[dayOfWeek(date)]}）{closed ? "／定休日" : ""}
+          </span>
         </div>
-      </div>
 
-      {/* 時間軸。何時が埋まっていて何時が空いているかを一目で見せます */}
-      <div className="mt-6 overflow-x-auto rounded border border-stone-200 bg-white p-4">
-        <div className="min-w-[640px]">
-          <div className="mb-2 flex text-xs text-stone-400">
-            <div className="w-24 shrink-0" />
-            <div className="relative h-4 flex-1">
-              {Array.from({ length: Math.floor(span / 60) + 1 }, (_, i) => (
-                <span key={i} className="absolute -translate-x-1/2" style={{ left: `${((i * 60) / span) * 100}%` }}>
-                  {toHHMM(openMin + i * 60)}
-                </span>
-              ))}
-            </div>
+        <div className="p-tiles">
+          <div className="p-tile">
+            <p className="p-tile__label">この日の予約</p>
+            <p className="p-tile__num">{live.length}<span className="p-tile__unit">件</span></p>
+            <p className="p-tile__sub">キャンセルを除いた件数です。</p>
           </div>
-          {biz.resources.map((res) => (
-            <div key={res} className="flex items-center border-t border-stone-100 py-2">
-              <div className="w-24 shrink-0 truncate text-sm text-stone-600">{res}</div>
-              <div className="relative h-8 flex-1 rounded bg-stone-100">
-                {dayRows
-                  .filter((r) => r.resource === res && r.status !== "canceled")
-                  .map((r) => {
-                    const m = biz.menus.find((x) => x.id === r.menuId);
-                    const left = ((toMin(r.start) - openMin) / span) * 100;
-                    const width = ((m?.minutes ?? biz.slotMinutes) / span) * 100;
-                    return (
-                      <div
-                        key={r.id}
-                        title={`${r.start} ${r.name}様 ${m?.name ?? ""}`}
-                        className={`absolute top-0 flex h-8 items-center overflow-hidden rounded px-2 text-xs text-white ${
-                          r.status === "visited" ? "bg-stone-500" : r.status === "noshow" ? "bg-rose-600" : "bg-emerald-800"
-                        }`}
-                        style={{ left: `${left}%`, width: `${width}%` }}
-                      >
-                        <span className="truncate">{r.name}</span>
-                      </div>
-                    );
-                  })}
+          <div className="p-tile">
+            <p className="p-tile__label">うち{CHANNELS.net.label}から</p>
+            <p className="p-tile__num">{netCount}<span className="p-tile__unit">件</span></p>
+            <p className="p-tile__sub">{CHANNELS.net.desc}。</p>
+          </div>
+          <div className="p-tile">
+            <p className="p-tile__label">うち{CHANNELS.phone.label}から</p>
+            <p className="p-tile__num">{phoneCount}<span className="p-tile__unit">件</span></p>
+            <p className="p-tile__sub">{CHANNELS.phone.desc}。</p>
+          </div>
+          <div className="p-tile">
+            <p className="p-tile__label">来店済みの売上</p>
+            <p className="p-tile__num">{sales.toLocaleString()}<span className="p-tile__unit">円</span></p>
+            <p className="p-tile__sub">状態が来店済みの行だけを合計しています。</p>
+          </div>
+        </div>
+
+        <p className="p-note" style={{ marginTop: 0 }}>
+          入口の内訳は台帳の集計です。入口が2つに分かれていても、数えている台帳は1つです。
+        </p>
+      </section>
+
+      {/* ---------------- 二 時間軸 ---------------- */}
+      <section className="p-section">
+        <div className="p-heading">
+          <span className="p-heading__no">二</span>
+          <h2 className="p-heading__text">{biz.resourceLabel}ごとの空き状況</h2>
+        </div>
+
+        <p className="p-lead">
+          横軸が時間、行が{biz.resourceLabel}です。帯が入っているところが埋まっている時間で、
+          紙色のままのところが空いている時間です。ネットの予約も電話の予約も同じ帯として並びます。
+        </p>
+
+        <div className="p-scroll">
+          <div className="p-chart">
+            <div className="p-chart__axis">
+              <div className="p-chart__gutter" />
+              <div className="p-chart__ticks">
+                {Array.from({ length: Math.floor(span / 60) + 1 }, (_, i) => (
+                  <span key={i} className="p-chart__tick" style={{ left: `${((i * 60) / span) * 100}%` }}>
+                    {toHHMM(openMin + i * 60)}
+                  </span>
+                ))}
               </div>
             </div>
-          ))}
-        </div>
-      </div>
 
-      {dayRows.length === 0 ? (
-        <p className="mt-6 rounded border border-dashed border-stone-300 bg-white px-6 py-12 text-center text-sm text-stone-500">
-          この日の予約はまだありません。
-        </p>
-      ) : (
-        <div className="mt-6 overflow-hidden rounded border border-stone-200 bg-white">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-stone-50 text-xs text-stone-500">
-              <tr>
-                <th className="px-4 py-3 font-medium">開始</th>
-                <th className="px-4 py-3 font-medium">メニュー</th>
-                <th className="px-4 py-3 font-medium">{biz.resourceLabel}</th>
-                <th className="px-4 py-3 font-medium">お客さま</th>
-                <th className="px-4 py-3 font-medium">状態</th>
-                <th className="px-4 py-3" />
-              </tr>
-            </thead>
-            <tbody>
-              {dayRows.map((r) => (
-                <tr key={r.id} className="border-t border-stone-100">
-                  <td className="px-4 py-3 font-mono">{r.start}</td>
-                  <td className="px-4 py-3">{biz.menus.find((m) => m.id === r.menuId)?.name}</td>
-                  <td className="px-4 py-3 text-stone-600">{r.resource}</td>
-                  <td className="px-4 py-3">
-                    <span className="block">{r.name}</span>
-                    <span className="block font-mono text-xs text-stone-500">{r.tel}</span>
-                    {r.note && <span className="mt-1 block text-xs text-stone-500">{r.note}</span>}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs ring-1 ${STATUS[r.status].tone}`}>
-                      {STATUS[r.status].label}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <select
-                      value={r.status}
-                      onChange={(e) => onStatus(r.id, e.target.value)}
-                      className="rounded border border-stone-300 px-2 py-1 text-xs"
-                    >
-                      {Object.entries(STATUS).map(([k, s]) => (
-                        <option key={k} value={k}>{s.label}</option>
-                      ))}
-                    </select>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+            {biz.resources.map((res) => (
+              <div key={res} className="p-chart__row">
+                <div className="p-chart__name">{res}</div>
+                <div className="p-chart__track">
+                  {dayRows
+                    .filter((r) => r.resource === res && r.status !== "canceled")
+                    .map((r) => {
+                      const m = biz.menus.find((x) => x.id === r.menuId);
+                      const left = ((toMin(r.start) - openMin) / span) * 100;
+                      const width = ((m?.minutes ?? biz.slotMinutes) / span) * 100;
+                      const mod = r.status === "visited" ? " p-chart__bar--visited" : r.status === "noshow" ? " p-chart__bar--noshow" : "";
+                      return (
+                        <div
+                          key={r.id}
+                          className={`p-chart__bar${mod}`}
+                          title={`${r.start} ${r.name}様 ${m?.name ?? ""}（受付：${CHANNELS[r.channel]?.label ?? ""}）`}
+                          style={{ left: `${left}%`, width: `${width}%` }}
+                        >
+                          {r.name}
+                        </div>
+                      );
+                    })}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
-      )}
-    </main>
+
+        <ul className="p-legend">
+          <li><span className="p-legend__swatch" />{STATUS.reserved.label}</li>
+          <li><span className="p-legend__swatch p-legend__swatch--visited" />{STATUS.visited.label}</li>
+          <li><span className="p-legend__swatch p-legend__swatch--noshow" />{STATUS.noshow.label}</li>
+          <li><span className="p-legend__swatch p-legend__swatch--free" />空き</li>
+        </ul>
+
+        <p className="p-note">
+          画面が狭いときは、時間軸を横にスクロールできます。帯の上に指を置くと、
+          お客さまのお名前とメニュー、どちらの入口から入った予約かが出ます。
+        </p>
+      </section>
+
+      {/* ---------------- 三 予約一覧 ---------------- */}
+      <section className="p-section">
+        <div className="p-heading">
+          <span className="p-heading__no">三</span>
+          <h2 className="p-heading__text">この日の予約一覧</h2>
+        </div>
+
+        <p className="p-lead">
+          状態を変えると、時間軸の帯と上の集計がその場で変わります。
+          来店済みにすると売上に乗り、キャンセルにすると枠が空いて、
+          お客さま画面にも空きとして戻ります。
+        </p>
+
+        {dayRows.length === 0 ? (
+          <div className="p-empty">
+            <p>この日の予約はまだありません。</p>
+            <p>下の「電話で受けた予約を台帳に入れる」から入れられます。</p>
+          </div>
+        ) : (
+          <div className="p-scroll">
+            <table className="p-table p-table--ledger">
+              <thead>
+                <tr>
+                  <th>開始</th>
+                  <th>メニュー</th>
+                  <th>{biz.resourceLabel}</th>
+                  <th>お客さま</th>
+                  <th>受付</th>
+                  <th>状態</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {dayRows.map((r) => (
+                  <tr key={r.id}>
+                    <td className="is-time">{r.start}</td>
+                    <td className="is-plain">{biz.menus.find((m) => m.id === r.menuId)?.name}</td>
+                    <td className="is-plain">{r.resource}</td>
+                    <td>
+                      <span className="p-table__name">{r.name}</span>
+                      <span className="p-table__tel">{r.tel}</span>
+                      {r.note ? <span className="p-table__note">{r.note}</span> : null}
+                    </td>
+                    <td><span className="p-mark">{CHANNELS[r.channel]?.label ?? "—"}</span></td>
+                    <td><span className={markClass(STATUS[r.status].tone)}>{STATUS[r.status].label}</span></td>
+                    <td className="is-act">
+                      <select
+                        className="p-input"
+                        style={{ width: "auto", fontSize: "var(--fs-note)" }}
+                        value={r.status}
+                        aria-label={`${r.name}様の状態`}
+                        onChange={(e) => onStatus(r.id, e.target.value)}
+                      >
+                        {Object.keys(STATUS).map((k) => (
+                          <option key={k} value={k}>{STATUS[k].label}</option>
+                        ))}
+                      </select>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      {/* ---------------- 四 電話予約の入力 ---------------- */}
+      <section className="p-section">
+        <div className="p-heading">
+          <span className="p-heading__no">四</span>
+          <h2 className="p-heading__text">電話で受けた予約を台帳に入れる</h2>
+        </div>
+
+        <p className="p-lead">
+          電話が鳴ったときに、店舗の人がその場で入れる画面です。
+          ここに出る空き枠は、お客さま画面が見ているものと<strong>同じ台帳の同じ判定</strong>です。
+          ネットで先に埋まった枠は、ここに出てきません。逆に、ここで入れた予約は、
+          その瞬間からお客さま画面で選べなくなります。
+        </p>
+
+        {justAdded ? (
+          <div className="p-scope">
+            <p>
+              <strong>{mdLabel(justAdded.date)}（{jpDay[dayOfWeek(justAdded.date)]}） {justAdded.start}</strong>
+              　{justAdded.name}様の予約を、受付：{CHANNELS.phone.label}として台帳に入れました。
+            </p>
+            <p className="p-scope__sub">
+              上の一覧と時間軸に反映されています。お客さま画面の「時間を選ぶ」からも、この枠は消えています。
+            </p>
+          </div>
+        ) : null}
+
+        {closed ? (
+          <div className="p-empty">
+            <p>{mdLabel(date)}（{jpDay[dayOfWeek(date)]}）は定休日です。</p>
+            <p>上の日付を変えると、その日の空き枠が出ます。</p>
+          </div>
+        ) : (
+          <React.Fragment>
+            <p className="p-field__label">メニュー</p>
+            <div className="p-picks">
+              {biz.menus.map((m) => (
+                <button
+                  key={m.id}
+                  type="button"
+                  className="p-pick"
+                  aria-pressed={m.id === phoneMenuId}
+                  onClick={() => { setPhoneMenuId(m.id); setPhonePicked(null); }}
+                >
+                  <span className="p-pick__name">{m.name}</span>
+                  <span className="p-pick__meta">
+                    {m.minutes}分{m.price > 0 ? ` ／ ${m.price.toLocaleString()}円` : ""}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            <p className="p-field__label" style={{ marginTop: "var(--sp-4)" }}>
+              {mdLabel(date)}（{jpDay[dayOfWeek(date)]}）の空き枠
+            </p>
+            <div className="p-slots">
+              {phoneSlots.map((s) => {
+                const full = s.free.length === 0;
+                return (
+                  <button
+                    key={s.start}
+                    type="button"
+                    className="p-slot"
+                    disabled={full}
+                    aria-pressed={phonePicked?.start === s.start}
+                    onClick={() => { setPhonePicked({ start: s.start, resource: s.free[0] }); setJustAdded(null); }}
+                  >
+                    {s.start}
+                  </button>
+                );
+              })}
+            </div>
+
+            {phoneSlots.every((s) => s.free.length === 0) ? (
+              <p className="p-note">この日は空きがありません。別の日付をお試しください。</p>
+            ) : (
+              <p className="p-note">
+                取り消し線の付いた時間は、ネット・電話どちらかの予約で
+                {biz.resourceLabel}がすべて埋まっている時間です。
+              </p>
+            )}
+
+            {phonePicked ? (
+              <div style={{ marginTop: "var(--sp-4)" }}>
+                <BookingForm
+                  biz={biz}
+                  menu={phoneMenu}
+                  date={date}
+                  picked={phonePicked}
+                  channel="phone"
+                  submitLabel="この内容で台帳に入れる"
+                  cancelLabel="時間を選び直す"
+                  onCancel={() => setPhonePicked(null)}
+                  onSubmit={(b) => { onBook(b); setJustAdded(b); setPhonePicked(null); }}
+                />
+              </div>
+            ) : null}
+          </React.Fragment>
+        )}
+      </section>
+    </React.Fragment>
   );
 }
 

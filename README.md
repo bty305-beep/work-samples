@@ -17,7 +17,33 @@
 
 ---
 
-## 1. 業務管理システム — `gyomu-kanri/`
+## 1. 受付一元化＋進捗自動連絡 — `demos/uketsuke-ichigenka/`
+
+**▶ [ブラウザで開く](https://bty305-beep.github.io/work-samples/demos/uketsuke-ichigenka/)** — インストール不要、その場で操作できます。
+
+電話・Webフォーム・LINE・来店の受付を1つの台帳にまとめ、**工程が進むたびに自動で連絡する**仕組みのデモです。上部のタブで4画面を切り替えられます。索引ページからの主な行き先で、意匠も索引ページと共通です。
+
+| 画面 | 内容 | 直接開くURL |
+|---|---|---|
+| ① 業務棚卸し | 工程ごとの所要時間×月間件数を一覧にし、自動化できる／半自動化／人がやるべきの3分類に振り分け。時給スライダーで人件費換算 | `#tanaoroshi` |
+| ② 受付 | お客さま側の入力フォーム。送信すると自動返信の文面が出ます | `#uketsuke` |
+| ③ 管理画面 | 社内側の受付一覧と1件の詳細。「工程を進める」で自動連絡が履歴に1行増えます | `#kanri` |
+| ④ 導入後の数字 | 4指標の導入前後と、削減時間・人件費換算 | `#suuji` |
+
+- **緊急語の検出と、判定の根拠の表示** — 本文に緊急語が含まれると緊急と判定し、**判定に使った語をそのまま画面に出します**。判定に使う語の一覧も画面から確認できます。なぜ緊急になったのか説明できない状態を作らないためです
+- **自動と担当を分けた対応履歴** — 履歴の各行に「自動」「担当」の別を付け、担当者が動かなくても送られた連絡がどれかを見て分かるようにしています
+- **①の時給スライダーは④の人件費換算と連動**します
+- **URLのハッシュで画面を直接指定できます** — 上表のとおり `#tanaoroshi` `#uketsuke` `#kanri` `#suuji`。索引ページからは、悩みごとに該当する画面へ直接リンクしています
+
+業種を切り替えると、工務店・リフォーム／歯科医院／自動車整備に変わります。工程名・所要時間・月間件数・受付項目・ステージ名・緊急語が入れ替わりますが、**画面の構造とコードは完全に同じ**です。変えているのはファイル冒頭の `INDUSTRIES` の1オブジェクトだけで、業種を1つ足すと切替ボタンが1つ増えます。
+
+所要時間・件数・導入後の数字は、すべて**デモ用の想定値**です。実在する企業の実績ではありません。受付フォームに入力した内容はどこにも保存・送信されません（localStorage・Cookie・外部通信のいずれも使っていません）。
+
+**React / Tailwind CSS（1ファイル構成・CDN読み込み・ビルド不要）**
+
+---
+
+## 2. 業務管理システム — `gyomu-kanri/`
 
 **▶ [ブラウザで開く](https://bty305-beep.github.io/work-samples/html/gyomu-kanri.html)** — インストール不要、その場で操作できます。
 
@@ -33,7 +59,7 @@
 
 ---
 
-## 2. 予約・受付システム — `yoyaku-system/`
+## 3. 予約・受付システム — `yoyaku-system/`
 
 **▶ [ブラウザで開く](https://bty305-beep.github.io/work-samples/html/yoyaku-system.html)** — インストール不要、その場で操作できます。
 
@@ -51,7 +77,7 @@
 
 ---
 
-## 3. デジタル商品EC — `digital-ec/`
+## 4. デジタル商品EC — `digital-ec/`
 
 **▶ [ブラウザで開く](https://bty305-beep.github.io/work-samples/html/digital-ec.html)** — インストール不要、その場で操作できます。
 
@@ -67,7 +93,7 @@
 
 ---
 
-## 4. 出店者管理システム — `demos/shutten-kanri/`
+## 5. 出店者管理システム — `demos/shutten-kanri/`
 
 **▶ [ブラウザで開く](https://bty305-beep.github.io/work-samples/demos/shutten-kanri/)** — インストール不要、その場で操作できます。
 
@@ -86,7 +112,7 @@
 
 ---
 
-## 5. データ収集ツール — `scrape-report/`
+## 6. データ収集ツール — `scrape-report/`
 
 指定したページから必要な項目を集め、CSVと集計レポートを書き出します。
 
@@ -103,7 +129,7 @@
 
 ---
 
-## 6. Excel業務の自動化キット — `excel-kit/`
+## 7. Excel業務の自動化キット — `excel-kit/`
 
 毎月くり返している作業を、設定ファイルを書くだけで自動化します。Excelはそのまま使い続けられます。
 
@@ -128,7 +154,7 @@
 
 ---
 
-## 7. Excel突合の自動化 デモ — `demos/excel-shogo/`
+## 8. Excel突合の自動化 デモ — `demos/excel-shogo/`
 
 **▶ [ブラウザで開く](https://bty305-beep.github.io/work-samples/demos/excel-shogo/)** — インストール不要、その場で操作できます。
 
@@ -148,7 +174,7 @@
 
 ---
 
-## 8. 工務店コーポレートサイト — `demos/koumuten-site/`
+## 9. 工務店コーポレートサイト — `demos/koumuten-site/`
 
 **▶ [ブラウザで開く](https://bty305-beep.github.io/work-samples/demos/koumuten-site/index.html)** — インストール不要、その場で操作できます。
 
@@ -168,7 +194,7 @@
 
 ---
 
-## 9. 士業サイト リニューアル — `demos/shigyo-site/`
+## 10. 士業サイト リニューアル — `demos/shigyo-site/`
 
 **▶ [ブラウザで開く](https://bty305-beep.github.io/work-samples/demos/shigyo-site/)** — インストール不要、その場で操作できます。
 
@@ -188,7 +214,7 @@
 
 ---
 
-## 10. 補助金・助成金マッチング PoC — `demos/hojokin-matching/`
+## 11. 補助金・助成金マッチング PoC — `demos/hojokin-matching/`
 
 **▶ [ブラウザで開く](https://bty305-beep.github.io/work-samples/demos/hojokin-matching/)** — インストール不要、その場で操作できます。
 

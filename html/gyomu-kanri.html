@@ -4,25 +4,556 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>業務管理システム デモ | 拠点・権限・項目定義を設定で切り替え</title>
-<meta name="description" content="人材管理・在庫管理・設備点検を同じ仕組みで扱う業務管理システムのデモ。マルチテナント構成と権限管理つき。">
+<meta name="description" content="人材管理・在庫管理・設備点検を同じ仕組みで扱う業務管理システムのデモです。拠点ごとのデータ分離と権限による表示範囲の違いを、画面上で切り替えて確認できます。掲載データはすべてデモ用の想定値です。">
 <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <script src="https://cdn.tailwindcss.com"></script>
+<style>
+/* ------------------------------------------------------------------
+   :root のトークンは索引ページ（リポジトリ直下の index.html）から
+   そのまま持ってきています。ここで新しい色や寸法は作っていません。
+------------------------------------------------------------------ */
+:root {
+  --c-base:         #ffffff;
+  --c-paper:        #f5f1e8;
+  --c-ink:          #1b1c1e;
+  --c-ink-2:        #4c4f54;
+  --c-ink-3:        #7d8087;
+  --c-rule:         #ddd7c8;
+  --c-rule-strong:  #b3ab98;
+  --c-accent:       #2d4257;
+  --c-accent-tint:  #eef1f3;
+  --c-caution:      #9c463b;
+  --c-caution-tint: #f3e9e6;
+  --font-mincho: "Hiragino Mincho ProN","Yu Mincho","YuMincho","MS PMincho","Noto Serif JP",serif;
+  --font-gothic: "Hiragino Kaku Gothic ProN","Hiragino Sans","Yu Gothic","YuGothic",Meiryo,"Noto Sans JP",sans-serif;
+  --fs-note:  13px;  --fs-body: 15px;  --fs-sub: 18px;  --fs-head: 24px;  --fs-title: 33px;
+  --lh-body: 1.9;  --lh-head: 1.45;  --ls-body: 0.04em;  --ls-head: 0.06em;
+  --sp-1: 4px;  --sp-2: 8px;  --sp-3: 16px;  --sp-4: 32px;  --sp-5: 64px;
+  --rule-1: 1px;  --rule-2: 2px;
+}
+
+html { -webkit-text-size-adjust: 100%; }
+
+/* Tailwind の preflight は実行時に head の末尾へ挿入されるため、
+   body と a はセレクタの詳細度を上げて上書きされないようにしています。 */
+html body {
+  margin: 0;
+  background: var(--c-base);
+  color: var(--c-ink);
+  font-family: var(--font-gothic);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  letter-spacing: var(--ls-body);
+  text-align: left;
+}
+
+*, *::before, *::after { border-radius: 0; box-shadow: none; }
+
+body a {
+  color: var(--c-accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+body a:hover { text-decoration-thickness: 2px; }
+
+:focus-visible { outline: var(--rule-2) solid var(--c-accent); outline-offset: 2px; }
+
+/* ------------------------------------------------------------------
+   版面
+------------------------------------------------------------------ */
+.p-topbar { border-top: 3px solid var(--c-accent); }
+
+.p-sheet {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 0 var(--sp-3);
+}
+
+.p-section { padding-top: var(--sp-5); }
+.p-section:last-of-type { padding-bottom: var(--sp-5); }
+
+/* ------------------------------------------------------------------
+   ヘッダー
+------------------------------------------------------------------ */
+.p-masthead { padding-top: var(--sp-4); padding-bottom: var(--sp-4); }
+
+.p-masthead__kicker {
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-head);
+  color: var(--c-ink-3);
+  margin: 0 0 var(--sp-2);
+}
+
+.p-masthead__title {
+  font-family: var(--font-mincho);
+  font-size: var(--fs-title);
+  line-height: var(--lh-head);
+  letter-spacing: var(--ls-head);
+  font-weight: 600;
+  color: var(--c-ink);
+  margin: 0;
+  padding-bottom: var(--sp-3);
+  border-bottom: var(--rule-2) solid var(--c-accent);
+}
+
+.p-masthead__lead {
+  margin: var(--sp-3) 0 0;
+  max-width: 42em;
+  color: var(--c-ink-2);
+}
+
+.p-masthead__meta {
+  margin: var(--sp-3) 0 0;
+  font-size: var(--fs-note);
+  color: var(--c-ink-3);
+}
+
+.p-masthead__meta a { margin-left: var(--sp-2); }
+
+/* ------------------------------------------------------------------
+   注記帯
+------------------------------------------------------------------ */
+.p-notice {
+  margin-top: var(--sp-4);
+  background: var(--c-caution-tint);
+  border-left: 3px solid var(--c-caution);
+  padding: var(--sp-3);
+}
+
+.p-notice__title {
+  margin: 0 0 var(--sp-1);
+  font-size: var(--fs-note);
+  font-weight: 700;
+  letter-spacing: var(--ls-head);
+  color: var(--c-caution);
+}
+
+.p-notice__body {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-note);
+  line-height: 1.8;
+  color: var(--c-ink-2);
+}
+
+.p-notice__body:last-child { margin-bottom: 0; }
+
+/* ------------------------------------------------------------------
+   節見出し
+------------------------------------------------------------------ */
+.p-heading {
+  margin: 0 0 var(--sp-3);
+  padding-bottom: var(--sp-2);
+  border-bottom: var(--rule-2) solid var(--c-rule-strong);
+}
+
+.p-heading__no {
+  display: block;
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-head);
+  color: var(--c-accent);
+  margin-bottom: var(--sp-1);
+}
+
+.p-heading__text {
+  font-family: var(--font-mincho);
+  font-size: var(--fs-head);
+  line-height: var(--lh-head);
+  letter-spacing: var(--ls-head);
+  font-weight: 600;
+  margin: 0;
+}
+
+.p-lead {
+  margin: 0 0 var(--sp-3);
+  max-width: 44em;
+  color: var(--c-ink-2);
+}
+
+.p-note {
+  margin: var(--sp-2) 0 0;
+  font-size: var(--fs-note);
+  line-height: 1.8;
+  color: var(--c-ink-3);
+}
+
+/* ------------------------------------------------------------------
+   切り替え（業務・権限・拠点）
+------------------------------------------------------------------ */
+.p-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-2);
+  padding-bottom: var(--sp-3);
+  font-size: var(--fs-note);
+  color: var(--c-ink-3);
+}
+
+.p-toolbar--ruled {
+  border-top: var(--rule-2) solid var(--c-rule-strong);
+  border-bottom: var(--rule-1) solid var(--c-rule);
+  padding-top: var(--sp-3);
+}
+
+.p-toolbar__label {
+  flex: 0 0 auto;
+  width: 5em;
+  letter-spacing: var(--ls-head);
+  color: var(--c-ink-2);
+}
+
+.p-choice {
+  font-family: var(--font-gothic);
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-body);
+  color: var(--c-ink-2);
+  background: var(--c-base);
+  border: var(--rule-1) solid var(--c-rule-strong);
+  padding: var(--sp-1) var(--sp-2);
+  cursor: pointer;
+}
+
+.p-choice:hover { background: var(--c-accent-tint); }
+
+.p-choice[aria-pressed="true"] {
+  color: var(--c-accent);
+  font-weight: 700;
+  background: var(--c-accent-tint);
+  border-color: var(--c-accent);
+}
+
+/* 現在の表示範囲 */
+.p-scope {
+  border-left: 3px solid var(--c-accent);
+  background: var(--c-accent-tint);
+  padding: var(--sp-3);
+  margin-top: var(--sp-3);
+}
+
+.p-scope p { margin: 0; }
+.p-scope__sub { margin-top: var(--sp-1) !important; font-size: var(--fs-note); color: var(--c-ink-2); }
+.p-scope strong { font-weight: 700; color: var(--c-accent); }
+
+/* ------------------------------------------------------------------
+   ボタン
+------------------------------------------------------------------ */
+.p-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+}
+
+.p-actions__spacer { flex: 1 1 auto; }
+
+.p-btn {
+  font-family: var(--font-gothic);
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-body);
+  color: var(--c-accent);
+  background: var(--c-accent-tint);
+  border: var(--rule-1) solid var(--c-rule-strong);
+  padding: var(--sp-1) var(--sp-2);
+  cursor: pointer;
+}
+
+.p-btn:hover { background: var(--c-base); }
+.p-btn:disabled { color: var(--c-ink-3); background: var(--c-base); border-color: var(--c-rule); cursor: not-allowed; }
+
+.p-btn--main {
+  font-size: var(--fs-body);
+  font-weight: 700;
+  background: var(--c-base);
+  border: var(--rule-2) solid var(--c-accent);
+  padding: var(--sp-2) var(--sp-3);
+}
+
+.p-btn--main:hover { background: var(--c-accent-tint); }
+
+.p-btn--caution {
+  color: var(--c-caution);
+  background: var(--c-base);
+  border-color: var(--c-caution);
+}
+
+.p-btn--caution:hover { background: var(--c-caution-tint); }
+
+.p-btn--quiet {
+  color: var(--c-ink-2);
+  background: var(--c-base);
+}
+
+/* 検索 */
+.p-search {
+  font-family: var(--font-gothic);
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-body);
+  color: var(--c-ink);
+  background: var(--c-base);
+  border: var(--rule-1) solid var(--c-rule-strong);
+  padding: var(--sp-1) var(--sp-2);
+  width: 14em;
+  max-width: 100%;
+}
+
+.p-search:focus { border-color: var(--c-accent); }
+
+.p-count {
+  font-size: var(--fs-note);
+  color: var(--c-ink-3);
+}
+
+.p-count strong {
+  font-weight: 700;
+  color: var(--c-accent);
+  font-feature-settings: "tnum" 1;
+}
+
+/* ------------------------------------------------------------------
+   表
+------------------------------------------------------------------ */
+.p-scroll {
+  overflow-x: auto;
+  border-top: var(--rule-2) solid var(--c-rule-strong);
+  border-bottom: var(--rule-2) solid var(--c-rule-strong);
+}
+
+.p-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-note);
+  line-height: 1.75;
+}
+
+.p-table--list { min-width: 760px; }
+.p-table--roles { min-width: 520px; }
+.p-table--fields { min-width: 560px; }
+
+.p-table th, .p-table td {
+  padding: var(--sp-2);
+  border-bottom: var(--rule-1) solid var(--c-rule);
+  text-align: left;
+  vertical-align: top;
+}
+
+.p-table thead th {
+  background: var(--c-paper);
+  border-bottom: var(--rule-1) solid var(--c-rule-strong);
+  font-weight: 700;
+  color: var(--c-ink-2);
+  letter-spacing: var(--ls-head);
+  white-space: nowrap;
+}
+
+.p-table tbody tr:last-child td { border-bottom: 0; }
+.p-table tbody tr:hover td { background: var(--c-accent-tint); }
+
+.p-table .is-num {
+  text-align: right;
+  white-space: nowrap;
+  font-feature-settings: "tnum" 1;
+}
+
+.p-table .is-date { white-space: nowrap; font-feature-settings: "tnum" 1; color: var(--c-ink-2); }
+.p-table .is-tenant { white-space: nowrap; color: var(--c-ink-2); }
+.p-table .is-primary { font-weight: 700; color: var(--c-ink); min-width: 10em; }
+.p-table .is-act { text-align: right; white-space: nowrap; }
+.p-table .is-plain { color: var(--c-ink-2); }
+
+/* 状態の札。紺と臙脂のほかは罫線と紙色だけで濃淡を作っています。 */
+.p-mark {
+  display: inline-block;
+  white-space: nowrap;
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-head);
+  padding: 0 var(--sp-2);
+  border: var(--rule-1) solid var(--c-rule-strong);
+  background: var(--c-base);
+  color: var(--c-ink-2);
+}
+
+.p-mark--watch {
+  background: var(--c-paper);
+  color: var(--c-ink);
+  font-weight: 700;
+}
+
+.p-mark--alert {
+  background: var(--c-caution-tint);
+  border-color: var(--c-caution);
+  color: var(--c-caution);
+  font-weight: 700;
+}
+
+.p-mark--muted {
+  border-color: var(--c-rule);
+  color: var(--c-ink-3);
+}
+
+.p-empty {
+  padding: var(--sp-4) var(--sp-2);
+  border-top: var(--rule-2) solid var(--c-rule-strong);
+  border-bottom: var(--rule-2) solid var(--c-rule-strong);
+  color: var(--c-ink-2);
+}
+
+.p-empty p { margin: 0; }
+.p-empty p + p { margin-top: var(--sp-1); font-size: var(--fs-note); color: var(--c-ink-3); }
+
+/* ------------------------------------------------------------------
+   入力（追加・編集・詳細）
+------------------------------------------------------------------ */
+.p-form {
+  border-top: var(--rule-2) solid var(--c-accent);
+  border-bottom: var(--rule-2) solid var(--c-rule-strong);
+  margin-bottom: var(--sp-4);
+  padding-bottom: var(--sp-3);
+}
+
+.p-form__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-2);
+  padding: var(--sp-2) 0 var(--sp-3);
+  border-bottom: var(--rule-1) solid var(--c-rule);
+}
+
+.p-form__title {
+  font-family: var(--font-mincho);
+  font-size: var(--fs-sub);
+  line-height: var(--lh-head);
+  letter-spacing: var(--ls-head);
+  font-weight: 600;
+  margin: 0;
+}
+
+.p-form__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-3);
+  padding-top: var(--sp-3);
+}
+
+.p-field { min-width: 0; }
+.p-field--wide { grid-column: 1 / -1; }
+
+.p-field__label {
+  display: block;
+  margin-bottom: var(--sp-1);
+  font-size: var(--fs-note);
+  font-weight: 700;
+  letter-spacing: var(--ls-head);
+  color: var(--c-ink-2);
+}
+
+.p-field__req { margin-left: var(--sp-2); font-weight: 400; color: var(--c-caution); }
+
+.p-input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  font-family: var(--font-gothic);
+  font-size: var(--fs-body);
+  line-height: 1.7;
+  letter-spacing: var(--ls-body);
+  color: var(--c-ink);
+  background: var(--c-base);
+  border: var(--rule-1) solid var(--c-rule-strong);
+  padding: var(--sp-1) var(--sp-2);
+}
+
+.p-input:focus { border-color: var(--c-accent); }
+.p-input:disabled { background: var(--c-paper); color: var(--c-ink-2); }
+.p-input.is-error { border-color: var(--c-caution); border-width: var(--rule-2); }
+.p-input--num { text-align: right; font-feature-settings: "tnum" 1; }
+
+.p-field__err { margin: var(--sp-1) 0 0; font-size: var(--fs-note); color: var(--c-caution); }
+
+.p-form__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  padding-top: var(--sp-3);
+}
+
+.p-form__foot .p-actions__spacer { flex: 1 1 auto; }
+
+/* ------------------------------------------------------------------
+   説明
+------------------------------------------------------------------ */
+.p-def { margin: 0 0 var(--sp-4); }
+
+.p-def__label {
+  margin: 0 0 var(--sp-1);
+  font-size: var(--fs-note);
+  font-weight: 700;
+  letter-spacing: var(--ls-head);
+  color: var(--c-accent);
+}
+
+.p-def__body { margin: 0; color: var(--c-ink); max-width: 44em; }
+
+.p-def__body code {
+  font-family: "SFMono-Regular", Consolas, "Courier New", monospace;
+  font-size: var(--fs-note);
+  background: var(--c-paper);
+  padding: 0 var(--sp-1);
+}
+
+.p-colophon {
+  margin-top: var(--sp-4);
+  padding-top: var(--sp-3);
+  border-top: var(--rule-2) solid var(--c-rule-strong);
+  font-size: var(--fs-note);
+  color: var(--c-ink-3);
+}
+
+.p-colophon p { margin: 0 0 var(--sp-1); }
+.p-colophon p:last-child { margin-bottom: 0; }
+
+/* ------------------------------------------------------------------
+   スマートフォン
+------------------------------------------------------------------ */
+@media (max-width: 640px) {
+  :root {
+    --fs-title: 26px;
+    --fs-head: 20px;
+    --fs-sub: 17px;
+    --sp-5: 48px;
+  }
+
+  .p-sheet { padding: 0 var(--sp-2); }
+  .p-toolbar__label { width: 100%; }
+  .p-form__grid { grid-template-columns: 1fr; }
+  .p-search { width: 100%; }
+  .p-actions__spacer { flex-basis: 100%; }
+}
+</style>
 </head>
 <body>
-<p style="margin:0;padding:10px 16px;background:#f3e9e6;border-bottom:2px solid #9c463b;color:#4c4f54;font:13px/1.7 'Hiragino Kaku Gothic ProN','Hiragino Sans','Yu Gothic',YuGothic,Meiryo,'Noto Sans JP',sans-serif;letter-spacing:0.04em;">
-<span style="color:#9c463b;font-weight:700;">デモ用の想定値です。</span>この画面に表示される拠点・件数・氏名などのデータは、動作確認のために用意した想定値であり、実在する企業の実績値ではありません。
-</p>
 <div id="root"></div>
 <script>Babel.registerPreset("react-classic", { presets: [[Babel.availablePresets["react"], { runtime: "classic" }]] });</script>
 <script type="text/babel" data-presets="react-classic">
-const { useState, useMemo } = React;
+const { useState, useMemo, useRef, useEffect } = React;
 
-/* ------------------------------------------------------------------
+/* ==================================================================
    業務定義。ここを差し替えるだけで別業務の管理システムになります。
    実案件では JSON / DB に外出しします。
------------------------------------------------------------------- */
+
+   例：
+     ・車両管理（fields = 車番／用途／車検満了日／状態）
+     ・工具の貸出管理（fields = 工具名／貸出先／返却予定日／状態）
+
+   画面のコードは項目名を直接持っていません。すべて下の fields を
+   見て、表の列・入力欄・検索対象・CSVの見出しを組み立てています。
+================================================================== */
+
 const SCHEMAS = {
   staff: {
     label: "人材管理",
@@ -65,10 +596,11 @@ const SCHEMAS = {
   },
 };
 
+/* 拠点。拠点は名前で見分けます（色分けはしていません）。 */
 const TENANTS = [
-  { id: "t1", name: "本店", accent: "bg-sky-600" },
-  { id: "t2", name: "北営業所", accent: "bg-emerald-600" },
-  { id: "t3", name: "南工場", accent: "bg-amber-600" },
+  { id: "t1", name: "本店" },
+  { id: "t2", name: "北営業所" },
+  { id: "t3", name: "南工場" },
 ];
 
 const ROLES = {
@@ -77,16 +609,18 @@ const ROLES = {
   staff: { label: "現場スタッフ", scope: "own", canEdit: false, canDelete: false },
 };
 
+/* 状態の見え方。plain＝通常、watch＝気に留める、alert＝手当てが要る、
+   muted＝すでに動いていないもの。臙脂を使うのは alert だけです。 */
 const STATUS_TONE = {
-  稼働中: "bg-emerald-50 text-emerald-700 ring-emerald-200",
-  休職: "bg-amber-50 text-amber-700 ring-amber-200",
-  退職: "bg-slate-100 text-slate-500 ring-slate-200",
-  適正: "bg-emerald-50 text-emerald-700 ring-emerald-200",
-  要発注: "bg-amber-50 text-amber-700 ring-amber-200",
-  欠品: "bg-rose-50 text-rose-700 ring-rose-200",
-  異常なし: "bg-emerald-50 text-emerald-700 ring-emerald-200",
-  要観察: "bg-amber-50 text-amber-700 ring-amber-200",
-  要修理: "bg-rose-50 text-rose-700 ring-rose-200",
+  稼働中: "plain",
+  休職: "watch",
+  退職: "muted",
+  適正: "plain",
+  要発注: "watch",
+  欠品: "alert",
+  異常なし: "plain",
+  要観察: "watch",
+  要修理: "alert",
 };
 
 const SEED = {
@@ -111,8 +645,22 @@ const SEED = {
   ],
 };
 
+const FIELD_TYPE_LABEL = {
+  text: "自由入力",
+  number: "数値",
+  date: "日付",
+  select: "選択肢",
+  status: "状態（選択肢）",
+  textarea: "自由入力（複数行）",
+};
+
 const blankRecord = (fields) =>
   fields.reduce((acc, f) => ({ ...acc, [f.key]: f.type === "number" ? "" : f.type === "status" || f.type === "select" ? f.options[0] : "" }), {});
+
+const markClass = (value) => {
+  const tone = STATUS_TONE[value];
+  return tone && tone !== "plain" ? `p-mark p-mark--${tone}` : "p-mark";
+};
 
 function App() {
   const [schemaKey, setSchemaKey] = useState("staff");
@@ -121,6 +669,7 @@ function App() {
   const [data, setData] = useState(SEED);
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState(null);
+  const formRef = useRef(null);
 
   const schema = SCHEMAS[schemaKey];
   const role = ROLES[roleKey];
@@ -135,7 +684,14 @@ function App() {
     );
   }, [rows, role.scope, viewTenant, query, schema.fields]);
 
+  // 一覧の下に入力欄が開くため、開いた位置まで送ります
+  useEffect(() => {
+    if (editing && formRef.current) formRef.current.scrollIntoView({ block: "start" });
+  }, [editing]);
+
   const tenantOf = (id) => TENANTS.find((t) => t.id === id);
+
+  const columns = schema.fields.filter((f) => f.type !== "textarea");
 
   const exportCsv = () => {
     const header = ["拠点", ...schema.fields.map((f) => f.label)];
@@ -167,179 +723,349 @@ function App() {
     setEditing(null);
   };
 
+  const schemaKeys = Object.keys(SCHEMAS);
+  const roleKeys = Object.keys(ROLES);
+
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
-      {/* 常時表示：いま誰として、どの拠点を見ているか */}
-      <div className="sticky top-0 z-20 border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-3 px-4 py-3">
-          <div className="flex items-baseline gap-2">
-            <span className="text-sm font-semibold tracking-tight">現場管理システム</span>
-            <span className="text-xs text-slate-400">デモ</span>
-          </div>
+    <React.Fragment>
+      <div className="p-topbar" />
 
-          <label className="flex items-center gap-2 text-xs text-slate-500">
-            業務
-            <select
-              value={schemaKey}
-              onChange={(e) => { setSchemaKey(e.target.value); setQuery(""); }}
-              className="rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-900"
-            >
-              {Object.entries(SCHEMAS).map(([k, s]) => (
-                <option key={k} value={k}>{s.label}</option>
-              ))}
-            </select>
-          </label>
+      <div className="p-sheet">
+        {/* ---------------- ヘッダー ---------------- */}
+        <header className="p-masthead">
+          <p className="p-masthead__kicker">中小企業向け　業務改善・自動化サンプル　業務管理</p>
+          <h1 className="p-masthead__title">業務管理システム デモ</h1>
+          <p className="p-masthead__lead">
+            複数の拠点を持つ会社で、人材・在庫・設備点検を1つの仕組みで扱うための画面です。
+            拠点ごとにデータを分けたうえで、本部だけが横断して見られるようにしています。
+            扱うものが変わっても画面のコードは変えません。変えるのは項目定義だけです。
+            この画面では、業務・権限・拠点をその場で切り替えて、見える範囲がどう変わるかを確認できます。
+          </p>
+          <p className="p-masthead__meta">
+            業務：{schemaKeys.map((k) => SCHEMAS[k].label).join("／")}
+            {"　"}権限：{roleKeys.map((k) => ROLES[k].label).join("／")}
+            {"　"}拠点：{TENANTS.map((t) => t.name).join("／")}
+            <a href="../index.html">業務の悩み 索引へ戻る</a>
+          </p>
 
-          <label className="flex items-center gap-2 text-xs text-slate-500">
-            権限
-            <select
-              value={roleKey}
-              onChange={(e) => setRoleKey(e.target.value)}
-              className="rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-900"
-            >
-              {Object.entries(ROLES).map(([k, r]) => (
-                <option key={k} value={k}>{r.label}</option>
-              ))}
-            </select>
-          </label>
-
-          <label className="flex items-center gap-2 text-xs text-slate-500">
-            所属拠点
-            <select
-              value={viewTenant}
-              onChange={(e) => setViewTenant(e.target.value)}
-              className="rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-900"
-            >
-              {TENANTS.map((t) => (
-                <option key={t.id} value={t.id}>{t.name}</option>
-              ))}
-            </select>
-          </label>
-
-          <span className="ml-auto text-xs text-slate-500">
-            {role.scope === "all" ? "全拠点を横断表示" : `${tenantOf(viewTenant).name}のみ表示`}
-          </span>
-        </div>
-      </div>
-
-      <main className="mx-auto max-w-6xl px-4 py-6">
-        <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h1 className="text-xl font-semibold tracking-tight">{schema.label}</h1>
-            <p className="mt-1 text-sm text-slate-500">
-              {visible.length}
-              {schema.unit}を表示中
+          <div className="p-notice">
+            <p className="p-notice__title">数値の扱いについて</p>
+            <p className="p-notice__body">
+              この画面に表示される拠点・氏名・品名・件数・日付は、すべて動作確認のために用意したデモ用の想定値です。
+              実在する企業・人物・実績とは関係ありません。
+            </p>
+            <p className="p-notice__body">
+              画面上で追加・編集・削除した内容は、ブラウザの中だけに保持されます。どこにも保存・送信されません
+              （localStorage・Cookie・外部通信のいずれも使っていません）。ページを開き直すと最初の状態に戻ります。
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder={`${schema.noun}を検索`}
-              className="w-44 rounded border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-900"
-            />
+        </header>
+
+        {/* ---------------- 業務の切り替え ---------------- */}
+        <div className="p-toolbar">
+          <span className="p-toolbar__label">業務</span>
+          {schemaKeys.map((k) => (
             <button
-              onClick={exportCsv}
-              className="rounded border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-100"
+              key={k}
+              type="button"
+              className="p-choice"
+              aria-pressed={k === schemaKey}
+              onClick={() => { setSchemaKey(k); setQuery(""); setEditing(null); }}
             >
-              CSVで書き出す
+              {SCHEMAS[k].label}
             </button>
-            {role.canEdit && (
-              <button
-                onClick={() => setEditing({ ...blankRecord(schema.fields), tenantId: viewTenant })}
-                className="rounded bg-slate-900 px-3 py-2 text-sm text-white hover:bg-slate-700"
-              >
-                {schema.noun}を追加
-              </button>
-            )}
-          </div>
+          ))}
         </div>
 
-        {visible.length === 0 ? (
-          <div className="rounded border border-dashed border-slate-300 bg-white px-6 py-16 text-center">
-            <p className="text-sm text-slate-600">条件に合う{schema.noun}がありません。</p>
-            <p className="mt-1 text-sm text-slate-400">検索語を消すか、拠点を切り替えてください。</p>
+        {/* ---------------- 一 権限と表示範囲 ---------------- */}
+        <section className="p-section">
+          <div className="p-heading">
+            <span className="p-heading__no">一</span>
+            <h2 className="p-heading__text">誰として、どこを見ているか</h2>
           </div>
-        ) : (
-          <div className="overflow-hidden rounded border border-slate-200 bg-white">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+
+          <p className="p-lead">
+            同じ画面でも、本部管理者と現場スタッフでは見える範囲も操作できることも違います。
+            権限と所属拠点を切り替えると、下の一覧の中身と使えるボタンがその場で変わります。
+          </p>
+
+          <div className="p-toolbar p-toolbar--ruled">
+            <span className="p-toolbar__label">権限</span>
+            {roleKeys.map((k) => (
+              <button
+                key={k}
+                type="button"
+                className="p-choice"
+                aria-pressed={k === roleKey}
+                onClick={() => { setRoleKey(k); setEditing(null); }}
+              >
+                {ROLES[k].label}
+              </button>
+            ))}
+          </div>
+
+          <div className="p-toolbar p-toolbar--ruled">
+            <span className="p-toolbar__label">所属拠点</span>
+            {TENANTS.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                className="p-choice"
+                aria-pressed={t.id === viewTenant}
+                onClick={() => { setViewTenant(t.id); setEditing(null); }}
+              >
+                {t.name}
+              </button>
+            ))}
+          </div>
+
+          <div className="p-scope">
+            <p>
+              いま<strong>{role.label}</strong>として、
+              <strong>{role.scope === "all" ? "全拠点を横断表示" : `${tenantOf(viewTenant).name}のみ表示`}</strong>
+              しています。
+            </p>
+            <p className="p-scope__sub">
+              {role.canEdit ? "追加・編集ができます。" : "閲覧のみです。追加・編集はできません。"}
+              {role.canDelete ? "削除もできます。" : "削除はできません。"}
+              {role.scope === "all"
+                ? "所属拠点の指定は、新しく登録するときの初期値として使われます。"
+                : "所属拠点を変えると、見える範囲がその拠点に切り替わります。"}
+            </p>
+          </div>
+
+          <div className="p-scroll" style={{ marginTop: "var(--sp-4)" }}>
+            <table className="p-table p-table--roles">
+              <thead>
                 <tr>
-                  <th className="px-4 py-3 font-medium">拠点</th>
-                  {schema.fields
-                    .filter((f) => f.type !== "textarea")
-                    .map((f) => (
-                      <th key={f.key} className="px-4 py-3 font-medium">{f.label}</th>
-                    ))}
-                  <th className="px-4 py-3" />
+                  <th>権限</th>
+                  <th>見える範囲</th>
+                  <th>編集</th>
+                  <th>削除</th>
                 </tr>
               </thead>
               <tbody>
-                {visible.map((r) => (
-                  <tr key={r.id} className="border-t border-slate-100 hover:bg-slate-50">
-                    <td className="px-4 py-3">
-                      <span className="flex items-center gap-2">
-                        <span className={`h-3 w-1 rounded-full ${tenantOf(r.tenantId).accent}`} />
-                        <span className="text-slate-600">{tenantOf(r.tenantId).name}</span>
-                      </span>
+                {roleKeys.map((k) => (
+                  <tr key={k}>
+                    <td className={k === roleKey ? "is-primary" : "is-plain"}>
+                      {ROLES[k].label}
+                      {k === roleKey ? "（表示中）" : ""}
                     </td>
-                    {schema.fields
-                      .filter((f) => f.type !== "textarea")
-                      .map((f) => (
-                        <td key={f.key} className="px-4 py-3">
-                          {f.type === "status" ? (
-                            <span className={`inline-flex rounded-full px-2 py-0.5 text-xs ring-1 ${STATUS_TONE[r[f.key]] ?? "bg-slate-100 text-slate-600 ring-slate-200"}`}>
-                              {r[f.key]}
-                            </span>
-                          ) : f.type === "number" ? (
-                            <span className="font-mono tabular-nums">{r[f.key]}</span>
-                          ) : f.type === "date" ? (
-                            <span className="font-mono text-slate-600">{r[f.key]}</span>
-                          ) : f.primary ? (
-                            <span className="font-medium">{r[f.key]}</span>
-                          ) : (
-                            <span className="text-slate-600">{r[f.key]}</span>
-                          )}
-                        </td>
-                      ))}
-                    <td className="px-4 py-3 text-right">
-                      <button
-                        onClick={() => setEditing(r)}
-                        className="text-xs text-slate-500 underline underline-offset-4 hover:text-slate-900"
-                      >
-                        {role.canEdit ? "編集" : "詳細"}
-                      </button>
-                    </td>
+                    <td className="is-plain">{ROLES[k].scope === "all" ? "全拠点" : "自拠点のみ"}</td>
+                    <td className="is-plain">{ROLES[k].canEdit ? "できる" : "できない"}</td>
+                    <td className="is-plain">{ROLES[k].canDelete ? "できる" : "できない"}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        )}
 
-        <p className="mt-6 text-xs leading-relaxed text-slate-400">
-          項目定義を差し替えるだけで別業務の管理システムになります。上部の「業務」を切り替えると、
-          同じ画面が人材管理・在庫管理・設備点検に変わります。実案件ではここをデータベース側に持たせ、
-          拠点ごとのデータ分離と権限制御をサーバー側で担保します。
-        </p>
-      </main>
+          <p className="p-note">
+            この画面では権限をその場で切り替えられますが、実案件では利用者が自分で変えられるものではありません。
+            拠点ごとのデータ分離と権限の判定は、画面側ではなくサーバー側で行います。
+          </p>
+        </section>
 
-      {editing && (
-        <RecordForm
-          schema={schema}
-          record={editing}
-          readOnly={!role.canEdit}
-          canDelete={role.canDelete && Boolean(editing.id)}
-          tenantLocked={role.scope !== "all"}
-          onCancel={() => setEditing(null)}
-          onSave={save}
-          onDelete={() => remove(editing.id)}
-        />
-      )}
-    </div>
+        {/* ---------------- 二 一覧 ---------------- */}
+        <section className="p-section">
+          <div className="p-heading">
+            <span className="p-heading__no">二</span>
+            <h2 className="p-heading__text">{schema.label}の一覧</h2>
+          </div>
+
+          <p className="p-lead">
+            検索は表に出ている項目だけでなく、{schema.fields.find((f) => f.type === "textarea").label}も対象にしています。
+            CSVは、いま表示している範囲をそのまま書き出します。
+          </p>
+
+          <div className="p-actions">
+            <input
+              className="p-search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={`${schema.noun}を検索`}
+              aria-label={`${schema.noun}を検索`}
+            />
+            <button type="button" className="p-btn" onClick={exportCsv} disabled={visible.length === 0}>
+              CSVで書き出す
+            </button>
+            {role.canEdit ? (
+              <button
+                type="button"
+                className="p-btn p-btn--main"
+                onClick={() => setEditing({ ...blankRecord(schema.fields), tenantId: viewTenant })}
+              >
+                {schema.noun}を追加
+              </button>
+            ) : null}
+            <span className="p-actions__spacer" />
+            <span className="p-count">
+              <strong>{visible.length}</strong>{schema.unit}を表示中
+            </span>
+          </div>
+
+          {editing ? (
+            <div ref={formRef}>
+              <RecordForm
+                key={editing.id ?? "new"}
+                schema={schema}
+                record={editing}
+                readOnly={!role.canEdit}
+                canDelete={role.canDelete && Boolean(editing.id)}
+                tenantLocked={role.scope !== "all"}
+                onCancel={() => setEditing(null)}
+                onSave={save}
+                onDelete={() => remove(editing.id)}
+              />
+            </div>
+          ) : null}
+
+          {visible.length === 0 ? (
+            <div className="p-empty">
+              <p>条件に合う{schema.noun}がありません。</p>
+              <p>検索語を消すか、拠点を切り替えてください。</p>
+            </div>
+          ) : (
+            <div className="p-scroll">
+              <table className="p-table p-table--list">
+                <thead>
+                  <tr>
+                    <th>拠点</th>
+                    {columns.map((f) => (
+                      <th key={f.key}>{f.label}</th>
+                    ))}
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {visible.map((r) => (
+                    <tr key={r.id}>
+                      <td className="is-tenant">{tenantOf(r.tenantId).name}</td>
+                      {columns.map((f) => (
+                        <td
+                          key={f.key}
+                          className={
+                            f.type === "number" ? "is-num"
+                            : f.type === "date" ? "is-date"
+                            : f.primary ? "is-primary"
+                            : "is-plain"
+                          }
+                        >
+                          {f.type === "status"
+                            ? <span className={markClass(r[f.key])}>{r[f.key]}</span>
+                            : r[f.key]}
+                        </td>
+                      ))}
+                      <td className="is-act">
+                        <button type="button" className="p-btn p-btn--quiet" onClick={() => setEditing(r)}>
+                          {role.canEdit ? "編集" : "詳細"}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <p className="p-note">
+            表は横にスクロールできます。{schema.fields.find((f) => f.type === "textarea").label}は行が長くなるため一覧には出さず、
+            「{role.canEdit ? "編集" : "詳細"}」で開いたときに表示します。
+          </p>
+        </section>
+
+        {/* ---------------- 三 項目定義 ---------------- */}
+        <section className="p-section">
+          <div className="p-heading">
+            <span className="p-heading__no">三</span>
+            <h2 className="p-heading__text">差し替えているのは項目定義だけ</h2>
+          </div>
+
+          <p className="p-lead">
+            いま表示している「{schema.label}」の項目定義です。表の列も、入力欄も、検索の対象も、
+            CSVの見出しも、すべてこの定義から組み立てています。
+            上の「業務」を切り替えると、同じ画面が人材管理・在庫管理・設備点検に変わります。
+          </p>
+
+          <div className="p-scroll">
+            <table className="p-table p-table--fields">
+              <thead>
+                <tr>
+                  <th>項目</th>
+                  <th>種別</th>
+                  <th>必須</th>
+                  <th>選択肢</th>
+                </tr>
+              </thead>
+              <tbody>
+                {schema.fields.map((f) => (
+                  <tr key={f.key}>
+                    <td className="is-primary">{f.label}</td>
+                    <td className="is-plain">{FIELD_TYPE_LABEL[f.type]}</td>
+                    <td className="is-plain">{f.required ? "必須" : "任意"}</td>
+                    <td className="is-plain">{f.options ? f.options.join("／") : "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <p className="p-note">
+            車両管理、工具の貸出管理、クレーム記録なども、この定義を書き換えるだけで同じ画面のまま扱えます。
+          </p>
+        </section>
+
+        {/* ---------------- 四 実案件との違い ---------------- */}
+        <section className="p-section">
+          <div className="p-heading">
+            <span className="p-heading__no">四</span>
+            <h2 className="p-heading__text">実案件ではどうなるか</h2>
+          </div>
+
+          <div className="p-def">
+            <p className="p-def__label">項目定義の置き場所</p>
+            <p className="p-def__body">
+              この画面ではファイル冒頭の <code>SCHEMAS</code> に項目定義を持たせています。
+              実案件ではデータベース側に持たせ、業務の追加や項目の変更を画面を作り直さずに行えるようにします。
+            </p>
+          </div>
+
+          <div className="p-def">
+            <p className="p-def__label">拠点ごとのデータ分離と権限</p>
+            <p className="p-def__body">
+              この画面では、権限の判定をブラウザ側で行っています。
+              実案件では拠点ごとのデータ分離と権限制御をサーバー側で担保し、
+              権限のない利用者にはそもそもデータが渡らない形にします。
+            </p>
+          </div>
+
+          <div className="p-def">
+            <p className="p-def__label">この画面と納品物の違い</p>
+            <p className="p-def__body">
+              この画面はブラウザの中だけで動いており、データの保存も外部への送信も行っていません。
+              サンプルデータを埋め込んで、操作したときの動きだけをお見せしています。
+              ページを開き直すと最初の状態に戻ります。
+            </p>
+          </div>
+
+          <div className="p-colophon">
+            <p>掲載しているデータは、すべてデモ用の想定値です。実在する企業・人物・実績とは関係ありません。</p>
+            <p>React ＋ Tailwind CSS の1ファイル構成（CDN読み込み・ビルド不要）。意匠は索引ページと共通です。</p>
+            <p>
+              ほかのサンプルは
+              <a href="../index.html">業務の悩み 索引</a>
+              から見られます。
+            </p>
+          </div>
+        </section>
+      </div>
+    </React.Fragment>
   );
 }
 
+/* ==================================================================
+   追加・編集・詳細。一覧の上に開きます（覆いかぶさる窓は使いません）。
+================================================================== */
 function RecordForm({ schema, record, readOnly, canDelete, tenantLocked, onCancel, onSave, onDelete }) {
   const [draft, setDraft] = useState(record);
   const [touched, setTouched] = useState(false);
@@ -355,78 +1081,78 @@ function RecordForm({ schema, record, readOnly, canDelete, tenantLocked, onCance
   };
 
   return (
-    <div className="fixed inset-0 z-30 flex items-end justify-center bg-slate-900/40 p-0 sm:items-center sm:p-6">
-      <div className="max-h-full w-full max-w-lg overflow-y-auto rounded-t-lg bg-white sm:rounded-lg">
-        <div className="sticky top-0 flex items-center justify-between border-b border-slate-200 bg-white px-5 py-4">
-          <h2 className="text-sm font-semibold">
-            {record.id ? `${schema.noun}の${readOnly ? "詳細" : "編集"}` : `${schema.noun}を追加`}
-          </h2>
-          <button onClick={onCancel} className="text-sm text-slate-500 hover:text-slate-900">閉じる</button>
-        </div>
-
-        <div className="space-y-4 px-5 py-5">
-          <div>
-            <label className="mb-1 block text-xs text-slate-500">拠点</label>
-            <select
-              value={draft.tenantId}
-              disabled={readOnly || tenantLocked}
-              onChange={(e) => set("tenantId", e.target.value)}
-              className="w-full rounded border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-50 disabled:text-slate-500"
-            >
-              {TENANTS.map((t) => (
-                <option key={t.id} value={t.id}>{t.name}</option>
-              ))}
-            </select>
-          </div>
-
-          {schema.fields.map((f) => {
-            const isMissing = touched && f.required && !String(draft[f.key] ?? "").trim();
-            const base = `w-full rounded border px-3 py-2 text-sm disabled:bg-slate-50 disabled:text-slate-500 ${isMissing ? "border-rose-400" : "border-slate-300"}`;
-            return (
-              <div key={f.key}>
-                <label className="mb-1 block text-xs text-slate-500">
-                  {f.label}
-                  {f.required && <span className="ml-1 text-rose-500">必須</span>}
-                </label>
-                {f.type === "select" || f.type === "status" ? (
-                  <select value={draft[f.key]} disabled={readOnly} onChange={(e) => set(f.key, e.target.value)} className={base}>
-                    {f.options.map((o) => (
-                      <option key={o} value={o}>{o}</option>
-                    ))}
-                  </select>
-                ) : f.type === "textarea" ? (
-                  <textarea rows={3} value={draft[f.key] ?? ""} disabled={readOnly} onChange={(e) => set(f.key, e.target.value)} className={base} />
-                ) : (
-                  <input
-                    type={f.type === "number" ? "number" : f.type === "date" ? "date" : "text"}
-                    value={draft[f.key] ?? ""}
-                    disabled={readOnly}
-                    onChange={(e) => set(f.key, e.target.value)}
-                    className={base}
-                  />
-                )}
-                {isMissing && <p className="mt-1 text-xs text-rose-600">{f.label}を入力してください。</p>}
-              </div>
-            );
-          })}
-        </div>
-
-        {!readOnly && (
-          <div className="sticky bottom-0 flex items-center gap-2 border-t border-slate-200 bg-white px-5 py-4">
-            <button onClick={submit} className="rounded bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-700">
-              保存する
-            </button>
-            <button onClick={onCancel} className="rounded border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">
-              やめる
-            </button>
-            {canDelete && (
-              <button onClick={onDelete} className="ml-auto text-sm text-rose-600 underline underline-offset-4">
-                削除する
-              </button>
-            )}
-          </div>
-        )}
+    <div className="p-form">
+      <div className="p-form__head">
+        <h3 className="p-form__title">
+          {record.id ? `${schema.noun}の${readOnly ? "詳細" : "編集"}` : `${schema.noun}を追加`}
+        </h3>
+        <span className="p-actions__spacer" />
+        <button type="button" className="p-btn p-btn--quiet" onClick={onCancel}>閉じる</button>
       </div>
+
+      <div className="p-form__grid">
+        <div className="p-field">
+          <label className="p-field__label" htmlFor="fld-tenant">拠点</label>
+          <select
+            id="fld-tenant"
+            className="p-input"
+            value={draft.tenantId}
+            disabled={readOnly || tenantLocked}
+            onChange={(e) => set("tenantId", e.target.value)}
+          >
+            {TENANTS.map((t) => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))}
+          </select>
+        </div>
+
+        {schema.fields.map((f) => {
+          const isMissing = touched && f.required && !String(draft[f.key] ?? "").trim();
+          const cls = `p-input${f.type === "number" ? " p-input--num" : ""}${isMissing ? " is-error" : ""}`;
+          const id = `fld-${f.key}`;
+          return (
+            <div className={`p-field${f.type === "textarea" ? " p-field--wide" : ""}`} key={f.key}>
+              <label className="p-field__label" htmlFor={id}>
+                {f.label}
+                {f.required ? <span className="p-field__req">必須</span> : null}
+              </label>
+              {f.type === "select" || f.type === "status" ? (
+                <select id={id} className={cls} value={draft[f.key]} disabled={readOnly} onChange={(e) => set(f.key, e.target.value)}>
+                  {f.options.map((o) => (
+                    <option key={o} value={o}>{o}</option>
+                  ))}
+                </select>
+              ) : f.type === "textarea" ? (
+                <textarea id={id} className={cls} rows={3} value={draft[f.key] ?? ""} disabled={readOnly} onChange={(e) => set(f.key, e.target.value)} />
+              ) : (
+                <input
+                  id={id}
+                  className={cls}
+                  type={f.type === "number" ? "number" : f.type === "date" ? "date" : "text"}
+                  value={draft[f.key] ?? ""}
+                  disabled={readOnly}
+                  onChange={(e) => set(f.key, e.target.value)}
+                />
+              )}
+              {isMissing ? <p className="p-field__err">{f.label}を入力してください。</p> : null}
+            </div>
+          );
+        })}
+      </div>
+
+      {readOnly ? null : (
+        <div className="p-form__foot">
+          <button type="button" className="p-btn p-btn--main" onClick={submit}>保存する</button>
+          <button type="button" className="p-btn" onClick={onCancel}>やめる</button>
+          {touched && missing.length > 0 ? (
+            <span className="p-field__err" style={{ margin: 0 }}>未入力の必須項目が{missing.length}件あります。</span>
+          ) : null}
+          <span className="p-actions__spacer" />
+          {canDelete ? (
+            <button type="button" className="p-btn p-btn--caution" onClick={onDelete}>削除する</button>
+          ) : null}
+        </div>
+      )}
     </div>
   );
 }

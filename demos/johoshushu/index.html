@@ -1,0 +1,2051 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>定期的な情報収集の自動化 デモ | 差分レポートで確認する</title>
+<meta name="description" content="競合の価格や補助金の公募情報を定期的に取りに行き、前回との差分だけをレポートにする仕組みのデモ。収集設定・収集結果・差分レポート・通知ルール・実行履歴・手作業との比較の6画面。掲載データはすべて架空で、実在のサイトにはアクセスしていません。">
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+/* ==================================================================
+   配色・字送りは索引ページ（リポジトリ直下の index.html）と同一です。
+   このファイルで新しいトークンは定義していません。
+================================================================== */
+:root {
+  --c-base:         #ffffff;
+  --c-paper:        #f5f1e8;
+  --c-ink:          #1b1c1e;
+  --c-ink-2:        #4c4f54;
+  --c-ink-3:        #7d8087;
+  --c-rule:         #ddd7c8;
+  --c-rule-strong:  #b3ab98;
+  --c-accent:       #2d4257;
+  --c-accent-tint:  #eef1f3;
+  --c-caution:      #9c463b;
+  --c-caution-tint: #f3e9e6;
+  --font-mincho: "Hiragino Mincho ProN","Yu Mincho","YuMincho","MS PMincho","Noto Serif JP",serif;
+  --font-gothic: "Hiragino Kaku Gothic ProN","Hiragino Sans","Yu Gothic","YuGothic",Meiryo,"Noto Sans JP",sans-serif;
+  --fs-note:  13px;  --fs-body: 15px;  --fs-sub: 18px;  --fs-head: 24px;  --fs-title: 33px;
+  --lh-body: 1.9;  --lh-head: 1.45;  --ls-body: 0.04em;  --ls-head: 0.06em;
+  --sp-1: 4px;  --sp-2: 8px;  --sp-3: 16px;  --sp-4: 32px;  --sp-5: 64px;
+  --rule-1: 1px;  --rule-2: 2px;
+}
+
+html { -webkit-text-size-adjust: 100%; }
+
+/* Tailwind の preflight は実行時に head の末尾へ挿入されるため、
+   body と a はセレクタの詳細度を上げて上書きされないようにしています。 */
+html body {
+  margin: 0;
+  background: var(--c-base);
+  color: var(--c-ink);
+  font-family: var(--font-gothic);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  letter-spacing: var(--ls-body);
+  text-align: left;
+}
+
+*, *::before, *::after { border-radius: 0; box-shadow: none; }
+
+body a {
+  color: var(--c-accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+body a:hover { text-decoration-thickness: 2px; }
+
+:focus-visible { outline: var(--rule-2) solid var(--c-accent); outline-offset: 2px; }
+
+/* ------------------------------------------------------------------
+   版面
+------------------------------------------------------------------ */
+.p-topbar { border-top: 3px solid var(--c-accent); }
+
+.p-sheet {
+  max-width: 940px;
+  margin: 0 auto;
+  padding: 0 var(--sp-3);
+}
+
+.p-section { padding-top: var(--sp-5); }
+.p-section:last-of-type { padding-bottom: var(--sp-5); }
+
+/* ------------------------------------------------------------------
+   ヘッダー
+------------------------------------------------------------------ */
+.p-masthead { padding-top: var(--sp-4); padding-bottom: var(--sp-4); }
+
+.p-masthead__kicker {
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-head);
+  color: var(--c-ink-3);
+  margin: 0 0 var(--sp-2);
+}
+
+.p-masthead__title {
+  font-family: var(--font-mincho);
+  font-size: var(--fs-title);
+  line-height: var(--lh-head);
+  letter-spacing: var(--ls-head);
+  font-weight: 600;
+  color: var(--c-ink);
+  margin: 0;
+  padding-bottom: var(--sp-3);
+  border-bottom: var(--rule-2) solid var(--c-accent);
+}
+
+.p-masthead__lead {
+  margin: var(--sp-3) 0 0;
+  max-width: 40em;
+  color: var(--c-ink-2);
+}
+
+.p-masthead__meta {
+  margin: var(--sp-3) 0 0;
+  font-size: var(--fs-note);
+  color: var(--c-ink-3);
+}
+
+/* ------------------------------------------------------------------
+   注記帯
+------------------------------------------------------------------ */
+.p-notice {
+  margin-top: var(--sp-4);
+  background: var(--c-caution-tint);
+  border-left: 3px solid var(--c-caution);
+  padding: var(--sp-3);
+}
+
+.p-notice__title {
+  margin: 0 0 var(--sp-1);
+  font-size: var(--fs-note);
+  font-weight: 700;
+  letter-spacing: var(--ls-head);
+  color: var(--c-caution);
+}
+
+.p-notice__body {
+  margin: 0;
+  font-size: var(--fs-note);
+  line-height: 1.8;
+  color: var(--c-ink-2);
+}
+
+.p-notice__body + .p-notice__body { margin-top: var(--sp-2); }
+
+/* ------------------------------------------------------------------
+   目次
+------------------------------------------------------------------ */
+.p-nav {
+  margin-top: var(--sp-3);
+  padding: var(--sp-2) 0;
+  border-top: var(--rule-1) solid var(--c-rule);
+  border-bottom: var(--rule-1) solid var(--c-rule);
+  font-size: var(--fs-note);
+  color: var(--c-ink-3);
+}
+
+.p-nav ul { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: var(--sp-2) var(--sp-3); }
+
+/* ------------------------------------------------------------------
+   節見出し
+------------------------------------------------------------------ */
+.p-heading {
+  margin: 0 0 var(--sp-3);
+  padding-bottom: var(--sp-2);
+  border-bottom: var(--rule-2) solid var(--c-rule-strong);
+}
+
+.p-heading__no {
+  display: block;
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-head);
+  color: var(--c-accent);
+  margin-bottom: var(--sp-1);
+}
+
+.p-heading__text {
+  font-family: var(--font-mincho);
+  font-size: var(--fs-head);
+  line-height: var(--lh-head);
+  letter-spacing: var(--ls-head);
+  font-weight: 600;
+  margin: 0;
+}
+
+.p-lead {
+  margin: 0 0 var(--sp-3);
+  max-width: 42em;
+  color: var(--c-ink-2);
+}
+
+.p-sub {
+  font-family: var(--font-mincho);
+  font-size: var(--fs-sub);
+  line-height: var(--lh-head);
+  letter-spacing: var(--ls-head);
+  font-weight: 600;
+  margin: var(--sp-4) 0 var(--sp-2);
+  padding-bottom: var(--sp-1);
+  border-bottom: var(--rule-1) solid var(--c-rule-strong);
+}
+
+.p-note {
+  margin: var(--sp-2) 0 0;
+  font-size: var(--fs-note);
+  line-height: 1.8;
+  color: var(--c-ink-3);
+}
+
+.p-note--caution { color: var(--c-caution); }
+
+/* ------------------------------------------------------------------
+   操作
+------------------------------------------------------------------ */
+.p-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+  font-size: var(--fs-note);
+  color: var(--c-ink-3);
+}
+
+.p-toolbar__spacer { flex: 1 1 auto; }
+
+.p-btn {
+  font-family: var(--font-gothic);
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-body);
+  color: var(--c-accent);
+  background: var(--c-accent-tint);
+  border: var(--rule-1) solid var(--c-rule-strong);
+  padding: var(--sp-1) var(--sp-2);
+  cursor: pointer;
+}
+
+.p-btn:hover { background: var(--c-base); }
+
+.p-btn[aria-pressed="true"] {
+  background: var(--c-accent);
+  border-color: var(--c-accent);
+  color: var(--c-base);
+}
+
+.p-btn--main {
+  font-size: var(--fs-body);
+  padding: var(--sp-2) var(--sp-4);
+  background: var(--c-accent);
+  border-color: var(--c-accent);
+  color: var(--c-base);
+}
+
+.p-btn--main:hover { background: var(--c-accent); opacity: 0.86; }
+
+.p-btn--main:disabled,
+.p-btn--main:disabled:hover {
+  background: var(--c-rule-strong);
+  border-color: var(--c-rule-strong);
+  color: var(--c-base);
+  cursor: default;
+  opacity: 1;
+}
+
+/* ------------------------------------------------------------------
+   枠と段組
+------------------------------------------------------------------ */
+.p-box { border: var(--rule-1) solid var(--c-rule-strong); background: var(--c-base); }
+
+.p-box__head {
+  background: var(--c-paper);
+  border-bottom: var(--rule-1) solid var(--c-rule-strong);
+  padding: var(--sp-2);
+  font-size: var(--fs-note);
+  font-weight: 700;
+  letter-spacing: var(--ls-head);
+  color: var(--c-accent);
+}
+
+.p-box__body { padding: var(--sp-2); }
+.p-box__body--flush { padding: 0; }
+
+.p-cols {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  align-items: start;
+  gap: var(--sp-3);
+}
+
+.p-cols--2 { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+
+/* 選択肢 */
+.p-choice {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: flex-start;
+  padding: var(--sp-2);
+  border-bottom: var(--rule-1) solid var(--c-rule);
+  cursor: pointer;
+}
+
+.p-choice:last-child { border-bottom: 0; }
+.p-choice:hover { background: var(--c-accent-tint); }
+
+.p-choice input {
+  flex: 0 0 auto;
+  margin: 7px 0 0;
+  accent-color: var(--c-accent);
+}
+
+.p-choice__body { flex: 1 1 auto; min-width: 0; }
+.p-choice__label { display: block; font-size: var(--fs-body); line-height: 1.6; }
+.p-choice__note { display: block; font-size: var(--fs-note); line-height: 1.7; color: var(--c-ink-3); margin-top: 2px; }
+
+/* 入力 */
+.p-input, .p-select {
+  font-family: var(--font-gothic);
+  font-size: var(--fs-body);
+  letter-spacing: var(--ls-body);
+  color: var(--c-ink);
+  background: var(--c-base);
+  border: var(--rule-1) solid var(--c-rule-strong);
+  padding: var(--sp-1) var(--sp-2);
+  width: 100%;
+  max-width: 12em;
+}
+
+.p-field { margin-bottom: var(--sp-3); }
+.p-field:last-child { margin-bottom: 0; }
+
+.p-field__label {
+  display: block;
+  margin: 0 0 var(--sp-1);
+  font-size: var(--fs-note);
+  font-weight: 700;
+  letter-spacing: var(--ls-head);
+  color: var(--c-accent);
+}
+
+.p-field__note { margin: var(--sp-1) 0 0; font-size: var(--fs-note); color: var(--c-ink-3); }
+
+.p-inline { display: flex; align-items: baseline; gap: var(--sp-2); flex-wrap: wrap; }
+.p-inline--tight { display: inline-flex; flex-wrap: nowrap; margin-left: var(--sp-2); }
+
+/* ------------------------------------------------------------------
+   数字
+------------------------------------------------------------------ */
+.p-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  border-top: var(--rule-2) solid var(--c-accent);
+  border-left: var(--rule-1) solid var(--c-rule);
+}
+
+.p-stat {
+  padding: var(--sp-2) var(--sp-3) var(--sp-3);
+  border-right: var(--rule-1) solid var(--c-rule);
+  border-bottom: var(--rule-1) solid var(--c-rule);
+}
+
+.p-stat__label { margin: 0 0 var(--sp-1); font-size: var(--fs-note); letter-spacing: var(--ls-head); color: var(--c-ink-2); }
+
+.p-stat__num {
+  margin: 0;
+  font-size: var(--fs-title);
+  line-height: 1.2;
+  font-weight: 700;
+  color: var(--c-accent);
+  letter-spacing: 0.01em;
+  font-feature-settings: "tnum" 1;
+}
+
+.p-stat__unit { font-size: var(--fs-sub); font-weight: 500; margin-left: 2px; }
+.p-stat__note { margin: var(--sp-1) 0 0; font-size: var(--fs-note); line-height: 1.7; color: var(--c-ink-3); }
+
+.p-stat--caution .p-stat__num { color: var(--c-caution); }
+.p-stat--muted .p-stat__num { color: var(--c-ink-3); }
+.p-stat--text .p-stat__num { font-size: var(--fs-head); }
+
+/* 差分レポートの要約は8枠。desktopは4列、スマートフォンは2列。 */
+.p-stats--4 { grid-template-columns: repeat(4, 1fr); }
+/* 手作業との比較の結果は4枠。枠が狭いので2列に固定する。 */
+.p-stats--2 { grid-template-columns: repeat(2, 1fr); border-top: 0; border-left: 0; }
+
+/* ------------------------------------------------------------------
+   表
+------------------------------------------------------------------ */
+.p-tablewrap {
+  overflow-x: auto;
+  border-top: var(--rule-2) solid var(--c-rule-strong);
+  border-bottom: var(--rule-2) solid var(--c-rule-strong);
+}
+
+.p-table {
+  width: 100%;
+  min-width: 820px;
+  border-collapse: collapse;
+  font-size: var(--fs-note);
+  line-height: 1.75;
+}
+
+.p-table th, .p-table td {
+  padding: var(--sp-2);
+  text-align: left;
+  vertical-align: top;
+  border-bottom: var(--rule-1) solid var(--c-rule);
+  border-left: var(--rule-1) solid transparent;
+}
+
+.p-table thead th {
+  background: var(--c-paper);
+  color: var(--c-ink-2);
+  font-weight: 700;
+  letter-spacing: var(--ls-head);
+  white-space: nowrap;
+  border-bottom: var(--rule-1) solid var(--c-rule-strong);
+}
+
+.p-table thead th.is-group {
+  text-align: center;
+  border-left: var(--rule-1) solid var(--c-rule-strong);
+}
+
+/* 差分レポートの表は列が少ないので、下限幅を下げて横スクロールを短くする。 */
+.p-table--diff { min-width: 660px; }
+
+.p-table tbody tr:last-child td { border-bottom: 0; }
+.p-table td.is-num { text-align: right; white-space: nowrap; font-feature-settings: "tnum" 1; }
+.p-table td.is-tight { white-space: nowrap; }
+.p-table td.is-prev { color: var(--c-ink-3); }
+.p-table .is-sep { border-left: var(--rule-1) solid var(--c-rule); }
+
+.p-table tbody tr.is-notify td { background: var(--c-accent-tint); }
+.p-table tbody tr.is-notify td:first-child { border-left: 3px solid var(--c-accent); }
+.p-table tbody tr.is-gone td { color: var(--c-ink-3); }
+
+.p-strike { text-decoration: line-through; text-decoration-thickness: 1px; }
+
+/* 変化の表示 */
+.p-move { display: block; }
+.p-move + .p-move { margin-top: 2px; }
+.p-move__name { color: var(--c-ink-3); margin-right: var(--sp-1); }
+.p-move__from { color: var(--c-ink-3); }
+.p-move__arrow { color: var(--c-ink-3); margin: 0 var(--sp-1); }
+.p-move__to { font-weight: 700; }
+.p-move__pct { margin-left: var(--sp-1); font-feature-settings: "tnum" 1; }
+.p-move__pct--caution { color: var(--c-caution); }
+.p-move__pct--accent { color: var(--c-accent); }
+
+/* 分類ラベル */
+.p-tag {
+  display: inline-block;
+  font-size: var(--fs-note);
+  line-height: 1.6;
+  padding: 0 var(--sp-1);
+  white-space: nowrap;
+  border: var(--rule-1) solid var(--c-rule-strong);
+  background: var(--c-base);
+  color: var(--c-ink-2);
+}
+
+.p-tag--caution { color: var(--c-caution); border-color: var(--c-caution); background: var(--c-caution-tint); }
+.p-tag--accent  { color: var(--c-accent);  border-color: var(--c-accent);  background: var(--c-accent-tint); }
+.p-tag--added { color: var(--c-accent); border-color: var(--c-accent); }
+.p-tag--removed { color: var(--c-ink-3); border-color: var(--c-rule); }
+.p-tag--edit { color: var(--c-ink-2); }
+.p-tag--same { color: var(--c-ink-3); border-color: var(--c-rule); }
+.p-tag--notify { color: var(--c-base); background: var(--c-accent); border-color: var(--c-accent); }
+.p-tag--off { color: var(--c-ink-3); border-color: var(--c-rule); }
+.p-tag--fail { color: var(--c-caution); border-color: var(--c-caution); background: var(--c-caution-tint); }
+
+/* ------------------------------------------------------------------
+   実行の状態
+------------------------------------------------------------------ */
+.p-run {
+  border-top: var(--rule-2) solid var(--c-accent);
+  padding: var(--sp-3) 0 0;
+  margin-top: var(--sp-4);
+}
+
+.p-run__line { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3); }
+.p-run__state { font-size: var(--fs-note); color: var(--c-ink-2); }
+
+.p-progress { margin: var(--sp-3) 0 0; padding: 0; list-style: none; border-top: var(--rule-1) solid var(--c-rule); }
+
+.p-progress li {
+  display: flex;
+  gap: var(--sp-3);
+  padding: var(--sp-1) var(--sp-2);
+  border-bottom: var(--rule-1) solid var(--c-rule);
+  font-size: var(--fs-note);
+}
+
+.p-progress__name { flex: 1 1 auto; min-width: 0; }
+.p-progress__state { flex: 0 0 auto; color: var(--c-ink-3); }
+.p-progress__state--done { color: var(--c-accent); }
+
+.p-empty {
+  border: var(--rule-1) dashed var(--c-rule-strong);
+  padding: var(--sp-4) var(--sp-3);
+  text-align: center;
+  color: var(--c-ink-3);
+  font-size: var(--fs-note);
+  background: var(--c-paper);
+}
+
+/* ------------------------------------------------------------------
+   用語・注記
+------------------------------------------------------------------ */
+.p-terms {
+  background: var(--c-paper);
+  border-top: var(--rule-2) solid var(--c-rule-strong);
+  padding: var(--sp-3);
+}
+
+.p-terms dl { margin: 0; }
+
+.p-terms dt {
+  font-size: var(--fs-note);
+  font-weight: 700;
+  letter-spacing: var(--ls-head);
+  color: var(--c-accent);
+  margin-bottom: var(--sp-1);
+}
+
+.p-terms dd { margin: 0 0 var(--sp-3); color: var(--c-ink); }
+.p-terms dd:last-of-type { margin-bottom: 0; }
+
+.p-sources { margin: 0; padding: 0; list-style: none; border-top: var(--rule-1) solid var(--c-rule); }
+
+.p-sources li {
+  display: flex;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-2);
+  border-bottom: var(--rule-1) solid var(--c-rule);
+  font-size: var(--fs-note);
+  line-height: 1.85;
+  color: var(--c-ink-2);
+}
+
+.p-sources__no { flex: 0 0 auto; width: 3.6em; color: var(--c-ink-3); }
+.p-sources__body { flex: 1 1 auto; }
+.p-sources__body strong { font-weight: 700; color: var(--c-ink); }
+
+.p-steps { margin: 0; padding: 0; list-style: none; border-top: var(--rule-1) solid var(--c-rule); }
+
+.p-steps li {
+  display: flex;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-2);
+  border-bottom: var(--rule-1) solid var(--c-rule);
+}
+
+.p-steps__no { flex: 0 0 auto; width: 2.2em; font-family: var(--font-mincho); font-size: var(--fs-sub); color: var(--c-accent); }
+.p-steps__body { flex: 1 1 auto; }
+.p-steps__body p { margin: 0; }
+.p-steps__note { margin-top: var(--sp-1) !important; font-size: var(--fs-note); color: var(--c-ink-2); }
+
+.p-colophon {
+  margin-top: var(--sp-4);
+  padding-top: var(--sp-3);
+  border-top: var(--rule-2) solid var(--c-rule-strong);
+  font-size: var(--fs-note);
+  color: var(--c-ink-3);
+}
+
+.p-colophon p { margin: 0 0 var(--sp-1); }
+.p-colophon p:last-child { margin-bottom: 0; }
+
+/* ------------------------------------------------------------------
+   スマートフォン
+------------------------------------------------------------------ */
+@media (max-width: 640px) {
+  :root {
+    --fs-title: 26px;
+    --fs-head: 20px;
+    --fs-sub: 17px;
+    --sp-5: 48px;
+  }
+
+  .p-stat__num { font-size: 28px; }
+  .p-stat--text .p-stat__num { font-size: var(--fs-sub); }
+  .p-stats--4, .p-stats--2 { grid-template-columns: repeat(2, 1fr); }
+  .p-input, .p-select { max-width: 100%; }
+  .p-btn--main { width: 100%; text-align: center; }
+  .p-inline--tight { margin-left: 0; }
+}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>Babel.registerPreset("react-classic", { presets: [[Babel.availablePresets["react"], { runtime: "classic" }]] });</script>
+<script type="text/babel" data-presets="react-classic">
+const { useState, useMemo, useRef, useEffect } = React;
+
+/* ==================================================================
+   このデモについて
+
+   ・掲載しているサイト名・商品名・価格・制度名は、すべて架空です。
+     実在するサイトへのアクセスは一切行っていません。
+     「前回取得分」「今回取得分」の2世代のデータをあらかじめ持たせ、
+     実行ボタンで両者を突き合わせて差分を出しています。
+   ・入力した内容はどこにも保存・送信されません。ブラウザのメモリ上に
+     だけ置き、リロードすると初期状態に戻ります。
+     localStorage / Cookie / 外部送信のいずれも使っていません。
+
+   転用のしかた
+
+   下の PRESETS を差し替えるだけで、別の用途のデモになります。
+   画面側のコードは、収集対象の中身も項目の意味も知りません。
+   ・targets … 収集先（サイト）
+   ・fields  … 取得して差分を見る項目。primary が値の上下を見る項目
+   ・rules   … 通知条件のひな形
+   ・rows    … 前回取得分(prev)と今回取得分(curr)の2世代データ
+================================================================== */
+
+/* ------------------------------------------------------------------
+   1. 共通設定
+------------------------------------------------------------------ */
+const CONFIG = {
+  title: "定期的な情報収集の自動化",
+  subtitle: "毎朝の目視チェックを、差分レポート1枚に置き換える",
+  defaultWatchSeconds: 25,   // 1件を目視で確認するのにかかる秒数（初期値）
+  defaultWage: 2200,         // 人件費換算に使う時給（円）。想定値です
+  historyRows: 6,            // 実行履歴に出す過去の実行回数
+  stepMs: 420,               // 実行演出の1サイトあたりの待ち時間
+};
+
+const FREQUENCIES = [
+  { key: "hourly",  label: "1時間ごと",        perMonth: 720, stepMs: 3600e3,          note: "価格の動きが速い商材向け" },
+  { key: "twice",   label: "1日2回（朝・夕）", perMonth: 60,  stepMs: 12 * 3600e3,     note: "朝と夕で在庫が動く商材向け" },
+  { key: "daily",   label: "毎朝1回（6時）",   perMonth: 30,  stepMs: 24 * 3600e3,     note: "もっとも多い設定" },
+  { key: "weekly",  label: "週1回（月曜朝）",  perMonth: 4,   stepMs: 7 * 24 * 3600e3, note: "公募・制度情報向け" },
+  { key: "monthly", label: "月1回（1日朝）",   perMonth: 1,   stepMs: 30 * 24 * 3600e3, note: "更新の少ない情報向け" },
+];
+
+// 臙脂（caution）は「要注意」の用途にだけ使う。値の向きと注意の向きは
+// 用途によって逆になるため、色はプリセットの kindTone で決める。
+const KIND_META = {
+  up:      { label: "値上がり" },
+  down:    { label: "値下がり" },
+  added:   { tag: "added",   label: "新規" },
+  removed: { tag: "removed", label: "消えた" },
+  edit:    { tag: "edit",    label: "項目の変更" },
+  same:    { tag: "same",    label: "変化なし" },
+};
+
+/* ------------------------------------------------------------------
+   2. 用途プリセット
+      ここを差し替えれば、別の情報収集のデモになります。
+------------------------------------------------------------------ */
+const PRESETS = [
+  {
+    key: "kakaku",
+    label: "競合の価格・在庫を見張る",
+    lead: "競合3社の販売ページから、価格・在庫状況・ポイント還元率を取得する設定です。毎朝1回まわして、変わった行だけを報告します。",
+    unitWord: "商品",
+    defaultFreq: "daily",
+    idField: { key: "name", label: "商品名" },
+    subField: { key: "model", label: "型番" },
+    kindLabels: { up: "値上がり", down: "値下がり" },
+    // 競合の値上がりは要注意、値下がりはこちらの好機
+    kindTone: { up: "caution", down: "accent" },
+    targets: [
+      { key: "s1", label: "A社 公式オンラインストア（架空）", short: "A社ストア", note: "自社と品ぞろえが最も近い競合" },
+      { key: "s2", label: "B社 通販サイト（架空）",           short: "B社通販",   note: "値引きが早い競合" },
+      { key: "s3", label: "C社 モール出店（架空）",           short: "C社モール", note: "ポイント還元で調整してくる競合" },
+    ],
+    fields: [
+      { key: "price", label: "販売価格",       unit: "円", type: "money",  primary: true, defaultOn: true,  note: "上下の向きを見る中心の項目" },
+      { key: "stock", label: "在庫状況",       unit: "",   type: "status", defaultOn: true,  note: "在庫あり／残りわずか／在庫なし" },
+      { key: "point", label: "ポイント還元率", unit: "%",  type: "num",    defaultOn: true,  note: "実質価格に効く項目" },
+    ],
+    rules: [
+      { key: "drop",   kind: "pct-down",  field: "price", label: "価格が下がった",             suffix: "％以上", defaultOn: true,  defaultThreshold: 5,  note: "追随の判断が要る" },
+      { key: "rise",   kind: "pct-up",    field: "price", label: "価格が上がった",             suffix: "％以上", defaultOn: true,  defaultThreshold: 5,  note: "こちらが安くなる好機" },
+      { key: "restock",kind: "status-to", field: "stock", value: "在庫あり", label: "在庫が「在庫あり」に戻った", defaultOn: true,  note: "品切れ中に流れていた客が戻る" },
+      { key: "added",  kind: "added",                     label: "新しい商品が掲載された",     defaultOn: true,  note: "競合の品ぞろえが増えた" },
+      { key: "removed",kind: "removed",                   label: "掲載が消えた",               defaultOn: true,  note: "取り扱い終了の可能性" },
+      { key: "point",  kind: "field-changed", field: "point", label: "ポイント還元率が変わった", defaultOn: false, note: "実質値引き。件数が多いため初期は無効" },
+    ],
+    rows: [
+      // 値上がり
+      { id: "k01", target: "s1", name: "電気ケトル 1.0L",        model: "KT-100", prev: { price: 4980, stock: "在庫あり", point: 1 },   curr: { price: 5480, stock: "在庫あり", point: 1 } },
+      { id: "k02", target: "s2", name: "コーヒーメーカー 5杯用",  model: "CM-500", prev: { price: 8900, stock: "在庫あり", point: 2 },   curr: { price: 9800, stock: "在庫あり", point: 2 } },
+      { id: "k03", target: "s3", name: "加湿器 4.0L",            model: "HM-400", prev: { price: 12800, stock: "在庫あり", point: 1 },  curr: { price: 13200, stock: "在庫あり", point: 1 } },
+      // 値下がり
+      { id: "k04", target: "s1", name: "ワイヤレスイヤホン",      model: "WE-330", prev: { price: 9800, stock: "在庫あり", point: 1 },   curr: { price: 8800, stock: "在庫あり", point: 1 } },
+      { id: "k05", target: "s2", name: "ロボット掃除機",          model: "RC-700", prev: { price: 39800, stock: "在庫あり", point: 2 },  curr: { price: 34800, stock: "在庫あり", point: 2 } },
+      { id: "k06", target: "s3", name: "ホットプレート",          model: "HP-320", prev: { price: 7980, stock: "在庫あり", point: 1 },   curr: { price: 7780, stock: "在庫あり", point: 1 } },
+      // 新規
+      { id: "k07", target: "s1", name: "除湿機 コンプレッサー式", model: "DH-900", prev: null,                                          curr: { price: 19800, stock: "在庫あり", point: 3 } },
+      { id: "k08", target: "s2", name: "電気毛布 シングル",       model: "EK-110", prev: null,                                          curr: { price: 4280, stock: "在庫あり", point: 1 } },
+      // 消えた
+      { id: "k09", target: "s1", name: "オーブントースター 4枚",  model: "OT-400", prev: { price: 8980, stock: "在庫あり", point: 1 },   curr: null },
+      { id: "k10", target: "s3", name: "フードプロセッサー",      model: "FP-300", prev: { price: 9800, stock: "在庫あり", point: 2 },   curr: null },
+      // 価格以外の変更
+      { id: "k11", target: "s1", name: "炊飯器 5.5合",           model: "RC-055", prev: { price: 18800, stock: "在庫なし", point: 2 },  curr: { price: 18800, stock: "在庫あり", point: 2 } },
+      { id: "k12", target: "s2", name: "電子レンジ 18L",         model: "MW-180", prev: { price: 14800, stock: "在庫あり", point: 1 },  curr: { price: 14800, stock: "残りわずか", point: 1 } },
+      { id: "k13", target: "s3", name: "ヘアドライヤー",         model: "HD-120", prev: { price: 7480, stock: "在庫あり", point: 2 },   curr: { price: 7480, stock: "在庫あり", point: 10 } },
+      // 変化なし
+      { id: "k14", target: "s1", name: "LEDシーリングライト 8畳", model: "CL-080", prev: { price: 6980, stock: "在庫あり", point: 1 },   curr: { price: 6980, stock: "在庫あり", point: 1 } },
+      { id: "k15", target: "s1", name: "電気ポット 2.2L",        model: "EP-220", prev: { price: 9480, stock: "在庫あり", point: 1 },   curr: { price: 9480, stock: "在庫あり", point: 1 } },
+      { id: "k16", target: "s1", name: "サーキュレーター 18cm",  model: "CF-180", prev: { price: 6780, stock: "在庫あり", point: 2 },   curr: { price: 6780, stock: "在庫あり", point: 2 } },
+      { id: "k17", target: "s1", name: "掃除機 スティック型",    model: "VC-620", prev: { price: 22800, stock: "残りわずか", point: 1 }, curr: { price: 22800, stock: "残りわずか", point: 1 } },
+      { id: "k18", target: "s1", name: "空気清浄機 20畳",        model: "AP-200", prev: { price: 24800, stock: "在庫あり", point: 2 },  curr: { price: 24800, stock: "在庫あり", point: 2 } },
+      { id: "k19", target: "s2", name: "スチームアイロン",       model: "SI-150", prev: { price: 5480, stock: "在庫あり", point: 1 },   curr: { price: 5480, stock: "在庫あり", point: 1 } },
+      { id: "k20", target: "s2", name: "電気圧力鍋 4.0L",        model: "PC-250", prev: { price: 16800, stock: "在庫あり", point: 1 },  curr: { price: 16800, stock: "在庫あり", point: 1 } },
+      { id: "k21", target: "s2", name: "精米機 5合",             model: "RM-050", prev: { price: 24800, stock: "在庫あり", point: 2 },  curr: { price: 24800, stock: "在庫あり", point: 2 } },
+      { id: "k22", target: "s2", name: "アイロン台 スタンド式",  model: "IB-090", prev: { price: 3280, stock: "在庫あり", point: 1 },   curr: { price: 3280, stock: "在庫あり", point: 1 } },
+      { id: "k23", target: "s2", name: "電動歯ブラシ",           model: "EB-220", prev: { price: 3480, stock: "残りわずか", point: 1 }, curr: { price: 3480, stock: "残りわずか", point: 1 } },
+      { id: "k24", target: "s2", name: "布団乾燥機",             model: "FD-260", prev: { price: 13800, stock: "在庫あり", point: 2 },  curr: { price: 13800, stock: "在庫あり", point: 2 } },
+      { id: "k25", target: "s3", name: "卓上IHクッキングヒーター", model: "IH-140", prev: { price: 11800, stock: "在庫あり", point: 1 }, curr: { price: 11800, stock: "在庫あり", point: 1 } },
+      { id: "k26", target: "s3", name: "ミキサー 600ml",         model: "BL-600", prev: { price: 4980, stock: "在庫あり", point: 1 },   curr: { price: 4980, stock: "在庫あり", point: 1 } },
+      { id: "k27", target: "s3", name: "温水洗浄便座",           model: "WS-410", prev: { price: 32800, stock: "在庫あり", point: 2 },  curr: { price: 32800, stock: "在庫あり", point: 2 } },
+      { id: "k28", target: "s3", name: "扇風機 リビング用",      model: "FN-300", prev: { price: 5980, stock: "残りわずか", point: 1 }, curr: { price: 5980, stock: "残りわずか", point: 1 } },
+      { id: "k29", target: "s3", name: "ハンディクリーナー",     model: "HC-050", prev: { price: 6480, stock: "在庫あり", point: 1 },   curr: { price: 6480, stock: "在庫あり", point: 1 } },
+      { id: "k30", target: "s3", name: "衣類乾燥除湿機",         model: "CD-220", prev: { price: 15800, stock: "在庫あり", point: 3 },  curr: { price: 15800, stock: "在庫あり", point: 3 } },
+    ],
+  },
+
+  {
+    key: "hojokin",
+    label: "補助金・公募情報を見張る",
+    lead: "支援情報を載せている3つのページから、補助上限額・申請締切・受付状況を取得する設定です。週1回まわして、増えた制度と変わった条件だけを報告します。",
+    unitWord: "制度",
+    defaultFreq: "weekly",
+    idField: { key: "name", label: "制度名" },
+    subField: { key: "cat", label: "分野" },
+    kindLabels: { up: "増額", down: "減額" },
+    // 補助金は増額が好材料、減額のほうが要注意
+    kindTone: { up: "accent", down: "caution" },
+    targets: [
+      { key: "h1", label: "国の支援情報ポータル（架空）",     short: "国ポータル", note: "全国向けの制度が並ぶページ" },
+      { key: "h2", label: "◯◯県 産業支援公社（架空）",      short: "県公社",     note: "県内事業者向けの制度" },
+      { key: "h3", label: "◯◯市 商工課のお知らせ（架空）",  short: "市商工課",   note: "市内事業者向け。更新が不定期" },
+    ],
+    fields: [
+      { key: "amount",   label: "補助上限額", unit: "万円", type: "money",  primary: true, defaultOn: true, note: "増減の向きを見る中心の項目" },
+      { key: "deadline", label: "申請締切",   unit: "",     type: "date",   defaultOn: true, note: "後ろ倒し・前倒しの見落としが多い" },
+      { key: "status",   label: "受付状況",   unit: "",     type: "status", defaultOn: true, note: "受付前／公募中／受付終了" },
+    ],
+    rules: [
+      { key: "up",       kind: "pct-up",        field: "amount",   label: "補助上限額が増えた",            suffix: "％以上", defaultOn: true,  defaultThreshold: 10, note: "申請の優先度が上がる" },
+      { key: "down",     kind: "pct-down",      field: "amount",   label: "補助上限額が減った",            suffix: "％以上", defaultOn: true,  defaultThreshold: 10, note: "計画の見直しが要る" },
+      { key: "open",     kind: "status-to",     field: "status",   value: "公募中", label: "受付状況が「公募中」に変わった", defaultOn: true, note: "ここを逃すと1年待ちになる" },
+      { key: "deadline", kind: "field-changed", field: "deadline", label: "申請締切が変わった",            defaultOn: true,  note: "前倒しは特に危ない" },
+      { key: "added",    kind: "added",                            label: "新しい制度が掲載された",        defaultOn: true,  note: "見に行く目的の大半がこれ" },
+      { key: "removed",  kind: "removed",                          label: "掲載が消えた",                  defaultOn: false, note: "受付終了に伴う削除が多いため初期は無効" },
+    ],
+    rows: [
+      // 増額
+      { id: "h01", target: "h1", name: "生産性向上設備支援金（例）", cat: "設備投資", prev: { amount: 1000, deadline: "2026/09/30", status: "公募中" }, curr: { amount: 1500, deadline: "2026/09/30", status: "公募中" } },
+      { id: "h02", target: "h2", name: "県内企業デジタル化支援（例）", cat: "IT導入", prev: { amount: 300, deadline: "2026/10/15", status: "公募中" },  curr: { amount: 350, deadline: "2026/10/15", status: "公募中" } },
+      // 減額
+      { id: "h03", target: "h1", name: "販路開拓支援金（例）",       cat: "販路開拓", prev: { amount: 200, deadline: "2026/09/12", status: "公募中" }, curr: { amount: 150, deadline: "2026/09/12", status: "公募中" } },
+      { id: "h04", target: "h3", name: "商店街にぎわい創出補助（例）", cat: "販路開拓", prev: { amount: 100, deadline: "2026/11/28", status: "受付前" }, curr: { amount: 80, deadline: "2026/11/28", status: "受付前" } },
+      // 新規
+      { id: "h05", target: "h1", name: "省エネ設備導入支援金（例）", cat: "省エネ",   prev: null, curr: { amount: 2000, deadline: "2026/12/05", status: "受付前" } },
+      { id: "h06", target: "h2", name: "人材確保緊急支援金（例）",   cat: "人材",     prev: null, curr: { amount: 120, deadline: "2026/09/26", status: "公募中" } },
+      { id: "h07", target: "h3", name: "事業承継サポート補助（例）", cat: "事業承継", prev: null, curr: { amount: 500, deadline: "2027/01/30", status: "受付前" } },
+      // 消えた
+      { id: "h08", target: "h2", name: "中小企業設備更新支援（例）", cat: "設備投資", prev: { amount: 800, deadline: "2026/07/31", status: "受付終了" }, curr: null },
+      { id: "h09", target: "h3", name: "創業支援スタート補助（例）", cat: "販路開拓", prev: { amount: 60, deadline: "2026/06/30", status: "受付終了" },  curr: null },
+      // 上限額以外の変更
+      { id: "h10", target: "h1", name: "IT導入促進補助（例）",       cat: "IT導入",   prev: { amount: 450, deadline: "2026/09/05", status: "公募中" },  curr: { amount: 450, deadline: "2026/09/19", status: "公募中" } },
+      { id: "h11", target: "h2", name: "省エネ診断費用助成（例）",   cat: "省エネ",   prev: { amount: 30, deadline: "2026/10/31", status: "受付前" },   curr: { amount: 30, deadline: "2026/10/31", status: "公募中" } },
+      { id: "h12", target: "h3", name: "若手人材育成助成（例）",     cat: "人材",     prev: { amount: 90, deadline: "2026/10/09", status: "受付前" },   curr: { amount: 90, deadline: "2026/10/09", status: "公募中" } },
+      { id: "h13", target: "h1", name: "事業再構築支援金（例）",     cat: "設備投資", prev: { amount: 3000, deadline: "2026/08/08", status: "公募中" }, curr: { amount: 3000, deadline: "2026/08/08", status: "受付終了" } },
+      // 変化なし
+      { id: "h14", target: "h1", name: "ものづくり基盤強化補助（例）", cat: "設備投資", prev: { amount: 1250, deadline: "2026/11/14", status: "公募中" }, curr: { amount: 1250, deadline: "2026/11/14", status: "公募中" } },
+      { id: "h15", target: "h1", name: "越境販売支援補助（例）",     cat: "販路開拓", prev: { amount: 250, deadline: "2026/12/19", status: "受付前" },  curr: { amount: 250, deadline: "2026/12/19", status: "受付前" } },
+      { id: "h16", target: "h1", name: "職場環境改善助成（例）",     cat: "人材",     prev: { amount: 130, deadline: "2026/10/23", status: "公募中" },  curr: { amount: 130, deadline: "2026/10/23", status: "公募中" } },
+      { id: "h17", target: "h2", name: "県内調達力強化補助（例）",   cat: "設備投資", prev: { amount: 700, deadline: "2026/11/06", status: "公募中" },  curr: { amount: 700, deadline: "2026/11/06", status: "公募中" } },
+      { id: "h18", target: "h2", name: "観光事業者支援金（例）",     cat: "販路開拓", prev: { amount: 180, deadline: "2026/12/11", status: "受付前" },  curr: { amount: 180, deadline: "2026/12/11", status: "受付前" } },
+      { id: "h19", target: "h2", name: "テレワーク導入助成（例）",   cat: "IT導入",   prev: { amount: 100, deadline: "2026/09/18", status: "公募中" },  curr: { amount: 100, deadline: "2026/09/18", status: "公募中" } },
+      { id: "h20", target: "h2", name: "再エネ設備導入補助（例）",   cat: "省エネ",   prev: { amount: 400, deadline: "2027/01/16", status: "受付前" },  curr: { amount: 400, deadline: "2027/01/16", status: "受付前" } },
+      { id: "h21", target: "h3", name: "空き店舗活用補助（例）",     cat: "販路開拓", prev: { amount: 50, deadline: "2026/10/02", status: "公募中" },   curr: { amount: 50, deadline: "2026/10/02", status: "公募中" } },
+      { id: "h22", target: "h3", name: "市内就職促進奨励金（例）",   cat: "人材",     prev: { amount: 40, deadline: "2026/11/20", status: "公募中" },   curr: { amount: 40, deadline: "2026/11/20", status: "公募中" } },
+      { id: "h23", target: "h3", name: "小規模事業者経営改善補助（例）", cat: "事業承継", prev: { amount: 70, deadline: "2026/12/25", status: "受付前" }, curr: { amount: 70, deadline: "2026/12/25", status: "受付前" } },
+      { id: "h24", target: "h3", name: "地域資源活用支援金（例）",   cat: "販路開拓", prev: { amount: 150, deadline: "2026/09/11", status: "公募中" },  curr: { amount: 150, deadline: "2026/09/11", status: "公募中" } },
+    ],
+  },
+];
+
+/* ------------------------------------------------------------------
+   3. 表示のための小道具
+------------------------------------------------------------------ */
+const NOW = new Date();
+const p2 = (n) => String(n).padStart(2, "0");
+const nf = (n) => Number(n).toLocaleString("ja-JP");
+
+const fmtTime = (d) =>
+  `${d.getFullYear()}/${p2(d.getMonth() + 1)}/${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())}`;
+
+function fmtValue(field, v) {
+  if (v === null || v === undefined || v === "") return "—";
+  if (field.type === "money" || field.type === "num") return nf(v) + field.unit;
+  return String(v);
+}
+
+function pctChange(from, to) {
+  if (typeof from !== "number" || typeof to !== "number" || from === 0) return null;
+  return ((to - from) / from) * 100;
+}
+
+const fmtPct = (p) => (p >= 0 ? "＋" : "−") + Math.abs(p).toFixed(1) + "％";
+
+// 実行履歴の過去分に使う、毎回同じ値が出る擬似乱数
+function seeded(i) {
+  const x = Math.sin(i * 127.1 + 311.7) * 43758.5453;
+  return x - Math.floor(x);
+}
+
+// 実行時刻を頻度の区切りに合わせる
+function snapNow(freq) {
+  const d = new Date(NOW.getTime());
+  d.setSeconds(0, 0);
+  d.setMinutes(0);
+  if (freq.key !== "hourly") {
+    d.setHours(freq.key === "twice" ? (d.getHours() >= 18 ? 18 : 6) : 6);
+    if (freq.key === "weekly") d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+    if (freq.key === "monthly") d.setDate(1);
+  }
+  while (d.getTime() > NOW.getTime()) d.setTime(d.getTime() - freq.stepMs);
+  return d;
+}
+
+function fmtDuration(sec) {
+  if (sec < 60) return `${Math.round(sec)}秒`;
+  if (sec < 3600) return `${Math.round(sec / 60)}分`;
+  const h = Math.floor(sec / 3600);
+  const m = Math.round((sec - h * 3600) / 60);
+  return m === 0 ? `${nf(h)}時間` : `${nf(h)}時間${m}分`;
+}
+
+/* ------------------------------------------------------------------
+   4. 差分の判定
+      前回取得分と今回取得分を、選ばれている項目だけで突き合わせます。
+------------------------------------------------------------------ */
+function buildDiff(preset, targetKeys, fieldKeys) {
+  const fields = preset.fields.filter((f) => fieldKeys.includes(f.key));
+  const primary = fields.find((f) => f.primary);
+
+  return preset.rows
+    .filter((r) => targetKeys.includes(r.target))
+    .map((r) => {
+      if (!r.prev) return { row: r, kind: "added", changes: [] };
+      if (!r.curr) return { row: r, kind: "removed", changes: [] };
+
+      const changes = fields
+        .filter((f) => r.prev[f.key] !== r.curr[f.key])
+        .map((f) => ({
+          field: f,
+          from: r.prev[f.key],
+          to: r.curr[f.key],
+          pct: f.type === "money" || f.type === "num" ? pctChange(r.prev[f.key], r.curr[f.key]) : null,
+        }));
+
+      if (changes.length === 0) return { row: r, kind: "same", changes: [] };
+
+      const pc = primary ? changes.find((c) => c.field.key === primary.key) : null;
+      if (pc) return { row: r, kind: pc.to > pc.from ? "up" : "down", changes, primaryChange: pc };
+      return { row: r, kind: "edit", changes };
+    });
+}
+
+/* ------------------------------------------------------------------
+   5. 通知ルールの判定
+------------------------------------------------------------------ */
+function ruleActive(rule, fieldKeys) {
+  return !rule.field || fieldKeys.includes(rule.field);
+}
+
+function matchRule(rule, state, d) {
+  if (!state || !state.on) return false;
+  const th = Number(state.threshold) || 0;
+  switch (rule.kind) {
+    case "pct-down": {
+      const c = d.changes.find((c) => c.field.key === rule.field);
+      return !!c && c.pct !== null && c.pct <= -th;
+    }
+    case "pct-up": {
+      const c = d.changes.find((c) => c.field.key === rule.field);
+      return !!c && c.pct !== null && c.pct >= th;
+    }
+    case "status-to": {
+      const c = d.changes.find((c) => c.field.key === rule.field);
+      return !!c && c.to === rule.value;
+    }
+    case "field-changed":
+      return d.changes.some((c) => c.field.key === rule.field);
+    case "added":
+      return d.kind === "added";
+    case "removed":
+      return d.kind === "removed";
+    default:
+      return false;
+  }
+}
+
+/* ==================================================================
+   表示部品
+================================================================== */
+function Heading({ no, text }) {
+  return (
+    <div className="p-heading">
+      <span className="p-heading__no">{no}</span>
+      <h2 className="p-heading__text">{text}</h2>
+    </div>
+  );
+}
+
+function Stat({ label, num, unit, note, tone, text }) {
+  const cls =
+    "p-stat" +
+    (tone === "caution" ? " p-stat--caution" : tone === "muted" ? " p-stat--muted" : "") +
+    (text ? " p-stat--text" : "");
+  return (
+    <div className={cls}>
+      <p className="p-stat__label">{label}</p>
+      <p className="p-stat__num">
+        {num}
+        {unit ? <span className="p-stat__unit">{unit}</span> : null}
+      </p>
+      {note ? <p className="p-stat__note">{note}</p> : null}
+    </div>
+  );
+}
+
+function Tag({ kind, children }) {
+  return <span className={`p-tag p-tag--${kind}`}>{children}</span>;
+}
+
+function KindTag({ kind, preset }) {
+  const meta = KIND_META[kind];
+  const dir = kind === "up" || kind === "down";
+  return (
+    <Tag kind={dir ? preset.kindTone[kind] : meta.tag}>
+      {dir ? preset.kindLabels[kind] : meta.label}
+    </Tag>
+  );
+}
+
+function Move({ change, preset }) {
+  const tone = preset.kindTone[change.pct !== null && change.pct > 0 ? "up" : "down"];
+  return (
+    <span className="p-move">
+      <span className="p-move__name">{change.field.label}</span>
+      <span className="p-move__from">{fmtValue(change.field, change.from)}</span>
+      <span className="p-move__arrow">→</span>
+      <span className="p-move__to">{fmtValue(change.field, change.to)}</span>
+      {change.pct !== null ? (
+        <span className={"p-move__pct p-move__pct--" + tone}>
+          {fmtPct(change.pct)}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+/* ==================================================================
+   一　収集設定
+================================================================== */
+function SectionSettings({
+  preset, onPreset, cfg, setCfg, freq, phase, doneTargets, onRun, canRun, nextRunAt,
+}) {
+  const toggleTarget = (k) =>
+    setCfg((c) => ({
+      ...c,
+      targetKeys: c.targetKeys.includes(k) ? c.targetKeys.filter((x) => x !== k) : [...c.targetKeys, k],
+    }));
+
+  const toggleField = (k) =>
+    setCfg((c) => ({
+      ...c,
+      fieldKeys: c.fieldKeys.includes(k) ? c.fieldKeys.filter((x) => x !== k) : [...c.fieldKeys, k],
+    }));
+
+  const selected = preset.targets.filter((t) => cfg.targetKeys.includes(t.key));
+
+  return (
+    <section className="p-section" id="settings">
+      <Heading no="一" text="収集設定" />
+
+      <p className="p-lead">
+        どのサイトから、何の項目を、どのくらいの間隔で取ってくるかを決めます。
+        ここを変えると、下の収集結果と差分レポートの中身がその場で変わります。
+      </p>
+
+      <div className="p-toolbar">
+        <span>用途を選ぶ</span>
+        <span className="p-toolbar__spacer" />
+        {PRESETS.map((p) => (
+          <button
+            key={p.key}
+            type="button"
+            className="p-btn"
+            aria-pressed={p.key === preset.key}
+            onClick={() => onPreset(p.key)}
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
+
+      <p className="p-lead">{preset.lead}</p>
+
+      <div className="p-cols">
+        <div className="p-box">
+          <div className="p-box__head">収集対象（{cfg.targetKeys.length}／{preset.targets.length}件を選択中）</div>
+          <div className="p-box__body p-box__body--flush">
+            {preset.targets.map((t) => (
+              <label className="p-choice" key={t.key}>
+                <input
+                  type="checkbox"
+                  checked={cfg.targetKeys.includes(t.key)}
+                  onChange={() => toggleTarget(t.key)}
+                />
+                <span className="p-choice__body">
+                  <span className="p-choice__label">{t.label}</span>
+                  <span className="p-choice__note">{t.note}</span>
+                </span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div className="p-box">
+          <div className="p-box__head">取る項目（{cfg.fieldKeys.length}／{preset.fields.length}件を選択中）</div>
+          <div className="p-box__body p-box__body--flush">
+            {preset.fields.map((f) => (
+              <label className="p-choice" key={f.key}>
+                <input
+                  type="checkbox"
+                  checked={cfg.fieldKeys.includes(f.key)}
+                  onChange={() => toggleField(f.key)}
+                />
+                <span className="p-choice__body">
+                  <span className="p-choice__label">
+                    {f.label}
+                    {f.unit ? `（${f.unit}）` : ""}
+                  </span>
+                  <span className="p-choice__note">{f.note}</span>
+                </span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div className="p-box">
+          <div className="p-box__head">実行の頻度</div>
+          <div className="p-box__body p-box__body--flush">
+            {FREQUENCIES.map((f) => (
+              <label className="p-choice" key={f.key}>
+                <input
+                  type="radio"
+                  name="freq"
+                  checked={cfg.freqKey === f.key}
+                  onChange={() => setCfg((c) => ({ ...c, freqKey: f.key }))}
+                />
+                <span className="p-choice__body">
+                  <span className="p-choice__label">{f.label}</span>
+                  <span className="p-choice__note">
+                    {f.note}／月あたり {nf(f.perMonth)} 回
+                  </span>
+                </span>
+              </label>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <p className="p-note">
+        {preset.idField.label}は、行を見分けるための鍵として必ず取得します。選択の対象にはなりません。
+      </p>
+
+      <div className="p-run">
+        <div className="p-run__line">
+          <button type="button" className="p-btn p-btn--main" onClick={onRun} disabled={!canRun}>
+            {phase === "running" ? "収集中です" : phase === "done" ? "もう一度、収集を実行する" : "収集を実行する"}
+          </button>
+          <span className="p-run__state">
+            {cfg.targetKeys.length === 0
+              ? "収集対象を1つ以上選択してください。"
+              : cfg.fieldKeys.length === 0
+              ? "取る項目を1つ以上選択してください。"
+              : `対象 ${cfg.targetKeys.length} サイト／項目 ${cfg.fieldKeys.length} 件／${freq.label}。次回の自動実行は ${fmtTime(nextRunAt)} の予定です。`}
+          </span>
+        </div>
+
+        {phase !== "idle" ? (
+          <ul className="p-progress">
+            {selected.map((t) => (
+              <li key={t.key}>
+                <span className="p-progress__name">{t.label}</span>
+                <span
+                  className={
+                    "p-progress__state" + (doneTargets.includes(t.key) ? " p-progress__state--done" : "")
+                  }
+                >
+                  {doneTargets.includes(t.key) ? "取得しました" : "取得中"}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+/* ==================================================================
+   二　収集結果
+================================================================== */
+function SectionResults({ preset, diffs, fields, prevAt, currAt, hasRun }) {
+  const [showAll, setShowAll] = useState(false);
+  const shown = showAll ? diffs : diffs.slice(0, 12);
+
+  return (
+    <section className="p-section" id="results">
+      <Heading no="二" text="収集結果" />
+
+      <p className="p-lead">
+        今回取ってきた値と、前回取ってきた値を横に並べています。
+        目視で見比べるとしたらこの表です。実際に確認が要るのは、次の差分レポートの行だけです。
+      </p>
+
+      {!hasRun ? (
+        <div className="p-empty">上の「収集を実行する」を押すと、ここに結果が出ます。</div>
+      ) : (
+        <React.Fragment>
+          <div className="p-toolbar">
+            <span>
+              前回取得：{fmtTime(prevAt)}　／　今回取得：{fmtTime(currAt)}
+            </span>
+            <span className="p-toolbar__spacer" />
+            <span>
+              延べ {diffs.length} 件（今回 {diffs.filter((d) => d.row.curr).length} 件／前回{" "}
+              {diffs.filter((d) => d.row.prev).length} 件）
+            </span>
+          </div>
+
+          <div className="p-tablewrap">
+            <table className="p-table">
+              <thead>
+                <tr>
+                  <th rowSpan="2">収集対象</th>
+                  <th rowSpan="2">{preset.idField.label}</th>
+                  <th rowSpan="2">{preset.subField.label}</th>
+                  {fields.map((f) => (
+                    <th key={f.key} className="is-group" colSpan="2">
+                      {f.label}
+                      {f.unit ? `（${f.unit}）` : ""}
+                    </th>
+                  ))}
+                  <th rowSpan="2">判定</th>
+                </tr>
+                <tr>
+                  {fields.map((f) => (
+                    <React.Fragment key={f.key}>
+                      <th className="is-sep">前回</th>
+                      <th>今回</th>
+                    </React.Fragment>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {shown.map((d) => {
+                  const t = preset.targets.find((x) => x.key === d.row.target);
+                  return (
+                    <tr key={d.row.id} className={d.kind === "removed" ? "is-gone" : ""}>
+                      <td className="is-tight">{t.short}</td>
+                      <td className="is-tight">{d.row[preset.idField.key]}</td>
+                      <td className="is-tight">{d.row[preset.subField.key]}</td>
+                      {fields.map((f) => {
+                        const changed = d.changes.some((c) => c.field.key === f.key);
+                        return (
+                          <React.Fragment key={f.key}>
+                            <td className={"is-num is-prev is-sep" + (d.kind === "removed" ? " p-strike" : "")}>
+                              {d.row.prev ? fmtValue(f, d.row.prev[f.key]) : "—"}
+                            </td>
+                            <td className="is-num" style={changed ? { fontWeight: 700 } : null}>
+                              {d.row.curr ? fmtValue(f, d.row.curr[f.key]) : "—"}
+                            </td>
+                          </React.Fragment>
+                        );
+                      })}
+                      <td className="is-tight">
+                        <KindTag kind={d.kind} preset={preset} />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="p-toolbar" style={{ marginTop: "var(--sp-2)", marginBottom: 0 }}>
+            <span className="p-toolbar__spacer" />
+            <button type="button" className="p-btn" onClick={() => setShowAll((v) => !v)}>
+              {showAll ? "先頭12件だけ表示する" : `残り ${diffs.length - 12} 件も表示する`}
+            </button>
+          </div>
+
+          <p className="p-note">
+            表が画面に収まらないときは、表の中を横にスクロールできます。
+          </p>
+        </React.Fragment>
+      )}
+    </section>
+  );
+}
+
+/* ==================================================================
+   三　差分レポート
+================================================================== */
+const FILTERS = [
+  { key: "changed", label: "変わったものすべて" },
+  { key: "notify", label: "通知条件に当てはまるもの" },
+  { key: "up", label: "値上がり" },
+  { key: "down", label: "値下がり" },
+  { key: "added", label: "新規" },
+  { key: "removed", label: "消えた" },
+  { key: "edit", label: "項目の変更" },
+  { key: "same", label: "変化なし" },
+];
+
+function SectionDiff({ preset, diffs, counts, notified, hasRun, currAt }) {
+  const [filter, setFilter] = useState("changed");
+
+  const list = useMemo(() => {
+    if (filter === "changed") return diffs.filter((d) => d.kind !== "same");
+    if (filter === "notify") return diffs.filter((d) => notified.has(d.row.id));
+    return diffs.filter((d) => d.kind === filter);
+  }, [diffs, filter, notified]);
+
+  const changedCount = diffs.length - counts.same;
+
+  return (
+    <section className="p-section" id="diff">
+      <Heading no="三" text="差分レポート" />
+
+      <p className="p-lead">
+        前回と今回を突き合わせて、変わった行だけを抜き出したものです。
+        毎回届くのはこの表です。全件を見比べる作業は、ここでなくなります。
+      </p>
+
+      {!hasRun ? (
+        <div className="p-empty">上の「収集を実行する」を押すと、ここに差分が出ます。</div>
+      ) : (
+        <React.Fragment>
+          <div className="p-stats p-stats--4">
+            <Stat label="今回の確認対象" num={nf(changedCount)} unit="件" note={`延べ ${diffs.length} 件のうち`} />
+            <Stat label={preset.kindLabels.up} num={nf(counts.up)} unit="件" tone={preset.kindTone.up} />
+            <Stat label={preset.kindLabels.down} num={nf(counts.down)} unit="件" tone={preset.kindTone.down} />
+            <Stat label="新規" num={nf(counts.added)} unit="件" />
+            <Stat label="消えた" num={nf(counts.removed)} unit="件" tone="muted" />
+            <Stat label="項目の変更" num={nf(counts.edit)} unit="件" note="値の上下以外の変更" />
+            <Stat label="変化なし" num={nf(counts.same)} unit="件" tone="muted" note="見なくてよい行" />
+            <Stat label="通知条件に該当" num={nf(notified.size)} unit="件" note="表の中で強調されます" />
+          </div>
+
+          <p className="p-lead" style={{ marginTop: "var(--sp-4)" }}>
+            {fmtTime(currAt)} 時点。延べ {diffs.length} 件を取得し、
+            そのうち {counts.same} 件は前回とまったく同じでした。
+            見るべきは残り <strong>{changedCount}</strong> 件、
+            うち通知条件に当てはまるのは <strong>{notified.size}</strong> 件です。
+          </p>
+
+          <div className="p-toolbar">
+            <span>絞り込み</span>
+            <span className="p-toolbar__spacer" />
+            {FILTERS.map((f) => (
+              <button
+                key={f.key}
+                type="button"
+                className="p-btn"
+                aria-pressed={filter === f.key}
+                onClick={() => setFilter(f.key)}
+              >
+                {f.key === "up" || f.key === "down" ? preset.kindLabels[f.key] : f.label}
+              </button>
+            ))}
+          </div>
+
+          {list.length === 0 ? (
+            <div className="p-empty">この区分に当てはまる行はありません。</div>
+          ) : (
+            <div className="p-tablewrap">
+              <table className="p-table p-table--diff">
+                <thead>
+                  <tr>
+                    <th>区分</th>
+                    <th>収集対象</th>
+                    <th>{preset.idField.label}</th>
+                    <th>変わった内容</th>
+                    <th>通知</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {list.map((d) => {
+                    const t = preset.targets.find((x) => x.key === d.row.target);
+                    const isNotify = notified.has(d.row.id);
+                    return (
+                      <tr key={d.row.id} className={isNotify ? "is-notify" : ""}>
+                        <td className="is-tight">
+                          <KindTag kind={d.kind} preset={preset} />
+                        </td>
+                        <td className="is-tight">{t.short}</td>
+                        <td>
+                          {d.row[preset.idField.key]}
+                          <span className="p-move__name" style={{ marginLeft: "var(--sp-1)" }}>
+                            {d.row[preset.subField.key]}
+                          </span>
+                        </td>
+                        <td>
+                          {d.kind === "added" ? (
+                            <span>
+                              今回から掲載されました。
+                              {preset.fields
+                                .filter((f) => f.primary)
+                                .map((f) => ` ${f.label} ${fmtValue(f, d.row.curr[f.key])}。`)}
+                            </span>
+                          ) : d.kind === "removed" ? (
+                            <span>
+                              前回まで掲載されていましたが、今回は取得できませんでした。
+                              {preset.fields
+                                .filter((f) => f.primary)
+                                .map((f) => ` 前回の${f.label}は ${fmtValue(f, d.row.prev[f.key])}。`)}
+                            </span>
+                          ) : d.kind === "same" ? (
+                            <span style={{ color: "var(--c-ink-3)" }}>前回と同じです。</span>
+                          ) : (
+                            d.changes.map((c) => <Move key={c.field.key} change={c} preset={preset} />)
+                          )}
+                        </td>
+                        <td className="is-tight">
+                          {isNotify ? <Tag kind="notify">通知</Tag> : <span style={{ color: "var(--c-ink-3)" }}>—</span>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <p className="p-note">
+            表が画面に収まらないときは、表の中を横にスクロールすると「変わった内容」の列が出ます。
+          </p>
+          <p className="p-note">
+            このデモは、各区分を見てもらうために変化する行を多めに入れてあります。
+            実際の運用では、1回の実行で変わる行は 0〜3 件程度に収まることが多く、
+            そのぶん確認は短く済みます。
+          </p>
+        </React.Fragment>
+      )}
+    </section>
+  );
+}
+
+/* ==================================================================
+   四　通知ルール
+================================================================== */
+function SectionRules({ preset, cfg, setCfg, hitCounts, fieldKeys, notifiedSize }) {
+  const setRule = (key, patch) =>
+    setCfg((c) => ({ ...c, rules: { ...c.rules, [key]: { ...c.rules[key], ...patch } } }));
+
+  return (
+    <section className="p-section" id="rules">
+      <Heading no="四" text="通知ルール" />
+
+      <p className="p-lead">
+        「価格が5％以上下がったら知らせる」のように、報告してほしい条件を決めます。
+        条件に当てはまった行は、上の差分レポートで色を変えて表示されます。
+        しきい値の数字を動かすと、当てはまる件数がその場で変わります。
+      </p>
+
+      <div className="p-box">
+        <div className="p-box__head">通知する条件（該当 合計 {notifiedSize} 件）</div>
+        <div className="p-box__body p-box__body--flush">
+          {preset.rules.map((r) => {
+            const st = cfg.rules[r.key];
+            const active = ruleActive(r, fieldKeys);
+            return (
+              <div className="p-choice" key={r.key} style={{ cursor: "default" }}>
+                <input
+                  type="checkbox"
+                  checked={st.on}
+                  disabled={!active}
+                  onChange={(e) => setRule(r.key, { on: e.target.checked })}
+                  id={`rule-${r.key}`}
+                />
+                <span className="p-choice__body">
+                  <span className="p-choice__label">
+                    <label htmlFor={`rule-${r.key}`} style={{ cursor: active ? "pointer" : "default" }}>
+                      {r.label}
+                    </label>
+                    {r.suffix ? (
+                      <span className="p-inline p-inline--tight">
+                        <input
+                          className="p-input"
+                          style={{ maxWidth: "5em" }}
+                          type="number"
+                          min="0"
+                          max="90"
+                          step="1"
+                          value={st.threshold}
+                          disabled={!active || !st.on}
+                          onChange={(e) => setRule(r.key, { threshold: e.target.value })}
+                          aria-label={`${r.label}のしきい値`}
+                        />
+                        <span>{r.suffix}</span>
+                      </span>
+                    ) : null}
+                  </span>
+                  <span className="p-choice__note">
+                    {r.note}
+                    {!active ? (
+                      <React.Fragment>
+                        　<Tag kind="off">対象の項目を外しているため無効</Tag>
+                      </React.Fragment>
+                    ) : st.on ? (
+                      `　該当 ${hitCounts[r.key] || 0} 件`
+                    ) : (
+                      "　この条件は使いません"
+                    )}
+                  </span>
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <p className="p-note">
+        条件を厳しくすれば通知は減り、緩めれば増えます。
+        運用の初期は緩めに設定し、実際に届いた通知を見ながら数か月かけて締めていくのが現実的です。
+      </p>
+    </section>
+  );
+}
+
+/* ==================================================================
+   五　実行履歴
+================================================================== */
+function SectionHistory({ runs, freq, nextRunAt }) {
+  return (
+    <section className="p-section" id="history">
+      <Heading no="五" text="実行履歴" />
+
+      <p className="p-lead">
+        いつ実行され、何件取得し、そのうち何件が変わり、何件が通知条件に当てはまったかの記録です。
+        実行されなかった日があれば、ここが空くのですぐ分かります。
+        人の習慣に任せていると、この記録自体が残りません。
+      </p>
+
+      <div className="p-toolbar">
+        <span>設定：{freq.label}</span>
+        <span className="p-toolbar__spacer" />
+        <span>次回の実行予定：{fmtTime(nextRunAt)}</span>
+      </div>
+
+      <div className="p-tablewrap">
+        <table className="p-table" style={{ minWidth: "620px" }}>
+          <thead>
+            <tr>
+              <th>実行日時</th>
+              <th>状態</th>
+              <th>取得件数</th>
+              <th>変化した件数</th>
+              <th>通知した件数</th>
+              <th>所要</th>
+            </tr>
+          </thead>
+          <tbody>
+            {runs.map((r, i) => (
+              <tr key={i} className={r.live ? "is-notify" : ""}>
+                <td className="is-tight">{fmtTime(r.time)}</td>
+                <td className="is-tight">
+                  {r.live ? (
+                    <Tag kind="notify">この画面での実行</Tag>
+                  ) : r.label ? (
+                    <Tag kind={r.fail ? "fail" : "edit"}>{r.label}</Tag>
+                  ) : (
+                    "正常終了"
+                  )}
+                </td>
+                <td className="is-num">{nf(r.total)} 件</td>
+                <td className="is-num">{nf(r.changed)} 件</td>
+                <td className="is-num">{nf(r.notified)} 件</td>
+                <td className="is-num">{r.sec} 秒</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <p className="p-note">
+        「この画面での実行」以外の行は、記録の見え方を示すためのデモ用の数字です。
+      </p>
+      <p className="p-note">
+        取得に失敗した回も、1件の記録として残します。何も届かない状態を「変化がなかった」と
+        取り違えないためです。失敗したときは、失敗したことをそのまま知らせます。
+      </p>
+    </section>
+  );
+}
+
+/* ==================================================================
+   六　手作業との比較
+================================================================== */
+function SectionSaving({ preset, freq, currCount, changedCount, saving, setSaving }) {
+  const num = (v, d) => {
+    const n = Number(v);
+    return Number.isFinite(n) && n >= 0 ? n : d;
+  };
+
+  const count = num(saving.count, 0);
+  const sec = num(saving.sec, 0);
+  const wage = num(saving.wage, 0);
+  const runs = freq.perMonth;
+
+  const manualPerRun = count * sec;
+  const autoPerRun = Math.min(changedCount, count) * sec;
+  const cutPerRun = Math.max(manualPerRun - autoPerRun, 0);
+
+  const manualMonth = manualPerRun * runs;
+  const autoMonth = autoPerRun * runs;
+  const cutMonth = cutPerRun * runs;
+  const cutYear = cutMonth * 12;
+  const yen = Math.round((cutMonth / 3600) * wage);
+
+  return (
+    <section className="p-section" id="saving">
+      <Heading no="六" text="手作業との比較" />
+
+      <p className="p-lead">
+        いま目視で確認している件数と、1件あたりにかかる秒数を入れてください。
+        自動化した場合との差を出します。自動化しても確認がゼロになるわけではなく、
+        「変わった行だけを見る時間」は残ります。その分を差し引いた数字です。
+      </p>
+
+      <div className="p-cols p-cols--2">
+        <div className="p-box">
+          <div className="p-box__head">入力</div>
+          <div className="p-box__body">
+            <div className="p-field">
+              <label className="p-field__label" htmlFor="sv-count">1回に目視で確認している件数</label>
+              <div className="p-inline">
+                <input
+                  id="sv-count"
+                  className="p-input"
+                  type="number"
+                  min="0"
+                  max="9999"
+                  value={saving.count}
+                  onChange={(e) => setSaving((s) => ({ ...s, count: e.target.value }))}
+                />
+                <span>件</span>
+                <button
+                  type="button"
+                  className="p-btn"
+                  onClick={() => setSaving((s) => ({ ...s, count: String(currCount) }))}
+                >
+                  いまの収集件数（{currCount}件）を入れる
+                </button>
+              </div>
+            </div>
+
+            <div className="p-field">
+              <label className="p-field__label" htmlFor="sv-sec">1件あたりの目視の秒数</label>
+              <div className="p-inline">
+                <input
+                  id="sv-sec"
+                  className="p-input"
+                  type="number"
+                  min="0"
+                  max="600"
+                  value={saving.sec}
+                  onChange={(e) => setSaving((s) => ({ ...s, sec: e.target.value }))}
+                />
+                <span>秒</span>
+              </div>
+              <p className="p-field__note">
+                ページを開き、前回の値を思い出し、見比べて、必要ならメモする。ここまでの時間です。
+              </p>
+            </div>
+
+            <div className="p-field">
+              <label className="p-field__label" htmlFor="sv-wage">人件費の換算に使う時給（想定値）</label>
+              <div className="p-inline">
+                <input
+                  id="sv-wage"
+                  className="p-input"
+                  type="number"
+                  min="0"
+                  max="20000"
+                  step="100"
+                  value={saving.wage}
+                  onChange={(e) => setSaving((s) => ({ ...s, wage: e.target.value }))}
+                />
+                <span>円</span>
+              </div>
+            </div>
+
+            <div className="p-field">
+              <span className="p-field__label">実行の頻度（一の設定に連動）</span>
+              <p style={{ margin: 0 }}>
+                {freq.label}　月あたり {nf(runs)} 回
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="p-box">
+          <div className="p-box__head">結果</div>
+          <div className="p-box__body p-box__body--flush">
+            <div className="p-stats p-stats--2">
+              <Stat
+                label="いまの手作業（月あたり）"
+                num={fmtDuration(manualMonth)}
+                note={`1回 ${fmtDuration(manualPerRun)} × ${nf(runs)} 回`}
+                tone="caution"
+                text
+              />
+              <Stat
+                label="自動化した後（月あたり）"
+                num={fmtDuration(autoMonth)}
+                note={`差分 ${Math.min(changedCount, count)} 件だけを確認`}
+                text
+              />
+              <Stat
+                label="削減できる時間（月あたり）"
+                num={fmtDuration(cutMonth)}
+                note={`年あたり ${fmtDuration(cutYear)}`}
+                text
+              />
+              <Stat
+                label="人件費に換算（月あたり・想定値）"
+                num={nf(yen)}
+                unit="円"
+                note={`時給 ${nf(wage)} 円で計算`}
+                tone="caution"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <p className="p-note">
+        計算式は次のとおりです。手作業＝件数 × 秒数 × 月あたりの実行回数。
+        自動化後＝変化した件数 × 秒数 × 月あたりの実行回数。削減時間＝その差。
+        時給は入力した想定値であり、実績値ではありません。
+      </p>
+      <p className="p-note p-note--caution">
+        頻度を「1時間ごと」にすると、手作業の数字が現実離れした値になります。
+        それは計算の誤りではなく、その頻度は人手では回せないという意味です。
+      </p>
+    </section>
+  );
+}
+
+/* ==================================================================
+   七　実装と運用について
+================================================================== */
+function SectionNotes() {
+  return (
+    <section className="p-section" id="notes">
+      <Heading no="七" text="実装と運用について" />
+
+      <p className="p-lead">
+        この画面はブラウザ上の見本です。実際にお渡しするものは、次の形になります。
+      </p>
+
+      <ol className="p-steps">
+        <li>
+          <span className="p-steps__no">一</span>
+          <span className="p-steps__body">
+            <p>納品物は Python のスクリプトです。ブラウザで開く画面ではありません。</p>
+            <p className="p-steps__note">
+              収集対象・取得項目・通知条件は設定ファイルに切り出します。対象が増えたときは、設定ファイルに1行足すだけで済む形にします。
+            </p>
+          </span>
+        </li>
+        <li>
+          <span className="p-steps__no">二</span>
+          <span className="p-steps__body">
+            <p>サーバー上で定期実行し、差分レポートをメールで送ります。</p>
+            <p className="p-steps__note">
+              毎朝6時などの時刻を決めて自動で走らせます。受け取る側は、届いたメールを見るだけです。この画面を開く必要はありません。
+            </p>
+          </span>
+        </li>
+        <li>
+          <span className="p-steps__no">三</span>
+          <span className="p-steps__body">
+            <p>取得した値は世代ごとに保存し、いつ何が変わったかを後から追えるようにします。</p>
+            <p className="p-steps__note">
+              前回と今回の2世代だけでなく、過去の推移を残します。値上がりが続いているのか、一時的なものかを判断するために必要です。
+            </p>
+          </span>
+        </li>
+        <li>
+          <span className="p-steps__no">四</span>
+          <span className="p-steps__body">
+            <p>取得に失敗したときは、失敗したこと自体を知らせます。</p>
+            <p className="p-steps__note">
+              ページの作りが変わると取得できなくなります。何も届かない状態を「変化がなかった」と取り違えないよう、失敗も1件の報告として扱います。
+            </p>
+          </span>
+        </li>
+      </ol>
+
+      <div className="p-notice" style={{ marginTop: "var(--sp-4)" }}>
+        <p className="p-notice__title">収集先サイトの取り扱いについて</p>
+        <p className="p-notice__body">
+          実施前に、収集先サイトの利用規約と robots.txt を確認し、許容される範囲でのみ実施します。
+          自動取得を禁じているサイトは対象から外します。取得の間隔は相手のサーバーに負荷をかけない範囲に抑え、
+          公式に API や配信データが提供されている場合は、そちらを優先して使います。
+          この確認は着手前の作業に含みます。確認の結果、対象にできないサイトがあった場合は、その旨をお伝えします。
+        </p>
+      </div>
+
+      <h3 className="p-sub">この画面での割り切り</h3>
+
+      <ul className="p-sources">
+        <li>
+          <span className="p-sources__no">注記1</span>
+          <span className="p-sources__body">
+            <strong>掲載しているデータはすべてデモ用の架空のものです。</strong>
+            サイト名・商品名・価格・在庫状況・制度名・補助上限額・締切のいずれも、この画面のために作ったものであり、
+            実在する企業・商品・制度を示すものではありません。
+          </span>
+        </li>
+        <li>
+          <span className="p-sources__no">注記2</span>
+          <span className="p-sources__body">
+            <strong>実在のサイトには一切アクセスしていません。</strong>
+            「前回取得分」と「今回取得分」の2世代のデータをこのファイルの中にあらかじめ持たせ、
+            実行ボタンで両者を突き合わせているだけです。通信は発生しません。
+          </span>
+        </li>
+        <li>
+          <span className="p-sources__no">注記3</span>
+          <span className="p-sources__body">
+            <strong>実際の納品物は Python スクリプトです。</strong>
+            サーバー上で定期実行し、差分レポートをメールで送る形になります。
+            この画面は、届くレポートの中身を先に確認していただくためのものです。
+          </span>
+        </li>
+        <li>
+          <span className="p-sources__no">注記4</span>
+          <span className="p-sources__body">
+            <strong>収集先サイトの利用規約と robots.txt を事前に確認します。</strong>
+            許容される範囲でのみ実施し、禁止されている場合は対象から外します。
+          </span>
+        </li>
+        <li>
+          <span className="p-sources__no">注記5</span>
+          <span className="p-sources__body">
+            削減時間と人件費換算は、入力された想定値による試算です。実績値ではありません。
+          </span>
+        </li>
+        <li>
+          <span className="p-sources__no">注記6</span>
+          <span className="p-sources__body">
+            入力内容は保存されません。localStorage・Cookie・外部送信のいずれも使っていないため、
+            画面を再読み込みすると初期状態に戻ります。
+          </span>
+        </li>
+      </ul>
+
+      <div className="p-terms" style={{ marginTop: "var(--sp-4)" }}>
+        <dl>
+          <dt>差分レポート</dt>
+          <dd>前回取得した値と今回取得した値を突き合わせ、違いがあった行だけを抜き出したものです。全件を見比べる代わりに、これだけを見ます。</dd>
+          <dt>通知ルール</dt>
+          <dd>差分のうち、どれを「知らせるべきもの」として扱うかの条件です。変わったことと、対応が要ることは別だからです。</dd>
+          <dt>実行履歴</dt>
+          <dd>いつ実行され、何件取得したかの記録です。実行されなかったことに気づくために残します。</dd>
+        </dl>
+      </div>
+
+      <div className="p-colophon">
+        <p>この画面は、業務改善・自動化のサンプルとして作成したものです。受注実績を示すものではありません。</p>
+        <p>
+          サンプル一覧は
+          <a href="../../">業務の悩み 索引</a>
+          にまとめています。
+        </p>
+      </div>
+    </section>
+  );
+}
+
+/* ==================================================================
+   本体
+================================================================== */
+function defaultsFor(preset) {
+  const rules = {};
+  preset.rules.forEach((r) => {
+    rules[r.key] = { on: r.defaultOn, threshold: r.defaultThreshold === undefined ? 0 : r.defaultThreshold };
+  });
+  return {
+    targetKeys: preset.targets.map((t) => t.key),
+    fieldKeys: preset.fields.filter((f) => f.defaultOn).map((f) => f.key),
+    freqKey: preset.defaultFreq,
+    rules,
+  };
+}
+
+function App() {
+  const [presetKey, setPresetKey] = useState(PRESETS[0].key);
+  const preset = PRESETS.find((p) => p.key === presetKey);
+
+  const [cfg, setCfg] = useState(() => defaultsFor(PRESETS[0]));
+  const [phase, setPhase] = useState("idle");
+  const [doneTargets, setDoneTargets] = useState([]);
+  const [liveRuns, setLiveRuns] = useState([]);
+  const [saving, setSaving] = useState({
+    count: "30",
+    sec: String(CONFIG.defaultWatchSeconds),
+    wage: String(CONFIG.defaultWage),
+  });
+
+  const timers = useRef([]);
+  useEffect(() => () => timers.current.forEach(clearTimeout), []);
+
+  const freq = FREQUENCIES.find((f) => f.key === cfg.freqKey);
+  const fields = preset.fields.filter((f) => cfg.fieldKeys.includes(f.key));
+
+  /* 差分の計算。設定を変えると、ここが再計算されます。 */
+  const diffs = useMemo(
+    () => buildDiff(preset, cfg.targetKeys, cfg.fieldKeys),
+    [preset, cfg.targetKeys, cfg.fieldKeys]
+  );
+
+  const counts = useMemo(() => {
+    const c = { up: 0, down: 0, added: 0, removed: 0, edit: 0, same: 0 };
+    diffs.forEach((d) => { c[d.kind] += 1; });
+    return c;
+  }, [diffs]);
+
+  /* 通知の判定 */
+  const { notified, hitCounts } = useMemo(() => {
+    const set = new Set();
+    const hits = {};
+    preset.rules.forEach((r) => { hits[r.key] = 0; });
+    diffs.forEach((d) => {
+      preset.rules.forEach((r) => {
+        if (!ruleActive(r, cfg.fieldKeys)) return;
+        if (matchRule(r, cfg.rules[r.key], d)) {
+          hits[r.key] += 1;
+          set.add(d.row.id);
+        }
+      });
+    });
+    return { notified: set, hitCounts: hits };
+  }, [diffs, preset, cfg.rules, cfg.fieldKeys]);
+
+  const changedCount = diffs.length - counts.same;
+  const currCount = diffs.filter((d) => d.row.curr).length;
+
+  /* 実行の時刻 */
+  const snapped = useMemo(() => snapNow(freq), [freq]);
+  const currAt = snapped;
+  const prevAt = new Date(snapped.getTime() - freq.stepMs);
+  const nextRunAt = new Date(snapped.getTime() + freq.stepMs);
+
+  /* 実行履歴（過去分はデモ用の記録） */
+  const runs = useMemo(() => {
+    const past = [];
+    for (let i = 1; i <= CONFIG.historyRows; i++) {
+      const t = new Date(snapped.getTime() - freq.stepMs * i);
+      const ch = Math.floor(seeded(i * 3 + freq.perMonth) * 7);
+      // 5回前は取得に失敗した回とする。失敗も1件の記録として残ることを示す。
+      if (i === 5) {
+        past.push({
+          time: t,
+          total: 0,
+          changed: 0,
+          notified: 1,
+          sec: 21,
+          label: "取得に失敗（相手先が応答せず）",
+          fail: true,
+        });
+        continue;
+      }
+      past.push({
+        time: t,
+        total: Math.max(currCount - Math.floor(seeded(i * 11) * 3), 0),
+        changed: ch,
+        notified: Math.floor(seeded(i * 7 + 1) * (ch + 1)),
+        sec: 4 + Math.floor(seeded(i * 5) * 6),
+        label: i === 1 ? "前回取得分" : null,
+      });
+    }
+    return [...liveRuns, ...past].slice(0, 12);
+  }, [liveRuns, snapped, freq, currCount]);
+
+  /* 実行 */
+  const canRun = cfg.targetKeys.length > 0 && cfg.fieldKeys.length > 0 && phase !== "running";
+
+  const run = () => {
+    timers.current.forEach(clearTimeout);
+    timers.current = [];
+    setPhase("running");
+    setDoneTargets([]);
+
+    const list = preset.targets.filter((t) => cfg.targetKeys.includes(t.key));
+    list.forEach((t, i) => {
+      timers.current.push(
+        setTimeout(() => setDoneTargets((p) => [...p, t.key]), CONFIG.stepMs * (i + 1))
+      );
+    });
+
+    timers.current.push(
+      setTimeout(() => {
+        setPhase("done");
+        setLiveRuns((prev) => [
+          {
+            time: new Date(),
+            total: currCount,
+            changed: changedCount,
+            notified: notified.size,
+            sec: 3 + list.length,
+            live: true,
+          },
+          ...prev,
+        ]);
+      }, CONFIG.stepMs * (list.length + 1))
+    );
+  };
+
+  const switchPreset = (key) => {
+    const p = PRESETS.find((x) => x.key === key);
+    timers.current.forEach(clearTimeout);
+    timers.current = [];
+    setPresetKey(key);
+    setCfg(defaultsFor(p));
+    setPhase("idle");
+    setDoneTargets([]);
+    setLiveRuns([]);
+    setSaving((s) => ({ ...s, count: String(p.rows.filter((r) => r.curr).length) }));
+  };
+
+  const hasRun = phase === "done";
+
+  return (
+    <React.Fragment>
+      <div className="p-topbar" />
+
+      <div className="p-sheet">
+        <header className="p-masthead">
+          <p className="p-masthead__kicker">中小企業向け　業務改善・自動化サンプル</p>
+          <h1 className="p-masthead__title">{CONFIG.title}</h1>
+          <p className="p-masthead__lead">
+            {CONFIG.subtitle}。競合の価格を毎朝見に行く、補助金の公募ページを定期的に開く、
+            更新があったかどうかを目で確かめる。この一連の作業を機械に任せ、
+            変わったところだけを1枚のレポートにする仕組みの見本です。画面上で実際に動きます。
+          </p>
+          <p className="p-masthead__meta">
+            収集設定・収集結果・差分レポート・通知ルール・実行履歴・手作業との比較の6画面
+          </p>
+
+          <div className="p-notice">
+            <p className="p-notice__title">この画面のデータについて</p>
+            <p className="p-notice__body">
+              掲載しているサイト名・商品名・価格・制度名は、すべてデモ用の架空のものです。
+              実在するサイトへのアクセスは一切行っていません。
+              「前回取得分」と「今回取得分」の2世代のデータをあらかじめ持たせ、
+              実行ボタンでその2つを突き合わせています。
+            </p>
+            <p className="p-notice__body">
+              実際の納品物は Python のスクリプトです。サーバー上で定期実行し、
+              差分レポートをメールで送る形になります。
+              収集先サイトの利用規約と robots.txt は着手前に確認し、許容される範囲でのみ実施します。
+            </p>
+          </div>
+
+          <nav className="p-nav" aria-label="画面の目次">
+            <ul>
+              <li><a href="#settings">一　収集設定</a></li>
+              <li><a href="#results">二　収集結果</a></li>
+              <li><a href="#diff">三　差分レポート</a></li>
+              <li><a href="#rules">四　通知ルール</a></li>
+              <li><a href="#history">五　実行履歴</a></li>
+              <li><a href="#saving">六　手作業との比較</a></li>
+              <li><a href="#notes">七　実装と運用について</a></li>
+            </ul>
+          </nav>
+        </header>
+
+        <SectionSettings
+          preset={preset}
+          onPreset={switchPreset}
+          cfg={cfg}
+          setCfg={setCfg}
+          freq={freq}
+          phase={phase}
+          doneTargets={doneTargets}
+          onRun={run}
+          canRun={canRun}
+          nextRunAt={nextRunAt}
+        />
+
+        <SectionResults
+          preset={preset}
+          diffs={diffs}
+          fields={fields}
+          prevAt={prevAt}
+          currAt={currAt}
+          hasRun={hasRun}
+        />
+
+        <SectionDiff
+          preset={preset}
+          diffs={diffs}
+          counts={counts}
+          notified={notified}
+          hasRun={hasRun}
+          currAt={currAt}
+        />
+
+        <SectionRules
+          preset={preset}
+          cfg={cfg}
+          setCfg={setCfg}
+          hitCounts={hitCounts}
+          fieldKeys={cfg.fieldKeys}
+          notifiedSize={notified.size}
+        />
+
+        <SectionHistory runs={runs} freq={freq} nextRunAt={nextRunAt} />
+
+        <SectionSaving
+          preset={preset}
+          freq={freq}
+          currCount={currCount}
+          changedCount={changedCount}
+          saving={saving}
+          setSaving={setSaving}
+        />
+
+        <SectionNotes />
+      </div>
+    </React.Fragment>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>

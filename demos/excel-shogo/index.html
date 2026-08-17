@@ -1,0 +1,1706 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Excel突合の自動化 デモ | 銀行明細と帳簿を一致・不一致・要確認に分ける</title>
+<meta name="description" content="銀行入金明細と売掛帳を突き合わせ、一致・不一致・要確認の3分類で出力するデモです。表記ゆれの正規化ルールを画面上で切り替えると、要確認の件数が変わる様子を確認できます。掲載データはすべて架空です。">
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+:root {
+  --c-base:         #ffffff;
+  --c-paper:        #f5f1e8;
+  --c-ink:          #1b1c1e;
+  --c-ink-2:        #4c4f54;
+  --c-ink-3:        #7d8087;
+  --c-rule:         #ddd7c8;
+  --c-rule-strong:  #b3ab98;
+  --c-accent:       #2d4257;
+  --c-accent-tint:  #eef1f3;
+  --c-caution:      #9c463b;
+  --c-caution-tint: #f3e9e6;
+  --font-mincho: "Hiragino Mincho ProN","Yu Mincho","YuMincho","MS PMincho","Noto Serif JP",serif;
+  --font-gothic: "Hiragino Kaku Gothic ProN","Hiragino Sans","Yu Gothic","YuGothic",Meiryo,"Noto Sans JP",sans-serif;
+  --fs-note:  13px;  --fs-body: 15px;  --fs-sub: 18px;  --fs-head: 24px;  --fs-title: 33px;
+  --lh-body: 1.9;  --lh-head: 1.45;  --ls-body: 0.04em;  --ls-head: 0.06em;
+  --sp-1: 4px;  --sp-2: 8px;  --sp-3: 16px;  --sp-4: 32px;  --sp-5: 64px;
+  --rule-1: 1px;  --rule-2: 2px;
+}
+
+html { -webkit-text-size-adjust: 100%; }
+
+/* Tailwind の preflight は実行時に head の末尾へ挿入されるため、
+   body と a はセレクタの詳細度を上げて上書きされないようにしています。 */
+html body {
+  margin: 0;
+  background: var(--c-base);
+  color: var(--c-ink);
+  font-family: var(--font-gothic);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  letter-spacing: var(--ls-body);
+  text-align: left;
+}
+
+*, *::before, *::after { border-radius: 0; box-shadow: none; }
+
+body a {
+  color: var(--c-accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+body a:hover { text-decoration-thickness: 2px; }
+
+:focus-visible { outline: var(--rule-2) solid var(--c-accent); outline-offset: 2px; }
+
+/* ------------------------------------------------------------------
+   版面
+------------------------------------------------------------------ */
+.p-topbar { border-top: 3px solid var(--c-accent); }
+
+.p-sheet {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 0 var(--sp-3);
+}
+
+.p-section { padding-top: var(--sp-5); }
+.p-section:last-of-type { padding-bottom: var(--sp-5); }
+
+/* ------------------------------------------------------------------
+   ヘッダー
+------------------------------------------------------------------ */
+.p-masthead { padding-top: var(--sp-4); padding-bottom: var(--sp-4); }
+
+.p-masthead__kicker {
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-head);
+  color: var(--c-ink-3);
+  margin: 0 0 var(--sp-2);
+}
+
+.p-masthead__title {
+  font-family: var(--font-mincho);
+  font-size: var(--fs-title);
+  line-height: var(--lh-head);
+  letter-spacing: var(--ls-head);
+  font-weight: 600;
+  color: var(--c-ink);
+  margin: 0;
+  padding-bottom: var(--sp-3);
+  border-bottom: var(--rule-2) solid var(--c-accent);
+}
+
+.p-masthead__lead {
+  margin: var(--sp-3) 0 0;
+  max-width: 42em;
+  color: var(--c-ink-2);
+}
+
+.p-masthead__meta {
+  margin: var(--sp-3) 0 0;
+  font-size: var(--fs-note);
+  color: var(--c-ink-3);
+}
+
+/* ------------------------------------------------------------------
+   注記帯
+------------------------------------------------------------------ */
+.p-notice {
+  margin-top: var(--sp-4);
+  background: var(--c-caution-tint);
+  border-left: 3px solid var(--c-caution);
+  padding: var(--sp-3);
+}
+
+.p-notice__title {
+  margin: 0 0 var(--sp-1);
+  font-size: var(--fs-note);
+  font-weight: 700;
+  letter-spacing: var(--ls-head);
+  color: var(--c-caution);
+}
+
+.p-notice__body {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-note);
+  line-height: 1.8;
+  color: var(--c-ink-2);
+}
+
+.p-notice__body:last-child { margin-bottom: 0; }
+
+/* ------------------------------------------------------------------
+   節見出し
+------------------------------------------------------------------ */
+.p-heading {
+  margin: 0 0 var(--sp-3);
+  padding-bottom: var(--sp-2);
+  border-bottom: var(--rule-2) solid var(--c-rule-strong);
+}
+
+.p-heading__no {
+  display: block;
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-head);
+  color: var(--c-accent);
+  margin-bottom: var(--sp-1);
+}
+
+.p-heading__text {
+  font-family: var(--font-mincho);
+  font-size: var(--fs-head);
+  line-height: var(--lh-head);
+  letter-spacing: var(--ls-head);
+  font-weight: 600;
+  margin: 0;
+}
+
+.p-lead {
+  margin: 0 0 var(--sp-3);
+  max-width: 44em;
+  color: var(--c-ink-2);
+}
+
+.p-note {
+  margin: var(--sp-2) 0 0;
+  font-size: var(--fs-note);
+  line-height: 1.8;
+  color: var(--c-ink-3);
+}
+
+.p-note--caution { color: var(--c-caution); }
+
+/* ------------------------------------------------------------------
+   2表の並置
+------------------------------------------------------------------ */
+.p-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-3);
+}
+
+.p-card {
+  border-top: var(--rule-2) solid var(--c-accent);
+  border-bottom: var(--rule-1) solid var(--c-rule-strong);
+  min-width: 0;
+}
+
+.p-card__head { padding: var(--sp-2) 0; }
+
+.p-card__title {
+  font-family: var(--font-mincho);
+  font-size: var(--fs-sub);
+  line-height: var(--lh-head);
+  letter-spacing: var(--ls-head);
+  font-weight: 600;
+  margin: 0;
+}
+
+.p-card__meta {
+  margin: var(--sp-1) 0 0;
+  font-size: var(--fs-note);
+  line-height: 1.7;
+  color: var(--c-ink-3);
+}
+
+/* ------------------------------------------------------------------
+   表
+------------------------------------------------------------------ */
+.p-scroll {
+  overflow-x: auto;
+  border-top: var(--rule-1) solid var(--c-rule);
+}
+
+.p-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-note);
+  line-height: 1.7;
+}
+
+.p-table--pair { min-width: 380px; }
+.p-table--result { min-width: 1060px; }
+
+.p-table th {
+  background: var(--c-paper);
+  border-bottom: var(--rule-1) solid var(--c-rule-strong);
+  padding: var(--sp-2);
+  text-align: left;
+  font-weight: 700;
+  letter-spacing: var(--ls-head);
+  color: var(--c-ink-2);
+  white-space: nowrap;
+}
+
+.p-table td {
+  border-bottom: var(--rule-1) solid var(--c-rule);
+  padding: var(--sp-2);
+  vertical-align: top;
+  color: var(--c-ink);
+}
+
+.p-table tr:last-child td { border-bottom: 0; }
+
+.p-table__num {
+  text-align: right;
+  white-space: nowrap;
+  font-feature-settings: "tnum" 1;
+}
+
+.p-table__id {
+  color: var(--c-ink-3);
+  white-space: nowrap;
+  font-feature-settings: "tnum" 1;
+}
+
+.p-table__date { white-space: nowrap; font-feature-settings: "tnum" 1; }
+
+.p-table__name { min-width: 11em; }
+
+.p-table__reason { min-width: 22em; }
+
+.p-table__none { color: var(--c-ink-3); }
+
+.p-table tr.is-review td,
+.p-table tr.is-diff td { background: var(--c-caution-tint); }
+
+/* ------------------------------------------------------------------
+   ルール切り替え
+------------------------------------------------------------------ */
+.p-rules {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: var(--rule-2) solid var(--c-rule-strong);
+  border-bottom: var(--rule-2) solid var(--c-rule-strong);
+}
+
+.p-rule { border-bottom: var(--rule-1) solid var(--c-rule); }
+.p-rule:last-child { border-bottom: 0; }
+
+.p-rule__label {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-2);
+  cursor: pointer;
+}
+
+.p-rule__label:hover { background: var(--c-accent-tint); }
+
+.p-rule__box {
+  flex: 0 0 auto;
+  margin-top: 6px;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--c-accent);
+}
+
+.p-rule__body { flex: 1 1 auto; min-width: 0; }
+
+.p-rule__name {
+  display: block;
+  font-weight: 700;
+  line-height: var(--lh-head);
+}
+
+.p-rule__desc {
+  display: block;
+  margin-top: var(--sp-1);
+  font-size: var(--fs-note);
+  line-height: 1.8;
+  color: var(--c-ink-2);
+}
+
+.p-rule__ex {
+  display: block;
+  margin-top: var(--sp-1);
+  font-size: var(--fs-note);
+  color: var(--c-ink-3);
+}
+
+.p-rule__hit {
+  flex: 0 0 auto;
+  font-size: var(--fs-note);
+  color: var(--c-accent);
+  white-space: nowrap;
+  padding-top: 2px;
+}
+
+/* 許容範囲 */
+.p-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  margin-top: var(--sp-3);
+}
+
+.p-field { flex: 1 1 240px; min-width: 0; }
+
+.p-field__label {
+  display: block;
+  font-size: var(--fs-note);
+  font-weight: 700;
+  letter-spacing: var(--ls-head);
+  color: var(--c-accent);
+  margin-bottom: var(--sp-1);
+}
+
+.p-field__row { display: flex; align-items: center; gap: var(--sp-2); }
+
+.p-field__input {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--font-gothic);
+  font-size: var(--fs-body);
+  color: var(--c-ink);
+  background: var(--c-base);
+  border: var(--rule-1) solid var(--c-rule-strong);
+  padding: var(--sp-2);
+  text-align: right;
+  font-feature-settings: "tnum" 1;
+}
+
+.p-field__unit { flex: 0 0 auto; font-size: var(--fs-note); color: var(--c-ink-2); }
+
+.p-field__note {
+  margin: var(--sp-1) 0 0;
+  font-size: var(--fs-note);
+  line-height: 1.8;
+  color: var(--c-ink-3);
+}
+
+/* ------------------------------------------------------------------
+   ボタン
+------------------------------------------------------------------ */
+.p-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-top: var(--sp-4);
+}
+
+.p-btn {
+  font-family: var(--font-gothic);
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-body);
+  color: var(--c-accent);
+  background: var(--c-accent-tint);
+  border: var(--rule-1) solid var(--c-rule-strong);
+  padding: var(--sp-2) var(--sp-3);
+  cursor: pointer;
+}
+
+.p-btn:hover { background: var(--c-base); }
+
+.p-btn--primary {
+  font-size: var(--fs-body);
+  font-weight: 700;
+  color: var(--c-base);
+  background: var(--c-accent);
+  border-color: var(--c-accent);
+  padding: var(--sp-2) var(--sp-4);
+}
+
+.p-btn--primary:hover { background: var(--c-ink); border-color: var(--c-ink); }
+
+.p-actions__note { font-size: var(--fs-note); color: var(--c-ink-3); }
+
+/* ------------------------------------------------------------------
+   集計タイル
+------------------------------------------------------------------ */
+.p-tiles {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-4);
+}
+
+.p-tile {
+  border-top: var(--rule-2) solid var(--c-accent);
+  border-bottom: var(--rule-1) solid var(--c-rule-strong);
+  padding: var(--sp-2) 0 var(--sp-3);
+}
+
+.p-tile--caution { border-top-color: var(--c-caution); }
+
+.p-tile__label {
+  margin: 0 0 var(--sp-1);
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-head);
+  color: var(--c-ink-2);
+}
+
+.p-tile__num {
+  margin: 0;
+  font-size: var(--fs-title);
+  line-height: 1.25;
+  font-weight: 700;
+  color: var(--c-accent);
+  font-feature-settings: "tnum" 1;
+}
+
+.p-tile--caution .p-tile__num { color: var(--c-caution); }
+
+.p-tile__unit { font-size: var(--fs-sub); font-weight: 500; margin-left: 2px; }
+
+.p-tile__sub {
+  margin: var(--sp-1) 0 0;
+  font-size: var(--fs-note);
+  line-height: 1.7;
+  color: var(--c-ink-2);
+}
+
+/* 分類の説明 */
+.p-legend {
+  margin: 0 0 var(--sp-4);
+  padding: var(--sp-3);
+  background: var(--c-paper);
+  border-top: var(--rule-2) solid var(--c-rule-strong);
+}
+
+.p-legend dl { margin: 0; }
+
+.p-legend dt {
+  font-size: var(--fs-note);
+  font-weight: 700;
+  letter-spacing: var(--ls-head);
+  color: var(--c-accent);
+  margin-bottom: var(--sp-1);
+}
+
+.p-legend dd {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-note);
+  line-height: 1.8;
+  color: var(--c-ink-2);
+}
+
+.p-legend dd:last-of-type { margin-bottom: 0; }
+
+/* ------------------------------------------------------------------
+   絞り込み
+------------------------------------------------------------------ */
+.p-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+}
+
+.p-tab {
+  font-family: var(--font-gothic);
+  font-size: var(--fs-note);
+  color: var(--c-ink-2);
+  background: var(--c-base);
+  border: var(--rule-1) solid var(--c-rule-strong);
+  padding: var(--sp-1) var(--sp-3);
+  cursor: pointer;
+}
+
+.p-tab:hover { background: var(--c-accent-tint); }
+
+.p-tab[aria-pressed="true"] {
+  color: var(--c-base);
+  background: var(--c-accent);
+  border-color: var(--c-accent);
+  font-weight: 700;
+}
+
+/* 分類ラベル */
+.p-badge {
+  display: inline-block;
+  font-size: var(--fs-note);
+  font-weight: 700;
+  letter-spacing: var(--ls-head);
+  padding: 1px var(--sp-2);
+  border: var(--rule-1) solid var(--c-rule-strong);
+  background: var(--c-accent-tint);
+  color: var(--c-accent);
+  white-space: nowrap;
+}
+
+.p-badge--caution {
+  background: var(--c-caution-tint);
+  color: var(--c-caution);
+  border-color: var(--c-caution);
+}
+
+/* 理由 */
+.p-reasons { margin: 0; padding: 0; list-style: none; }
+
+.p-reasons li {
+  padding-left: 12px;
+  border-left: var(--rule-2) solid var(--c-rule-strong);
+  margin-bottom: var(--sp-1);
+  line-height: 1.7;
+}
+
+.p-reasons li:last-child { margin-bottom: 0; }
+.p-reasons li.is-warn { border-left-color: var(--c-caution); color: var(--c-caution); }
+
+.p-empty {
+  padding: var(--sp-4) var(--sp-2);
+  color: var(--c-ink-3);
+  border-top: var(--rule-1) solid var(--c-rule);
+  border-bottom: var(--rule-1) solid var(--c-rule);
+}
+
+/* ------------------------------------------------------------------
+   手作業との比較
+------------------------------------------------------------------ */
+.p-calc {
+  margin: var(--sp-4) 0 0;
+  padding: 0;
+  list-style: none;
+  border-top: var(--rule-2) solid var(--c-rule-strong);
+}
+
+.p-calc li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: baseline;
+  padding: var(--sp-3) var(--sp-2);
+  border-bottom: var(--rule-1) solid var(--c-rule);
+}
+
+.p-calc__label { flex: 1 1 16em; color: var(--c-ink-2); font-size: var(--fs-note); }
+
+.p-calc__value {
+  flex: 0 0 auto;
+  font-size: var(--fs-sub);
+  font-weight: 700;
+  font-feature-settings: "tnum" 1;
+}
+
+.p-calc__value--caution { color: var(--c-caution); }
+.p-calc__value--accent { color: var(--c-accent); }
+
+.p-calc__detail { flex: 1 1 100%; font-size: var(--fs-note); color: var(--c-ink-3); }
+
+/* ------------------------------------------------------------------
+   納品物の説明
+------------------------------------------------------------------ */
+.p-def { margin: 0 0 var(--sp-4); }
+
+.p-def__label {
+  margin: 0 0 var(--sp-1);
+  font-size: var(--fs-note);
+  font-weight: 700;
+  letter-spacing: var(--ls-head);
+  color: var(--c-accent);
+}
+
+.p-def__body { margin: 0; color: var(--c-ink); max-width: 44em; }
+
+.p-code {
+  margin: var(--sp-3) 0 0;
+  padding: var(--sp-3);
+  background: var(--c-paper);
+  border-left: 3px solid var(--c-rule-strong);
+  font-family: "SFMono-Regular", Consolas, "Courier New", monospace;
+  font-size: var(--fs-note);
+  line-height: 1.8;
+  color: var(--c-ink);
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.p-colophon {
+  margin-top: var(--sp-4);
+  padding-top: var(--sp-3);
+  border-top: var(--rule-2) solid var(--c-rule-strong);
+  font-size: var(--fs-note);
+  color: var(--c-ink-3);
+}
+
+.p-colophon p { margin: 0 0 var(--sp-1); }
+.p-colophon p:last-child { margin-bottom: 0; }
+
+/* ------------------------------------------------------------------
+   スマートフォン
+------------------------------------------------------------------ */
+@media (max-width: 860px) {
+  .p-pair { grid-template-columns: 1fr; gap: var(--sp-4); }
+  .p-tiles { grid-template-columns: 1fr; gap: var(--sp-3); }
+}
+
+@media (max-width: 640px) {
+  :root {
+    --fs-title: 26px;
+    --fs-head: 20px;
+    --fs-sub: 17px;
+    --sp-5: 48px;
+  }
+
+  .p-sheet { padding: 0 var(--sp-2); }
+  .p-tile__num { font-size: 28px; }
+  .p-btn--primary { width: 100%; text-align: center; }
+}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>Babel.registerPreset("react-classic", { presets: [[Babel.availablePresets["react"], { runtime: "classic" }]] });</script>
+<script type="text/babel" data-presets="react-classic">
+const { useState, useMemo } = React;
+
+/* ==================================================================
+   突合の設定。ここを差し替えるだけで、別の突合業務に転用できます。
+
+   例：
+     ・請求書と入金明細（key = 請求先／振込依頼人）
+     ・受注一覧と出荷一覧（key = 注文番号）
+     ・在庫表と棚卸表（key = 商品コード、amount = 数量）
+
+   画面のコードは列名を直接持っていません。すべて下の columns と
+   keyField / dateField / amountField を見て組み立てています。
+================================================================== */
+
+const RECON_CONFIG = {
+  jobName: "銀行入金明細と売掛帳の突合",
+  period: "2026年8月",
+  defaultYear: 2026,
+
+  // 左の表（突合の起点にする側）
+  left: {
+    label: "銀行入金明細",
+    source: "インターネットバンキングから書き出したCSV",
+    keyField: "摘要",
+    dateField: "日付",
+    amountField: "金額",
+    kindField: "区分",      // 突合の対象かどうかを判定する列（なければ null）
+    kindTarget: "入金",     // この値でない行は、対象外として要確認に回します
+    columns: [
+      { key: "日付", label: "取引日", type: "date" },
+      { key: "摘要", label: "摘要（振込依頼人）", type: "text" },
+      { key: "区分", label: "区分", type: "text" },
+      { key: "金額", label: "入出金額", type: "amount" },
+    ],
+  },
+
+  // 右の表（突き合わせる相手）
+  right: {
+    label: "売掛帳（帳簿）",
+    source: "会計ソフトから書き出したExcel",
+    keyField: "取引先",
+    dateField: "日付",
+    amountField: "金額",
+    kindField: null,
+    kindTarget: null,
+    columns: [
+      { key: "日付", label: "計上日", type: "date" },
+      { key: "取引先", label: "取引先", type: "text" },
+      { key: "伝票番号", label: "伝票番号", type: "text" },
+      { key: "金額", label: "金額", type: "amount" },
+    ],
+  },
+
+  // 許容範囲。0 にすると、1円・1日の違いも不一致として拾います。
+  tolerance: { amountYen: 0, dateDays: 0 },
+
+  // 名寄せの候補として提示する一致度の下限（0〜1）。
+  // これを超えても自動で一致にはせず、必ず人の確認に回します。
+  similarThreshold: 0.68,
+
+  // 手作業との比較の初期値
+  manual: { rowsPerMonth: 300, secondsPerRow: 25, setupMinutes: 5 },
+};
+
+/* ------------------------------------------------------------------
+   正規化ルール。画面のチェックボックスは、この配列から作っています。
+   ルールを足すときは、ここに1件書けば画面にも反映されます。
+------------------------------------------------------------------ */
+
+const CORP_PATTERN = /株式会社|カブシキガイシャ|カブシキカイシャ|有限会社|ユウゲンガイシャ|合同会社|㈱|㈲|\(株\)|\(有\)|\(同\)|\(カ\)|\(ユ\)|カ\)|\(カ|ユ\)|\(ユ/g;
+
+const NOISE_PATTERN = /振込|振替|入金|送金|御中|\d+月分|第?\d+回/g;
+
+const SYMBOL_PATTERN = /[()（）【】\[\]「」『』・,，.。/／\\\-−ー―~〜*＊※#＃:：;；'"`|]/g;
+
+const KEY_RULES = [
+  {
+    id: "space",
+    label: "前後・途中の空白を無視する",
+    desc: "「山田　商店」と「山田商店」を同じ取引先として扱います。全角の空白も対象です。",
+    example: "山田　商店 → 山田商店",
+    apply: (s) => s.replace(/[\s　]+/g, ""),
+  },
+  {
+    id: "width",
+    label: "全角と半角を同一視する",
+    desc: "全角の英数字・半角のカナをそろえます。金額が全角で入っている行も、数値として読めるようになります。",
+    example: "ＡＢＣ商会 → ABC商会　／　ﾐﾅﾄﾌｰｽﾞ → ミナトフーズ",
+    apply: (s) => s.normalize("NFKC").toUpperCase(),
+  },
+  {
+    id: "corp",
+    label: "「株式会社」「（株）」「カブシキガイシャ」を同一視する",
+    desc: "法人格の表記を取り除いてから比べます。前株・後株の違いも吸収します。",
+    example: "（株）サンプル物流 → サンプル物流",
+    apply: (s) => s.replace(CORP_PATTERN, ""),
+  },
+  {
+    id: "symbol",
+    label: "記号・括弧と「※8月分」などの付記を無視する",
+    desc: "中黒・括弧・記号と、摘要に足された「振込」「※8月分」といった語を取り除きます。",
+    example: "北央・エンジニアリング（振込） → 北央エンジニアリング",
+    apply: (s) => s.replace(NOISE_PATTERN, "").replace(SYMBOL_PATTERN, ""),
+  },
+  {
+    id: "date",
+    label: "日付の書式の違いを吸収する",
+    desc: "「2026/08/31」「2026-08-31」「20260831」「2026年8月31日」「R8.8.31」を同じ日として扱います。外すと、書式が違うだけで日付違いになります。",
+    example: "R8.8.14 → 2026年8月14日",
+    apply: null, // 日付にだけ効くルールのため、名称の正規化には使いません
+  },
+];
+
+const NAME_RULES = KEY_RULES.filter((r) => r.apply);
+
+const ALL_ON = KEY_RULES.reduce((acc, r) => { acc[r.id] = true; return acc; }, {});
+const ALL_OFF = KEY_RULES.reduce((acc, r) => { acc[r.id] = false; return acc; }, {});
+
+/* ==================================================================
+   サンプルデータ。すべて架空です。
+   実務でよくある崩れ方（表記ゆれ・1円違い・1日ずれ・全角混在・
+   片方にしかない行・摘要への付記）をそのまま入れています。
+================================================================== */
+
+const LEFT_ROWS = [
+  { id: "B01", 日付: "2026/08/03", 摘要: "株式会社丸尾工業", 区分: "入金", 金額: "284,000" },
+  { id: "B02", 日付: "2026/08/04", 摘要: "ハヤシフーズ株式会社", 区分: "入金", 金額: "96,800" },
+  { id: "B03", 日付: "2026/08/05", 摘要: "株式会社青葉システム", 区分: "入金", 金額: "458,330" },
+  { id: "B04", 日付: "2026/08/05", 摘要: "振込手数料", 区分: "出金", 金額: "660" },
+  { id: "B05", 日付: "2026/08/06", 摘要: "（株）サンプル物流", 区分: "入金", 金額: "132,000" },
+  { id: "B06", 日付: "2026/08/07", 摘要: "カブシキガイシャ大和紙業", 区分: "入金", 金額: "175,000" },
+  { id: "B07", 日付: "2026/08/08", 摘要: "みどり印刷株式会社", 区分: "入金", 金額: "88,000" },
+  { id: "B08", 日付: "2026-08-11", 摘要: "ABC商会", 区分: "入金", 金額: "64,900" },
+  { id: "B09", 日付: "2026/08/12", 摘要: "株式会社イロハ設備", 区分: "入金", 金額: "55,000" },
+  { id: "B10", 日付: "2026/08/13", 摘要: "ﾐﾅﾄﾌｰｽﾞ(ｶ", 区分: "入金", 金額: "213,400" },
+  { id: "B11", 日付: "R8.8.14", 摘要: "北央・エンジニアリング（振込）", 区分: "入金", 金額: "96,000" },
+  { id: "B12", 日付: "2026/08/17", 摘要: "山田　商店 ※8月分", 区分: "入金", 金額: "43,200" },
+  { id: "B13", 日付: "2026/08/18", 摘要: "セイワ電気株式会社", 区分: "入金", 金額: "187,000" },
+  { id: "B14", 日付: "2026/08/18", 摘要: "ﾃﾞﾝｷﾀﾞｲ", 区分: "出金", 金額: "8,800" },
+  { id: "B15", 日付: "2026/08/19", 摘要: "富士見テック株式会社", 区分: "入金", 金額: "329,340" },
+  { id: "B16", 日付: "2026/08/20", 摘要: "株式会社ひまわり食品", 区分: "入金", 金額: "１４８，５００" },
+  { id: "B17", 日付: "2026/08/21", 摘要: "コスモ商事株式会社", 区分: "入金", 金額: "512,000" },
+  { id: "B18", 日付: "2026/08/21", 摘要: "株式会社さくら物産", 区分: "入金", 金額: "780,000" },
+  { id: "B19", 日付: "2026/08/24", 摘要: "新星ロジスティクス株式会社", 区分: "入金", 金額: "61,600" },
+  { id: "B20", 日付: "2026/08/25", 摘要: "株式会社ヤマト精機", 区分: "入金", 金額: "145,200" },
+  { id: "B21", 日付: "2026年8月25日", 摘要: "東西トレーディング株式会社", 区分: "入金", 金額: "99,000" },
+  { id: "B22", 日付: "2026/08/26", 摘要: "ケイアイ物産株式会社", 区分: "入金", 金額: "234,000" },
+  { id: "B23", 日付: "2026/08/26", 摘要: "カ）ホシノ", 区分: "入金", 金額: "45,000" },
+  { id: "B24", 日付: "2026/08/27", 摘要: "株式会社オリオン工販", 区分: "入金", 金額: "87,780" },
+  { id: "B25", 日付: "2026/08/28", 摘要: "株式会社ウィング企画", 区分: "入金", 金額: "118,800" },
+  { id: "B26", 日付: "2026/08/01", 摘要: "株式会社まつもと商会", 区分: "入金", 金額: "72,600" },
+  { id: "B27", 日付: "2026/08/31", 摘要: "MKフーズ(株)", 区分: "入金", 金額: "143,000" },
+  { id: "B28", 日付: "2026/08/31", 摘要: "株式会社くすのき薬品", 区分: "入金", 金額: "268,400" },
+  { id: "B29", 日付: "20260831", 摘要: "株式会社アイリス電子", 区分: "入金", 金額: "91,300" },
+  { id: "B30", 日付: "2026/08/31", 摘要: "株式会社ノースフィールド", 区分: "入金", 金額: "405,900" },
+];
+
+const RIGHT_ROWS = [
+  { id: "L01", 日付: "2026/08/03", 取引先: "株式会社丸尾工業", 伝票番号: "URI-2608-001", 金額: "284,000" },
+  { id: "L02", 日付: "2026/08/04", 取引先: "ハヤシフーズ株式会社", 伝票番号: "URI-2608-002", 金額: "96,800" },
+  { id: "L03", 日付: "2026/08/05", 取引先: "株式会社青葉システム", 伝票番号: "URI-2608-003", 金額: "458,331" },
+  { id: "L04", 日付: "2026/08/06", 取引先: "株式会社サンプル物流", 伝票番号: "URI-2608-004", 金額: "132,000" },
+  { id: "L05", 日付: "2026/08/07", 取引先: "大和紙業株式会社", 伝票番号: "URI-2608-005", 金額: "175,000" },
+  { id: "L06", 日付: "2026/08/07", 取引先: "みどり印刷株式会社", 伝票番号: "URI-2608-006", 金額: "88,000" },
+  { id: "L07", 日付: "2026/08/11", 取引先: "ＡＢＣ商会", 伝票番号: "URI-2608-007", 金額: "64,900" },
+  { id: "L08", 日付: "2026/08/12", 取引先: "株式会社イロハ設備", 伝票番号: "URI-2608-008", 金額: "55,000" },
+  { id: "L09", 日付: "2026/08/12", 取引先: "株式会社イロハ設備", 伝票番号: "URI-2608-009", 金額: "55,000" },
+  { id: "L10", 日付: "2026/08/13", 取引先: "ミナトフーズ株式会社", 伝票番号: "URI-2608-010", 金額: "213,400" },
+  { id: "L11", 日付: "2026/08/14", 取引先: "有限会社北央エンジニアリング", 伝票番号: "URI-2608-011", 金額: "96,000" },
+  { id: "L12", 日付: "2026/08/17", 取引先: "山田商店", 伝票番号: "URI-2608-012", 金額: "43,200" },
+  { id: "L13", 日付: "2026/08/18", 取引先: "株式会社セイワ電機", 伝票番号: "URI-2608-013", 金額: "187,000" },
+  { id: "L14", 日付: "2026/08/19", 取引先: "富士見テック株式会社", 伝票番号: "URI-2608-014", 金額: "330,000" },
+  { id: "L15", 日付: "2026/08/20", 取引先: "株式会社ひまわり食品", 伝票番号: "URI-2608-015", 金額: "148,500" },
+  { id: "L16", 日付: "2026/08/20", 取引先: "コスモ商事株式会社", 伝票番号: "URI-2608-016", 金額: "512,000" },
+  { id: "L17", 日付: "2026/08/21", 取引先: "株式会社さくら物産", 伝票番号: "URI-2608-017", 金額: "78,000" },
+  { id: "L18", 日付: "2026/08/24", 取引先: "新星ロジスティクス株式会社", 伝票番号: "URI-2608-018", 金額: "61,600" },
+  { id: "L19", 日付: "2026/08/25", 取引先: "株式会社ヤマト精機", 伝票番号: "URI-2608-019", 金額: "145,200" },
+  { id: "L20", 日付: "2026/08/25", 取引先: "東西トレーディング株式会社", 伝票番号: "URI-2608-020", 金額: "99,000" },
+  { id: "L21", 日付: "2026/08/26", 取引先: "ケイアイ物産株式会社", 伝票番号: "URI-2608-021", 金額: "234,000" },
+  { id: "L22", 日付: "2026/08/27", 取引先: "株式会社オリオン工販", 伝票番号: "URI-2608-022", 金額: "87,780" },
+  { id: "L23", 日付: "2026/08/27", 取引先: "三村建材株式会社", 伝票番号: "URI-2608-023", 金額: "156,200" },
+  { id: "L24", 日付: "2026/08/28", 取引先: "田中電設", 伝票番号: "URI-2608-024", 金額: "32,000" },
+  { id: "L25", 日付: "2026/08/28", 取引先: "株式会社ウィング企画", 伝票番号: "URI-2608-025", 金額: "118,800" },
+  { id: "L26", 日付: "2026/07/31", 取引先: "株式会社まつもと商会", 伝票番号: "URI-2607-089", 金額: "72,600" },
+  { id: "L27", 日付: "2026/08/31", 取引先: "ＭＫフーズ株式会社", 伝票番号: "URI-2608-026", 金額: "143,000" },
+  { id: "L28", 日付: "2026/08/31", 取引先: "株式会社くすのき薬品", 伝票番号: "URI-2608-027", 金額: "268,400" },
+  { id: "L29", 日付: "2026/08/31", 取引先: "株式会社アイリス電子", 伝票番号: "URI-2608-028", 金額: "91,300" },
+  { id: "L30", 日付: "2026/08/31", 取引先: "株式会社ノースフィールド", 伝票番号: "URI-2608-029", 金額: "405,900" },
+];
+
+/* ==================================================================
+   ここから下が突合の処理です。列名は設定から読むため、
+   別の業務に差し替えても、この部分は書き換えません。
+================================================================== */
+
+// 取引先名の正規化。有効なルールだけを順に通します。
+function normalizeName(raw, rules) {
+  let s = String(raw == null ? "" : raw);
+  NAME_RULES.forEach((r) => {
+    if (rules[r.id]) s = r.apply(s);
+  });
+  return s.trim();
+}
+
+// 金額の読み取り。全角の数字は「全角と半角を同一視する」が有効なときだけ読めます。
+function parseAmount(raw, rules) {
+  let s = String(raw == null ? "" : raw);
+  if (rules.width) s = s.normalize("NFKC");
+  s = s.replace(/[,，\s　円¥￥]/g, "");
+  if (s === "" || !/^-?\d+(\.\d+)?$/.test(s)) return null;
+  return Number(s);
+}
+
+const pad2 = (n) => String(n).padStart(2, "0");
+
+// 日付の読み取り。書式のゆれを吸収して、内部では同じ形にそろえます。
+function parseDate(raw, defaultYear) {
+  const s = String(raw == null ? "" : raw).normalize("NFKC").trim();
+  let m;
+
+  m = s.match(/^(\d{4})[/\-.年](\d{1,2})[/\-.月](\d{1,2})日?$/);
+  if (m) return `${m[1]}-${pad2(m[2])}-${pad2(m[3])}`;
+
+  m = s.match(/^(\d{4})(\d{2})(\d{2})$/);
+  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+
+  m = s.match(/^(?:令和|R)\s*(\d{1,2})[/\-.年](\d{1,2})[/\-.月](\d{1,2})日?$/i);
+  if (m) return `${2018 + Number(m[1])}-${pad2(m[2])}-${pad2(m[3])}`;
+
+  m = s.match(/^(\d{1,2})[/月](\d{1,2})日?$/);
+  if (m) return `${defaultYear}-${pad2(m[1])}-${pad2(m[2])}`;
+
+  return null;
+}
+
+const dayDiff = (a, b) => {
+  if (!a || !b) return null;
+  const t = (v) => { const p = v.split("-").map(Number); return Date.UTC(p[0], p[1] - 1, p[2]); };
+  return Math.round((t(a) - t(b)) / 86400000);
+};
+
+const fmtDate = (iso) => {
+  if (!iso) return "";
+  const p = iso.split("-").map(Number);
+  return `${p[0]}年${p[1]}月${p[2]}日`;
+};
+
+const yen = (n) => (n == null ? "—" : `${n.toLocaleString("ja-JP")}円`);
+
+// 2文字ずつに切って重なりを見る、素朴な一致度（0〜1）です。
+function similarity(a, b) {
+  if (!a || !b) return 0;
+  if (a === b) return 1;
+  const grams = (s) => { const g = []; for (let i = 0; i < s.length - 1; i += 1) g.push(s.slice(i, i + 2)); return g; };
+  const A = grams(a);
+  const B = grams(b);
+  if (!A.length || !B.length) return 0;
+  const bag = new Map();
+  A.forEach((g) => bag.set(g, (bag.get(g) || 0) + 1));
+  let hit = 0;
+  B.forEach((g) => {
+    const c = bag.get(g) || 0;
+    if (c > 0) { hit += 1; bag.set(g, c - 1); }
+  });
+  return (2 * hit) / (A.length + B.length);
+}
+
+// 表記ゆれを吸収するのに、どのルールが効いたかを調べます。
+function rulesThatMattered(rawA, rawB, rules) {
+  const hits = [];
+  NAME_RULES.forEach((r) => {
+    if (!rules[r.id]) return;
+    const without = Object.assign({}, rules);
+    without[r.id] = false;
+    if (normalizeName(rawA, without) !== normalizeName(rawB, without)) hits.push(r.label);
+  });
+  return hits;
+}
+
+function prepare(row, side, rules) {
+  const rawName = row[side.keyField];
+  const rawDate = row[side.dateField];
+  return {
+    row,
+    side,
+    rawName,
+    rawDate,
+    key: normalizeName(rawName, rules),
+    amount: parseAmount(row[side.amountField], rules),
+    // 日付ルールを外しているときは、書式をそろえずに文字どおり比べます。
+    date: rules.date ? parseDate(rawDate, RECON_CONFIG.defaultYear) : null,
+    dateText: String(rawDate == null ? "" : rawDate).trim(),
+    offTarget: side.kindField ? row[side.kindField] !== side.kindTarget : false,
+  };
+}
+
+// 1組の候補について、一致・不一致・要確認を決めます。
+function classifyPair(L, R, rules, tol) {
+  const reasons = [];
+  let status = "match";
+
+  // 取引先
+  if (L.rawName !== R.rawName) {
+    const hits = rulesThatMattered(L.rawName, R.rawName, rules);
+    reasons.push({
+      tone: "info",
+      text: `表記ゆれを正規化して名寄せしました（「${L.rawName}」と「${R.rawName}」）。${hits.length ? "効いたルール：" + hits.join("／") : ""}`,
+    });
+  }
+
+  // 金額
+  if (L.amount == null || R.amount == null) {
+    status = "review";
+    const side = L.amount == null ? RECON_CONFIG.left.label : RECON_CONFIG.right.label;
+    reasons.push({
+      tone: "warn",
+      text: `${side}の金額を数値として読み取れません（全角の数字などが入っています）。金額を比べられないため、人の確認に回します。`,
+    });
+  } else {
+    // 全角の数字を読み取ったときは、そのことを理由に残します。
+    [[L, RECON_CONFIG.left], [R, RECON_CONFIG.right]].forEach((pair) => {
+      const item = pair[0];
+      const side = pair[1];
+      const raw = item.row[side.amountField];
+      if (parseAmount(raw, { width: false }) === null) {
+        reasons.push({
+          tone: "info",
+          text: `${side.label}の金額が全角で入っていましたが、数値として読み取りました（「${raw}」→ ${yen(item.amount)}）。`,
+        });
+      }
+    });
+
+    const diff = L.amount - R.amount;
+    if (Math.abs(diff) > tol.amountYen) {
+      status = "diff";
+      reasons.push({
+        tone: "warn",
+        text: `金額が違います。${RECON_CONFIG.left.label} ${yen(L.amount)}／${RECON_CONFIG.right.label} ${yen(R.amount)}　差額 ${yen(Math.abs(diff))}`,
+      });
+    } else if (diff !== 0) {
+      reasons.push({ tone: "info", text: `金額の差 ${yen(Math.abs(diff))} は、許容差 ${yen(tol.amountYen)} の範囲内です。` });
+    }
+  }
+
+  // 日付
+  if (rules.date) {
+    if (L.date && R.date) {
+      const d = dayDiff(L.date, R.date);
+      if (Math.abs(d) > tol.dateDays) {
+        if (status !== "review") status = "diff";
+        reasons.push({
+          tone: "warn",
+          text: `日付が${Math.abs(d)}日ずれています。${RECON_CONFIG.left.label} ${fmtDate(L.date)}／${RECON_CONFIG.right.label} ${fmtDate(R.date)}`,
+        });
+      } else {
+        if (d !== 0) {
+          reasons.push({ tone: "info", text: `日付の${Math.abs(d)}日のずれは、許容範囲内として一致にしています。` });
+        }
+        if (L.dateText !== R.dateText) {
+          reasons.push({ tone: "info", text: `日付の書式の違いを吸収しました（「${L.dateText}」と「${R.dateText}」は同じ日です）。` });
+        }
+      }
+    } else {
+      status = "review";
+      reasons.push({ tone: "warn", text: `日付を読み取れない書式です（「${L.dateText}」／「${R.dateText}」）。` });
+    }
+  } else if (L.dateText !== R.dateText) {
+    if (status !== "review") status = "diff";
+    reasons.push({
+      tone: "warn",
+      text: `日付が違います（「${L.dateText}」と「${R.dateText}」）。書式の違いだけかもしれませんが、「日付の書式の違いを吸収する」を外しているため、文字どおり比べています。`,
+    });
+  }
+
+  // 対象外の行
+  if (L.offTarget) {
+    status = "review";
+    reasons.push({
+      tone: "warn",
+      text: `${RECON_CONFIG.left.label}の区分が「${L.row[RECON_CONFIG.left.kindField]}」です。消し込みの対象かどうかを確認してください。`,
+    });
+  }
+
+  if (status === "match") {
+    reasons.unshift({ tone: "info", text: "取引先・日付・金額が、決めたルールの範囲で一致しました。" });
+  }
+
+  return { status, reasons };
+}
+
+/* ------------------------------------------------------------------
+   突合の本体。
+   ① 正規化した取引先名が同じ行どうしを突き合わせる
+   ② 残った行は、名称の近い相手を候補として出す（自動一致にはしない）
+   ③ それでも残った行は、片方にしかない行として要確認に回す
+------------------------------------------------------------------ */
+function reconcile(rules, tol) {
+  const L = LEFT_ROWS.map((r) => prepare(r, RECON_CONFIG.left, rules));
+  const R = RIGHT_ROWS.map((r) => prepare(r, RECON_CONFIG.right, rules));
+
+  const byKey = new Map();
+  R.forEach((r, i) => {
+    if (!byKey.has(r.key)) byKey.set(r.key, []);
+    byKey.get(r.key).push(i);
+  });
+  const leftKeys = new Set(L.map((l) => l.key));
+
+  const usedRight = new Set();
+  const results = [];
+  const pending = [];
+
+  // ① 同じ取引先どうしを突き合わせる
+  L.forEach((l) => {
+    const candidates = (byKey.get(l.key) || []).filter((i) => !usedRight.has(i));
+    if (!candidates.length) { pending.push(l); return; }
+
+    // 候補が複数あるときは、金額と日付がもっとも近い行を選びます。
+    let best = candidates[0];
+    let bestScore = Infinity;
+    candidates.forEach((i) => {
+      const r = R[i];
+      const amountGap = (l.amount == null || r.amount == null) ? 1e9 : Math.abs(l.amount - r.amount);
+      const dateGap = (rules.date && l.date && r.date)
+        ? Math.abs(dayDiff(l.date, r.date))
+        : (l.dateText === r.dateText ? 0 : 30);
+      const score = amountGap + dateGap * 1000;
+      if (score < bestScore) { bestScore = score; best = i; }
+    });
+
+    usedRight.add(best);
+    const verdict = classifyPair(l, R[best], rules, tol);
+    if (candidates.length > 1) {
+      verdict.reasons.push({
+        tone: "info",
+        text: `同じ取引先の候補が${candidates.length}件ありました。金額と日付がもっとも近い行を対応づけています。`,
+      });
+    }
+    results.push({ id: l.row.id, left: l, right: R[best], status: verdict.status, reasons: verdict.reasons });
+  });
+
+  // ② 残った行に、名称の近い相手がいないかを見る
+  const leftovers = [];
+  pending.forEach((l) => {
+    let best = -1;
+    let bestSim = 0;
+    R.forEach((r, i) => {
+      if (usedRight.has(i)) return;
+      const sim = similarity(l.key, r.key);
+      if (sim > bestSim) { bestSim = sim; best = i; }
+    });
+
+    if (best >= 0 && bestSim >= RECON_CONFIG.similarThreshold) {
+      usedRight.add(best);
+      const r = R[best];
+      const reasons = [{
+        tone: "warn",
+        text: `取引先名の近い行があります（「${l.rawName}」と「${r.rawName}」／一致度 ${Math.round(bestSim * 100)}％）。別の会社の可能性があるため、自動では一致にしません。`,
+      }];
+      if (l.amount != null && r.amount != null && l.amount === r.amount) {
+        reasons.push({ tone: "info", text: `金額は ${yen(l.amount)} で一致しています。` });
+      }
+      if (rules.date && l.date && r.date && dayDiff(l.date, r.date) === 0) {
+        reasons.push({ tone: "info", text: `日付は ${fmtDate(l.date)} で一致しています。` });
+      }
+      results.push({ id: l.row.id, left: l, right: r, status: "review", reasons });
+      return;
+    }
+    leftovers.push(l);
+  });
+
+  // ③ 片方にしかない行
+  leftovers.forEach((l) => {
+    const reasons = [];
+    if ((byKey.get(l.key) || []).length > 0) {
+      reasons.push({
+        tone: "warn",
+        text: `同じ取引先の行が${RECON_CONFIG.right.label}にありますが、すでに別の行と対応づけ済みです。どの行に対応するかは、機械では決められません。`,
+      });
+    } else {
+      reasons.push({ tone: "warn", text: `${RECON_CONFIG.right.label}に対応する行が見つかりません。` });
+    }
+    if (l.offTarget) {
+      reasons.push({
+        tone: "info",
+        text: `区分が「${l.row[RECON_CONFIG.left.kindField]}」の行です。手数料や引き落としなど、売掛の消し込み対象ではない可能性があります。`,
+      });
+    }
+    results.push({ id: l.row.id, left: l, right: null, status: "review", reasons });
+  });
+
+  R.forEach((r, i) => {
+    if (usedRight.has(i)) return;
+    const reasons = [];
+    if (leftKeys.has(r.key)) {
+      reasons.push({
+        tone: "warn",
+        text: `同じ取引先の行が${RECON_CONFIG.left.label}にありますが、すでに別の行と対応づけ済みです。同じ金額の取引が重複しているため、どちらに対応するかは機械では決められません。`,
+      });
+    } else {
+      reasons.push({
+        tone: "warn",
+        text: `${RECON_CONFIG.left.label}に対応する行が見つかりません。入金がまだない、または現金で回収した可能性があります。`,
+      });
+    }
+    results.push({ id: r.row.id, left: null, right: r, status: "review", reasons });
+  });
+
+  const counts = { match: 0, diff: 0, review: 0 };
+  results.forEach((x) => { counts[x.status] += 1; });
+
+  return { rows: results, counts, total: results.length };
+}
+
+/* ==================================================================
+   表示
+================================================================== */
+
+const STATUS_LABEL = { match: "一致", diff: "不一致", review: "要確認" };
+
+function SourceTable({ side, rows }) {
+  return (
+    <div className="p-card">
+      <div className="p-card__head">
+        <h3 className="p-card__title">{side.label}</h3>
+        <p className="p-card__meta">{side.source}／{rows.length}行（架空のデータです）</p>
+      </div>
+      <div className="p-scroll">
+        <table className="p-table p-table--pair">
+          <thead>
+            <tr>
+              <th scope="col">行</th>
+              {side.columns.map((c) => (
+                <th key={c.key} scope="col" className={c.type === "amount" ? "p-table__num" : ""}>{c.label}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.id}>
+                <td className="p-table__id">{r.id}</td>
+                {side.columns.map((c) => (
+                  <td
+                    key={c.key}
+                    className={c.type === "amount" ? "p-table__num" : (c.type === "date" ? "p-table__date" : "")}
+                  >
+                    {r[c.key]}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function SideCells({ item, side }) {
+  if (!item) {
+    return (
+      <React.Fragment>
+        <td className="p-table__none">—</td>
+        <td className="p-table__none p-table__name">（対応する行なし）</td>
+        <td className="p-table__none p-table__num">—</td>
+      </React.Fragment>
+    );
+  }
+  return (
+    <React.Fragment>
+      <td className="p-table__date">
+        {item.dateText}
+        <br />
+        <span className="p-table__id">{item.row.id}</span>
+      </td>
+      <td className="p-table__name">{item.rawName}</td>
+      <td className="p-table__num">{item.row[side.amountField]}</td>
+    </React.Fragment>
+  );
+}
+
+function ResultTable({ rows }) {
+  if (!rows.length) {
+    return <p className="p-empty">この分類に該当する行はありません。</p>;
+  }
+  return (
+    <div className="p-scroll">
+      <table className="p-table p-table--result">
+        <thead>
+          <tr>
+            <th scope="col">分類</th>
+            <th scope="col" colSpan={3}>{RECON_CONFIG.left.label}</th>
+            <th scope="col" colSpan={3}>{RECON_CONFIG.right.label}</th>
+            <th scope="col">そう分類した理由</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((x) => (
+            <tr key={x.id} className={x.status === "match" ? "" : (x.status === "diff" ? "is-diff" : "is-review")}>
+              <td>
+                <span className={x.status === "match" ? "p-badge" : "p-badge p-badge--caution"}>
+                  {STATUS_LABEL[x.status]}
+                </span>
+              </td>
+              <SideCells item={x.left} side={RECON_CONFIG.left} />
+              <SideCells item={x.right} side={RECON_CONFIG.right} />
+              <td className="p-table__reason">
+                <ul className="p-reasons">
+                  {x.reasons.map((r, i) => (
+                    <li key={i} className={r.tone === "warn" ? "is-warn" : ""}>{r.text}</li>
+                  ))}
+                </ul>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function Tile({ label, num, unit, sub, caution }) {
+  return (
+    <div className={caution ? "p-tile p-tile--caution" : "p-tile"}>
+      <p className="p-tile__label">{label}</p>
+      <p className="p-tile__num">{num}<span className="p-tile__unit">{unit}</span></p>
+      {sub ? <p className="p-tile__sub">{sub}</p> : null}
+    </div>
+  );
+}
+
+const minutesText = (sec) => {
+  const m = Math.round(sec / 60);
+  if (m < 60) return `${m}分`;
+  return `${Math.floor(m / 60)}時間${m % 60}分`;
+};
+
+function App() {
+  const [rules, setRules] = useState(ALL_ON);
+  const [amountTol, setAmountTol] = useState(RECON_CONFIG.tolerance.amountYen);
+  const [dateTol, setDateTol] = useState(RECON_CONFIG.tolerance.dateDays);
+  const [hasRun, setHasRun] = useState(false);
+  const [filter, setFilter] = useState("all");
+  const [rowsPerMonth, setRowsPerMonth] = useState(RECON_CONFIG.manual.rowsPerMonth);
+  const [secondsPerRow, setSecondsPerRow] = useState(RECON_CONFIG.manual.secondsPerRow);
+
+  const result = useMemo(
+    () => reconcile(rules, { amountYen: amountTol, dateDays: dateTol }),
+    [rules, amountTol, dateTol]
+  );
+
+  // 正規化を一切かけない場合の結果。比較のために常に計算しています。
+  const baseline = useMemo(() => reconcile(ALL_OFF, { amountYen: 0, dateDays: 0 }), []);
+
+  const toggle = (id) => setRules((prev) => Object.assign({}, prev, { [id]: !prev[id] }));
+  const activeCount = KEY_RULES.filter((r) => rules[r.id]).length;
+  const shown = result.rows.filter((x) => filter === "all" || x.status === filter);
+
+  // 手作業との比較
+  const humanRate = result.total ? (result.counts.diff + result.counts.review) / result.total : 1;
+  const humanRows = Math.ceil(rowsPerMonth * humanRate);
+  const manualSec = rowsPerMonth * secondsPerRow;
+  const autoSec = humanRows * secondsPerRow + RECON_CONFIG.manual.setupMinutes * 60;
+  const savedSec = Math.max(manualSec - autoSec, 0);
+  const savedRate = manualSec ? Math.round((savedSec / manualSec) * 100) : 0;
+
+  return (
+    <React.Fragment>
+      <div className="p-topbar" />
+
+      <div className="p-sheet">
+        {/* ---------------- ヘッダー ---------------- */}
+        <header className="p-masthead">
+          <p className="p-masthead__kicker">中小企業向け　業務改善・自動化サンプル　突合作業</p>
+          <h1 className="p-masthead__title">Excel突合の自動化 デモ</h1>
+          <p className="p-masthead__lead">
+            銀行の入金明細と帳簿を突き合わせて、一致・不一致・要確認の3つに分けます。
+            表記がそろっていないから機械では無理だ、と言われがちな作業ですが、
+            そろえ方（正規化ルール）を決めれば、大半は自動で片づきます。
+            この画面では、そのルールをその場で切り替えて、結果がどう変わるかを確認できます。
+          </p>
+          <p className="p-masthead__meta">
+            対象：{RECON_CONFIG.jobName}（{RECON_CONFIG.period}）／
+            {RECON_CONFIG.left.label} {LEFT_ROWS.length}行・{RECON_CONFIG.right.label} {RIGHT_ROWS.length}行
+          </p>
+
+          <div className="p-notice">
+            <p className="p-notice__title">この画面について</p>
+            <p className="p-notice__body">
+              表示している会社名・日付・金額は、すべてデモ用の架空のデータです。実在する企業・取引とは関係ありません。
+              削減時間などの数字も、入力した条件から計算した想定値です。
+            </p>
+            <p className="p-notice__body">
+              実際にお渡しするものは、この画面と同じ処理をお手元のExcelファイルに対して行うPythonスクリプトです。
+              この画面は、その処理の動きを確認していただくためのものです。ブラウザの中だけで動いており、
+              ファイルの読み書きや外部への送信は行っていません。
+            </p>
+          </div>
+        </header>
+
+        {/* ---------------- 一 突合するデータ ---------------- */}
+        <section className="p-section">
+          <div className="p-heading">
+            <span className="p-heading__no">一</span>
+            <h2 className="p-heading__text">突合する2つの表</h2>
+          </div>
+
+          <p className="p-lead">
+            左が銀行から落としたCSV、右が会計ソフトから出した売掛帳です。
+            実務でよくある崩れ方をそのまま入れてあります。
+            片方が「（株）サンプル物流」で片方が「株式会社サンプル物流」、
+            金額が1円だけ違う、日付が1日ずれている、摘要に「※8月分」が足してある、といった行です。
+          </p>
+
+          <div className="p-pair">
+            <SourceTable side={RECON_CONFIG.left} rows={LEFT_ROWS} />
+            <SourceTable side={RECON_CONFIG.right} rows={RIGHT_ROWS} />
+          </div>
+
+          <p className="p-note">表は横にスクロールできます。画面が狭いときは、2つの表が上下に並びます。</p>
+        </section>
+
+        {/* ---------------- 二 突合ルール ---------------- */}
+        <section className="p-section">
+          <div className="p-heading">
+            <span className="p-heading__no">二</span>
+            <h2 className="p-heading__text">そろえ方を決める</h2>
+          </div>
+
+          <p className="p-lead">
+            チェックを外すと、そのルールを使わずに突合します。
+            外すほど「要確認」が増え、人が目で見る行が増えます。
+            どこまで機械に任せるかを、この画面で決められます。
+          </p>
+
+          <ul className="p-rules">
+            {KEY_RULES.map((r) => (
+              <li className="p-rule" key={r.id}>
+                <label className="p-rule__label">
+                  <input
+                    type="checkbox"
+                    className="p-rule__box"
+                    checked={!!rules[r.id]}
+                    onChange={() => toggle(r.id)}
+                  />
+                  <span className="p-rule__body">
+                    <span className="p-rule__name">{r.label}</span>
+                    <span className="p-rule__desc">{r.desc}</span>
+                    <span className="p-rule__ex">例：{r.example}</span>
+                  </span>
+                  <span className="p-rule__hit">{rules[r.id] ? "使う" : "使わない"}</span>
+                </label>
+              </li>
+            ))}
+          </ul>
+
+          <div className="p-fields">
+            <div className="p-field">
+              <label className="p-field__label" htmlFor="tol-amount">金額の許容差</label>
+              <span className="p-field__row">
+                <input
+                  id="tol-amount"
+                  className="p-field__input"
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={amountTol}
+                  onChange={(e) => setAmountTol(Math.max(0, Number(e.target.value) || 0))}
+                />
+                <span className="p-field__unit">円までは一致とみなす</span>
+              </span>
+              <p className="p-field__note">
+                0円のままだと、1円の差も不一致として拾います。振込手数料が引かれる取引がある場合も、
+                ここを広げるのではなく、手数料として別に扱うことをおすすめします。
+              </p>
+            </div>
+
+            <div className="p-field">
+              <label className="p-field__label" htmlFor="tol-date">日付の許容ずれ</label>
+              <span className="p-field__row">
+                <input
+                  id="tol-date"
+                  className="p-field__input"
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={dateTol}
+                  onChange={(e) => setDateTol(Math.max(0, Number(e.target.value) || 0))}
+                />
+                <span className="p-field__unit">日までは一致とみなす</span>
+              </span>
+              <p className="p-field__note">
+                1日にすると、計上日と入金日が1日ずれている行が一致に変わります。
+                「日付の書式の違いを吸収する」が有効なときにだけ効きます。
+              </p>
+            </div>
+          </div>
+
+          <div className="p-actions">
+            <button type="button" className="p-btn p-btn--primary" onClick={() => setHasRun(true)}>
+              突合する
+            </button>
+            <button
+              type="button"
+              className="p-btn"
+              onClick={() => { setRules(ALL_ON); setAmountTol(0); setDateTol(0); setHasRun(true); }}
+            >
+              推奨の設定に戻す
+            </button>
+            <button
+              type="button"
+              className="p-btn"
+              onClick={() => { setRules(ALL_OFF); setAmountTol(0); setDateTol(0); setHasRun(true); }}
+            >
+              正規化なしで突合する
+            </button>
+            <span className="p-actions__note">使用中のルール {activeCount} / {KEY_RULES.length}</span>
+          </div>
+        </section>
+
+        {/* ---------------- 三 突合結果 ---------------- */}
+        <section className="p-section">
+          <div className="p-heading">
+            <span className="p-heading__no">三</span>
+            <h2 className="p-heading__text">突合結果</h2>
+          </div>
+
+          {!hasRun ? (
+            <p className="p-empty">まだ突合していません。上の「突合する」を押してください。</p>
+          ) : (
+            <React.Fragment>
+              <p className="p-lead">
+                {RECON_CONFIG.left.label} {LEFT_ROWS.length}行と{RECON_CONFIG.right.label} {RIGHT_ROWS.length}行を突き合わせ、
+                {result.total}行に整理しました。人が見るのは「不一致」{result.counts.diff}件と「要確認」{result.counts.review}件、
+                あわせて{result.counts.diff + result.counts.review}行だけです。
+              </p>
+
+              <div className="p-tiles">
+                <Tile
+                  label="一致（そのまま消し込めます）"
+                  num={result.counts.match}
+                  unit="件"
+                  sub={`正規化なしの場合は ${baseline.counts.match}件`}
+                />
+                <Tile
+                  label="不一致（金額・日付が合いません）"
+                  num={result.counts.diff}
+                  unit="件"
+                  sub={`正規化なしの場合は ${baseline.counts.diff}件`}
+                  caution
+                />
+                <Tile
+                  label="要確認（人の判断が要ります）"
+                  num={result.counts.review}
+                  unit="件"
+                  sub={
+                    `正規化なしの場合は ${baseline.counts.review}件` +
+                    (result.counts.review < baseline.counts.review
+                      ? `。ルールを入れて ${baseline.counts.review - result.counts.review}件 減りました`
+                      : "")
+                  }
+                  caution
+                />
+              </div>
+
+              <div className="p-legend">
+                <dl>
+                  <dt>一致</dt>
+                  <dd>取引先・日付・金額が、決めたルールの範囲ですべて合っている行です。そのまま消し込めます。</dd>
+                  <dt>不一致</dt>
+                  <dd>相手の行は見つかったものの、金額または日付が合わない行です。差額と日数を出しているので、原因の見当がつきます。</dd>
+                  <dt>要確認</dt>
+                  <dd>片方にしかない行、名前が似ているだけで同じ会社と断定できない行、同じ条件の候補が複数ある行です。機械が勝手に決めず、人に回します。</dd>
+                </dl>
+              </div>
+
+              <div className="p-tabs">
+                {[
+                  { key: "all", label: `すべて（${result.total}件）` },
+                  { key: "match", label: `一致（${result.counts.match}件）` },
+                  { key: "diff", label: `不一致（${result.counts.diff}件）` },
+                  { key: "review", label: `要確認（${result.counts.review}件）` },
+                ].map((t) => (
+                  <button
+                    key={t.key}
+                    type="button"
+                    className="p-tab"
+                    aria-pressed={filter === t.key}
+                    onClick={() => setFilter(t.key)}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+
+              <ResultTable rows={shown} />
+
+              <p className="p-note">
+                ルールや許容範囲を変えると、この結果はその場で計算しなおします。表は横にスクロールできます。
+              </p>
+            </React.Fragment>
+          )}
+        </section>
+
+        {/* ---------------- 四 手作業との比較 ---------------- */}
+        <section className="p-section">
+          <div className="p-heading">
+            <span className="p-heading__no">四</span>
+            <h2 className="p-heading__text">手作業との比較</h2>
+          </div>
+
+          <p className="p-lead">
+            1か月の件数と、1件を目で見て突き合わせるのにかかる秒数を入れてください。
+            上の突合結果の比率（人が見る行の割合）を、そのまま当てはめて計算します。
+          </p>
+
+          <div className="p-fields">
+            <div className="p-field">
+              <label className="p-field__label" htmlFor="calc-rows">1か月の件数</label>
+              <span className="p-field__row">
+                <input
+                  id="calc-rows"
+                  className="p-field__input"
+                  type="number"
+                  min="1"
+                  step="10"
+                  value={rowsPerMonth}
+                  onChange={(e) => setRowsPerMonth(Math.max(1, Number(e.target.value) || 1))}
+                />
+                <span className="p-field__unit">件</span>
+              </span>
+            </div>
+            <div className="p-field">
+              <label className="p-field__label" htmlFor="calc-sec">1件あたりの目視時間</label>
+              <span className="p-field__row">
+                <input
+                  id="calc-sec"
+                  className="p-field__input"
+                  type="number"
+                  min="1"
+                  step="5"
+                  value={secondsPerRow}
+                  onChange={(e) => setSecondsPerRow(Math.max(1, Number(e.target.value) || 1))}
+                />
+                <span className="p-field__unit">秒</span>
+              </span>
+            </div>
+          </div>
+
+          <ul className="p-calc">
+            <li>
+              <span className="p-calc__label">いまのやり方（全件を目で見る）</span>
+              <span className="p-calc__value">{minutesText(manualSec)}</span>
+              <span className="p-calc__detail">
+                {rowsPerMonth.toLocaleString("ja-JP")}件 × {secondsPerRow}秒
+              </span>
+            </li>
+            <li>
+              <span className="p-calc__label">自動化した場合（不一致・要確認だけ目で見る）</span>
+              <span className="p-calc__value p-calc__value--caution">{minutesText(autoSec)}</span>
+              <span className="p-calc__detail">
+                {humanRows.toLocaleString("ja-JP")}件（全体の{Math.round(humanRate * 100)}％）× {secondsPerRow}秒
+                　＋　スクリプトの実行と結果の確認 {RECON_CONFIG.manual.setupMinutes}分
+              </span>
+            </li>
+            <li>
+              <span className="p-calc__label">1か月あたりの削減時間</span>
+              <span className="p-calc__value p-calc__value--accent">{minutesText(savedSec)}</span>
+              <span className="p-calc__detail">削減率 {savedRate}％</span>
+            </li>
+            <li>
+              <span className="p-calc__label">年間に換算した削減時間</span>
+              <span className="p-calc__value p-calc__value--accent">{minutesText(savedSec * 12)}</span>
+              <span className="p-calc__detail">同じ件数が12か月続いた場合</span>
+            </li>
+          </ul>
+
+          <p className="p-note p-note--caution">
+            ここに出る数字は、すべて想定値です。実際の削減時間は、データの崩れ方と確認の丁寧さによって変わります。
+            {hasRun ? "" : "「人が見る行の割合」は、上で突合を実行すると実際の結果に置き換わります。"}
+          </p>
+        </section>
+
+        {/* ---------------- 五 実際にお渡しするもの ---------------- */}
+        <section className="p-section">
+          <div className="p-heading">
+            <span className="p-heading__no">五</span>
+            <h2 className="p-heading__text">実際にお渡しするもの</h2>
+          </div>
+
+          <div className="p-def">
+            <p className="p-def__label">納品物</p>
+            <p className="p-def__body">
+              お手元のExcelファイル2つを読み込み、この画面と同じ処理を行うPythonスクリプトです。
+              結果は「一致」「不一致」「要確認」のシートに分かれたExcelファイルとして書き出します。
+              元のファイルは書き換えません。実行はコマンド1行、またはダブルクリックで動く形にします。
+            </p>
+          </div>
+
+          <div className="p-def">
+            <p className="p-def__label">突合ルールの持ち方</p>
+            <p className="p-def__body">
+              この画面で切り替えたルールは、納品物では設定ファイルに入ります。
+              列名や許容範囲が変わっても、設定ファイルを直すだけで済みます。プログラムは触りません。
+            </p>
+            <p className="p-code">{`{
+  "left":  { "path": "銀行明細.xlsx", "key": "摘要",   "date": "日付", "amount": "金額" },
+  "right": { "path": "売掛帳.xlsx",   "key": "取引先", "date": "日付", "amount": "金額" },
+  "rules": { "space": true, "width": true, "corp": true, "symbol": true, "date": true },
+  "tolerance": { "amount_yen": 0, "date_days": 0 },
+  "output": "突合結果_2026-08.xlsx"
+}`}</p>
+          </div>
+
+          <div className="p-def">
+            <p className="p-def__label">他の突合にも使えます</p>
+            <p className="p-def__body">
+              この画面のプログラムは、列名を直接持っていません。冒頭の設定を差し替えるだけで、
+              請求書と入金明細、受注一覧と出荷一覧、在庫表と棚卸表といった突合にもそのまま使えます。
+              合わせるものが変わっても、やっていることは同じです。
+            </p>
+          </div>
+
+          <div className="p-def">
+            <p className="p-def__label">この画面と納品物の違い</p>
+            <p className="p-def__body">
+              この画面はブラウザの中だけで動いており、Excelファイルの読み書きはしていません。
+              サンプルデータを埋め込んで、処理の結果だけをお見せしています。
+              ページを開き直すと最初の状態に戻ります（ブラウザへの保存は行っていません）。
+            </p>
+          </div>
+
+          <div className="p-colophon">
+            <p>掲載しているデータは、すべてデモ用の架空のものです。実在する企業・取引とは関係ありません。</p>
+            <p>
+              同じ処理のPythonスクリプトとサンプル出力は
+              <a href="https://github.com/bty305-beep/work-samples/tree/main/excel-kit">Excel業務の自動化キット</a>
+              に置いています。
+            </p>
+            <p>
+              ほかのサンプルは
+              <a href="../../">業務の悩み 索引</a>
+              から見られます。
+            </p>
+          </div>
+        </section>
+      </div>
+    </React.Fragment>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>

@@ -1,0 +1,2572 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>見積書・請求書の作成 デモ | マスタから作り、発行状況を一覧で見る</title>
+<meta name="description" content="商品マスタから見積書を作り、そのまま請求書に変換し、未発行・発行済・入金済・期日超過を一覧で確認できるデモです。税率ごとの内訳と端数処理、適格請求書の記載事項も画面上で確認できます。掲載データはすべて架空です。">
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+:root {
+  --c-base:         #ffffff;
+  --c-paper:        #f5f1e8;
+  --c-ink:          #1b1c1e;
+  --c-ink-2:        #4c4f54;
+  --c-ink-3:        #7d8087;
+  --c-rule:         #ddd7c8;
+  --c-rule-strong:  #b3ab98;
+  --c-accent:       #2d4257;
+  --c-accent-tint:  #eef1f3;
+  --c-caution:      #9c463b;
+  --c-caution-tint: #f3e9e6;
+  --font-mincho: "Hiragino Mincho ProN","Yu Mincho","YuMincho","MS PMincho","Noto Serif JP",serif;
+  --font-gothic: "Hiragino Kaku Gothic ProN","Hiragino Sans","Yu Gothic","YuGothic",Meiryo,"Noto Sans JP",sans-serif;
+  --fs-note:  13px;  --fs-body: 15px;  --fs-sub: 18px;  --fs-head: 24px;  --fs-title: 33px;
+  --lh-body: 1.9;  --lh-head: 1.45;  --ls-body: 0.04em;  --ls-head: 0.06em;
+  --sp-1: 4px;  --sp-2: 8px;  --sp-3: 16px;  --sp-4: 32px;  --sp-5: 64px;
+  --rule-1: 1px;  --rule-2: 2px;
+}
+
+html { -webkit-text-size-adjust: 100%; }
+
+/* Tailwind の preflight は実行時に head の末尾へ挿入されるため、
+   body と a はセレクタの詳細度を上げて上書きされないようにしています。 */
+html body {
+  margin: 0;
+  background: var(--c-base);
+  color: var(--c-ink);
+  font-family: var(--font-gothic);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  letter-spacing: var(--ls-body);
+  text-align: left;
+}
+
+*, *::before, *::after { border-radius: 0; box-shadow: none; }
+
+body a {
+  color: var(--c-accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+body a:hover { text-decoration-thickness: 2px; }
+
+:focus-visible { outline: var(--rule-2) solid var(--c-accent); outline-offset: 2px; }
+
+/* ------------------------------------------------------------------
+   版面
+------------------------------------------------------------------ */
+.p-topbar { border-top: 3px solid var(--c-accent); }
+
+.p-sheet {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 0 var(--sp-3);
+}
+
+.p-section { padding-top: var(--sp-5); }
+.p-section:last-of-type { padding-bottom: var(--sp-5); }
+
+/* ------------------------------------------------------------------
+   ヘッダー
+------------------------------------------------------------------ */
+.p-masthead { padding-top: var(--sp-4); padding-bottom: var(--sp-4); }
+
+.p-masthead__kicker {
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-head);
+  color: var(--c-ink-3);
+  margin: 0 0 var(--sp-2);
+}
+
+.p-masthead__back {
+  margin: 0 0 var(--sp-3);
+  font-size: var(--fs-note);
+}
+
+.p-masthead__title {
+  font-family: var(--font-mincho);
+  font-size: var(--fs-title);
+  line-height: var(--lh-head);
+  letter-spacing: var(--ls-head);
+  font-weight: 600;
+  color: var(--c-ink);
+  margin: 0;
+  padding-bottom: var(--sp-3);
+  border-bottom: var(--rule-2) solid var(--c-accent);
+}
+
+.p-masthead__lead {
+  margin: var(--sp-3) 0 0;
+  max-width: 42em;
+  color: var(--c-ink-2);
+}
+
+.p-masthead__meta {
+  margin: var(--sp-3) 0 0;
+  font-size: var(--fs-note);
+  color: var(--c-ink-3);
+}
+
+/* ------------------------------------------------------------------
+   注記帯
+------------------------------------------------------------------ */
+.p-notice {
+  margin-top: var(--sp-4);
+  background: var(--c-caution-tint);
+  border-left: 3px solid var(--c-caution);
+  padding: var(--sp-3);
+}
+
+.p-notice__title {
+  margin: 0 0 var(--sp-1);
+  font-size: var(--fs-note);
+  font-weight: 700;
+  letter-spacing: var(--ls-head);
+  color: var(--c-caution);
+}
+
+.p-notice__body {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-note);
+  line-height: 1.8;
+  color: var(--c-ink-2);
+}
+
+.p-notice__body:last-child { margin-bottom: 0; }
+
+/* ------------------------------------------------------------------
+   節見出し
+------------------------------------------------------------------ */
+.p-heading {
+  margin: 0 0 var(--sp-3);
+  padding-bottom: var(--sp-2);
+  border-bottom: var(--rule-2) solid var(--c-rule-strong);
+}
+
+.p-heading__no {
+  display: block;
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-head);
+  color: var(--c-accent);
+  margin-bottom: var(--sp-1);
+}
+
+.p-heading__text {
+  font-family: var(--font-mincho);
+  font-size: var(--fs-head);
+  line-height: var(--lh-head);
+  letter-spacing: var(--ls-head);
+  font-weight: 600;
+  margin: 0;
+}
+
+.p-sub {
+  margin: var(--sp-4) 0 var(--sp-2);
+  padding-bottom: var(--sp-1);
+  border-bottom: var(--rule-1) solid var(--c-rule-strong);
+  font-family: var(--font-mincho);
+  font-size: var(--fs-sub);
+  letter-spacing: var(--ls-head);
+  font-weight: 600;
+}
+
+.p-lead {
+  margin: 0 0 var(--sp-3);
+  max-width: 44em;
+  color: var(--c-ink-2);
+}
+
+.p-note {
+  margin: var(--sp-2) 0 0;
+  font-size: var(--fs-note);
+  line-height: 1.8;
+  color: var(--c-ink-3);
+}
+
+.p-note--caution { color: var(--c-caution); }
+
+/* ------------------------------------------------------------------
+   画面の切り替え
+------------------------------------------------------------------ */
+.p-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  padding: var(--sp-3) 0;
+  border-top: var(--rule-1) solid var(--c-rule);
+  border-bottom: var(--rule-2) solid var(--c-rule-strong);
+}
+
+.p-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+}
+
+.p-tab {
+  font-family: var(--font-gothic);
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-body);
+  color: var(--c-ink-2);
+  background: var(--c-base);
+  border: var(--rule-1) solid var(--c-rule-strong);
+  padding: var(--sp-1) var(--sp-3);
+  cursor: pointer;
+}
+
+.p-tab:hover { background: var(--c-accent-tint); }
+
+.p-tab[aria-pressed="true"] {
+  color: var(--c-base);
+  background: var(--c-accent);
+  border-color: var(--c-accent);
+  font-weight: 700;
+}
+
+/* ------------------------------------------------------------------
+   ボタン
+------------------------------------------------------------------ */
+.p-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-top: var(--sp-4);
+}
+
+.p-btn {
+  font-family: var(--font-gothic);
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-body);
+  color: var(--c-accent);
+  background: var(--c-accent-tint);
+  border: var(--rule-1) solid var(--c-rule-strong);
+  padding: var(--sp-2) var(--sp-3);
+  cursor: pointer;
+}
+
+.p-btn:hover { background: var(--c-base); }
+
+.p-btn--primary {
+  font-size: var(--fs-body);
+  font-weight: 700;
+  color: var(--c-base);
+  background: var(--c-accent);
+  border-color: var(--c-accent);
+  padding: var(--sp-2) var(--sp-4);
+}
+
+.p-btn--primary:hover { background: var(--c-ink); border-color: var(--c-ink); }
+
+.p-btn--mini {
+  padding: 2px var(--sp-2);
+  white-space: nowrap;
+}
+
+.p-btn:disabled {
+  color: var(--c-ink-3);
+  background: var(--c-paper);
+  border-color: var(--c-rule);
+  cursor: default;
+}
+
+.p-actions__note { font-size: var(--fs-note); color: var(--c-ink-3); }
+
+/* ------------------------------------------------------------------
+   入力
+------------------------------------------------------------------ */
+.p-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-3);
+}
+
+.p-field { flex: 1 1 240px; min-width: 0; }
+
+.p-field__label {
+  display: block;
+  font-size: var(--fs-note);
+  font-weight: 700;
+  letter-spacing: var(--ls-head);
+  color: var(--c-accent);
+  margin-bottom: var(--sp-1);
+}
+
+.p-field__row { display: flex; align-items: center; gap: var(--sp-2); }
+
+.p-field__unit { flex: 0 0 auto; font-size: var(--fs-note); color: var(--c-ink-2); }
+
+.p-field__note {
+  margin: var(--sp-1) 0 0;
+  font-size: var(--fs-note);
+  line-height: 1.8;
+  color: var(--c-ink-3);
+}
+
+.p-input, .p-select {
+  font-family: var(--font-gothic);
+  font-size: var(--fs-body);
+  letter-spacing: var(--ls-body);
+  color: var(--c-ink);
+  background: var(--c-base);
+  border: var(--rule-1) solid var(--c-rule-strong);
+  padding: var(--sp-1) var(--sp-2);
+  width: 100%;
+}
+
+.p-input--num {
+  text-align: right;
+  font-feature-settings: "tnum" 1;
+  max-width: 8em;
+}
+
+/* ------------------------------------------------------------------
+   集計タイル
+------------------------------------------------------------------ */
+.p-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-4);
+}
+
+.p-tile {
+  border-top: var(--rule-2) solid var(--c-accent);
+  border-bottom: var(--rule-1) solid var(--c-rule-strong);
+  padding: var(--sp-2) 0 var(--sp-3);
+}
+
+.p-tile--caution { border-top-color: var(--c-caution); }
+
+.p-tile__label {
+  margin: 0 0 var(--sp-1);
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-head);
+  color: var(--c-ink-2);
+}
+
+.p-tile__num {
+  margin: 0;
+  font-size: var(--fs-title);
+  line-height: 1.25;
+  font-weight: 700;
+  color: var(--c-accent);
+  font-feature-settings: "tnum" 1;
+}
+
+.p-tile--caution .p-tile__num { color: var(--c-caution); }
+
+.p-tile__unit { font-size: var(--fs-sub); font-weight: 500; margin-left: 2px; }
+
+.p-tile__sub {
+  margin: var(--sp-1) 0 0;
+  font-size: var(--fs-note);
+  line-height: 1.7;
+  color: var(--c-ink-2);
+  font-feature-settings: "tnum" 1;
+}
+
+/* ------------------------------------------------------------------
+   表
+------------------------------------------------------------------ */
+.p-scroll {
+  overflow-x: auto;
+  border-top: var(--rule-1) solid var(--c-rule);
+}
+
+.p-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-note);
+  line-height: 1.7;
+}
+
+.p-table--wide { min-width: 1000px; }
+.p-table--mid { min-width: 640px; }
+
+.p-table th {
+  background: var(--c-paper);
+  border-bottom: var(--rule-1) solid var(--c-rule-strong);
+  padding: var(--sp-2);
+  text-align: left;
+  font-weight: 700;
+  letter-spacing: var(--ls-head);
+  color: var(--c-ink-2);
+  white-space: nowrap;
+}
+
+.p-table td {
+  border-bottom: var(--rule-1) solid var(--c-rule);
+  padding: var(--sp-2);
+  vertical-align: top;
+  color: var(--c-ink);
+}
+
+.p-table tr:last-child td { border-bottom: 0; }
+
+.p-table__num {
+  text-align: right;
+  white-space: nowrap;
+  font-feature-settings: "tnum" 1;
+}
+
+.p-table__id {
+  color: var(--c-ink-3);
+  white-space: nowrap;
+  font-feature-settings: "tnum" 1;
+}
+
+.p-table__no { white-space: nowrap; font-feature-settings: "tnum" 1; }
+
+.p-table__kind { white-space: nowrap; }
+
+.p-table__cut {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--sp-1);
+}
+
+.p-table__date { white-space: nowrap; font-feature-settings: "tnum" 1; }
+
+.p-table__name { min-width: 10em; }
+
+.p-table__act { white-space: nowrap; }
+
+.p-table tr.is-overdue td { background: var(--c-caution-tint); }
+.p-table tr.is-open td { background: var(--c-accent-tint); }
+
+.p-table__detail td {
+  background: var(--c-paper);
+  padding: var(--sp-3);
+}
+
+.p-table__foot td {
+  background: var(--c-paper);
+  font-weight: 700;
+  border-top: var(--rule-1) solid var(--c-rule-strong);
+}
+
+.p-table__mark { color: var(--c-caution); }
+
+/* ------------------------------------------------------------------
+   分類ラベル
+------------------------------------------------------------------ */
+.p-badge {
+  display: inline-block;
+  font-size: var(--fs-note);
+  font-weight: 700;
+  letter-spacing: var(--ls-head);
+  padding: 1px var(--sp-2);
+  border: var(--rule-1) solid var(--c-rule-strong);
+  background: var(--c-accent-tint);
+  color: var(--c-accent);
+  white-space: nowrap;
+}
+
+.p-badge--caution {
+  background: var(--c-caution-tint);
+  color: var(--c-caution);
+  border-color: var(--c-caution);
+}
+
+.p-badge--quiet {
+  background: var(--c-base);
+  color: var(--c-ink-3);
+  font-weight: 400;
+}
+
+/* ------------------------------------------------------------------
+   分類の説明
+------------------------------------------------------------------ */
+.p-legend {
+  margin: 0 0 var(--sp-4);
+  padding: var(--sp-3);
+  background: var(--c-paper);
+  border-top: var(--rule-2) solid var(--c-rule-strong);
+}
+
+.p-legend dl { margin: 0; }
+
+.p-legend dt {
+  font-size: var(--fs-note);
+  font-weight: 700;
+  letter-spacing: var(--ls-head);
+  color: var(--c-accent);
+  margin-bottom: var(--sp-1);
+}
+
+.p-legend dt.is-caution { color: var(--c-caution); }
+
+.p-legend dd {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-note);
+  line-height: 1.8;
+  color: var(--c-ink-2);
+}
+
+.p-legend dd:last-of-type { margin-bottom: 0; }
+
+/* ------------------------------------------------------------------
+   操作の結果
+------------------------------------------------------------------ */
+.p-flash {
+  margin: 0 0 var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--c-accent-tint);
+  border-left: 3px solid var(--c-accent);
+  font-size: var(--fs-note);
+  line-height: 1.8;
+  color: var(--c-ink);
+}
+
+.p-empty {
+  padding: var(--sp-4) var(--sp-2);
+  color: var(--c-ink-3);
+  border-top: var(--rule-1) solid var(--c-rule);
+  border-bottom: var(--rule-1) solid var(--c-rule);
+}
+
+/* ------------------------------------------------------------------
+   帳票の体裁
+------------------------------------------------------------------ */
+.p-doc {
+  border: var(--rule-1) solid var(--c-rule-strong);
+  padding: var(--sp-4) var(--sp-3);
+  background: var(--c-base);
+}
+
+.p-doc__title {
+  margin: 0 0 var(--sp-4);
+  padding-bottom: var(--sp-2);
+  border-bottom: var(--rule-2) solid var(--c-accent);
+  font-family: var(--font-mincho);
+  font-size: var(--fs-head);
+  letter-spacing: 0.4em;
+  font-weight: 600;
+  text-align: center;
+}
+
+.p-doc__head {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-4);
+  margin-bottom: var(--sp-4);
+}
+
+.p-doc__to { min-width: 0; }
+
+.p-doc__client {
+  margin: 0 0 var(--sp-2);
+  padding-bottom: var(--sp-1);
+  border-bottom: var(--rule-1) solid var(--c-ink);
+  font-family: var(--font-mincho);
+  font-size: var(--fs-sub);
+  font-weight: 600;
+}
+
+.p-doc__line {
+  margin: 0;
+  font-size: var(--fs-note);
+  line-height: 1.9;
+  color: var(--c-ink-2);
+}
+
+.p-doc__line strong { color: var(--c-ink); font-weight: 700; }
+
+.p-doc__from { text-align: left; }
+
+.p-doc__sum {
+  margin: var(--sp-4) 0 0;
+  padding: 0;
+  list-style: none;
+  border-top: var(--rule-2) solid var(--c-rule-strong);
+  max-width: 26em;
+  margin-left: auto;
+}
+
+.p-doc__sum li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-2);
+  border-bottom: var(--rule-1) solid var(--c-rule);
+  font-size: var(--fs-note);
+}
+
+.p-doc__sum li:last-child { border-bottom: 0; }
+
+.p-doc__sum li.is-total {
+  border-top: var(--rule-1) solid var(--c-rule-strong);
+  border-bottom: var(--rule-2) solid var(--c-accent);
+  font-size: var(--fs-body);
+  font-weight: 700;
+}
+
+.p-doc__sum .p-doc__val {
+  text-align: right;
+  font-feature-settings: "tnum" 1;
+  white-space: nowrap;
+}
+
+.p-doc__note {
+  margin: var(--sp-3) 0 0;
+  font-size: var(--fs-note);
+  line-height: 1.8;
+  color: var(--c-ink-2);
+}
+
+/* ------------------------------------------------------------------
+   2つ並べる
+------------------------------------------------------------------ */
+.p-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-4);
+}
+
+.p-pair__head {
+  margin: 0 0 var(--sp-2);
+  padding-bottom: var(--sp-1);
+  border-bottom: var(--rule-2) solid var(--c-rule-strong);
+  font-size: var(--fs-note);
+  font-weight: 700;
+  letter-spacing: var(--ls-head);
+  color: var(--c-accent);
+}
+
+/* ------------------------------------------------------------------
+   手作業との比較
+------------------------------------------------------------------ */
+.p-calc {
+  margin: var(--sp-4) 0 0;
+  padding: 0;
+  list-style: none;
+  border-top: var(--rule-2) solid var(--c-rule-strong);
+}
+
+.p-calc li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: baseline;
+  padding: var(--sp-3) var(--sp-2);
+  border-bottom: var(--rule-1) solid var(--c-rule);
+}
+
+.p-calc__label { flex: 1 1 16em; color: var(--c-ink-2); font-size: var(--fs-note); }
+
+.p-calc__value {
+  flex: 0 0 auto;
+  font-size: var(--fs-sub);
+  font-weight: 700;
+  font-feature-settings: "tnum" 1;
+}
+
+.p-calc__value--caution { color: var(--c-caution); }
+.p-calc__value--accent { color: var(--c-accent); }
+
+.p-calc__detail { flex: 1 1 100%; font-size: var(--fs-note); color: var(--c-ink-3); }
+
+/* ------------------------------------------------------------------
+   説明
+------------------------------------------------------------------ */
+.p-def { margin: 0 0 var(--sp-4); }
+
+.p-def__label {
+  margin: 0 0 var(--sp-1);
+  font-size: var(--fs-note);
+  font-weight: 700;
+  letter-spacing: var(--ls-head);
+  color: var(--c-accent);
+}
+
+.p-def__body { margin: 0; color: var(--c-ink); max-width: 44em; }
+
+.p-code {
+  margin: var(--sp-3) 0 0;
+  padding: var(--sp-3);
+  background: var(--c-paper);
+  border-left: 3px solid var(--c-rule-strong);
+  font-family: "SFMono-Regular", Consolas, "Courier New", monospace;
+  font-size: var(--fs-note);
+  line-height: 1.8;
+  color: var(--c-ink);
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.p-colophon {
+  margin-top: var(--sp-4);
+  padding-top: var(--sp-3);
+  border-top: var(--rule-2) solid var(--c-rule-strong);
+  font-size: var(--fs-note);
+  color: var(--c-ink-3);
+}
+
+.p-colophon p { margin: 0 0 var(--sp-1); }
+.p-colophon p:last-child { margin-bottom: 0; }
+
+/* ------------------------------------------------------------------
+   スマートフォン
+------------------------------------------------------------------ */
+@media (max-width: 860px) {
+  .p-pair { grid-template-columns: 1fr; gap: var(--sp-4); }
+  .p-doc__head { grid-template-columns: 1fr; gap: var(--sp-3); }
+}
+
+@media (max-width: 640px) {
+  :root {
+    --fs-title: 26px;
+    --fs-head: 20px;
+    --fs-sub: 17px;
+    --sp-5: 48px;
+  }
+
+  .p-sheet { padding: 0 var(--sp-2); }
+  .p-tile__num { font-size: 28px; }
+  .p-btn--primary { width: 100%; text-align: center; }
+  .p-doc { padding: var(--sp-3) var(--sp-2); }
+  .p-doc__title { letter-spacing: 0.2em; }
+  .p-doc__sum { max-width: none; }
+}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>Babel.registerPreset("react-classic", { presets: [[Babel.availablePresets["react"], { runtime: "classic" }]] });</script>
+<script type="text/babel" data-presets="react-classic">
+const { useState } = React;
+
+/* ==================================================================
+   設定。ここから下の3つの固まり（自社情報・税率・マスタ）を
+   差し替えるだけで、別の会社・別の商品構成の帳票になります。
+   画面のプログラム本体は、品名や単価を直接持っていません。
+================================================================== */
+
+/* 基準日。この日を「今日」として、期日超過を判定しています。
+   実装時はその日の日付になります。 */
+const BASE_DATE = "2026-08-17";
+
+/* 自社の情報。適格請求書に必要な「発行者の名称」と「登録番号」を含みます。 */
+const COMPANY = {
+  name: "サンプル商事株式会社",
+  address: "東京都千代田区神田○○町1-2-3",
+  tel: "03-0000-0000",
+  registrationNo: "T1234567890123",
+  bank: "○○銀行 △△支店 普通 1234567 サンプルシヨウジ(カ",
+  business: "食品の卸売と、店舗まわりの資材・サービス",
+};
+
+/* 税率の設定。税率が変わったとき、直すのはここだけです。 */
+const TAX_CONFIG = {
+  rates: [
+    {
+      key: "standard",
+      rate: 0.10,
+      label: "標準税率 10%",
+      short: "10%",
+      mark: "",
+      note: "軽減税率の対象でないものは、すべてこちらです。",
+    },
+    {
+      key: "reduced",
+      rate: 0.08,
+      label: "軽減税率 8%",
+      short: "8%",
+      mark: "※",
+      note: "飲食料品（酒類・外食を除く）と、定期購読の新聞が対象です。明細では品名の後ろに※を付けます。",
+    },
+  ],
+  defaultRounding: "floor",
+  roundings: [
+    { key: "floor", label: "切り捨て" },
+    { key: "round", label: "四捨五入" },
+    { key: "ceil", label: "切り上げ" },
+  ],
+  roundingRule: "端数処理は、1枚の帳票につき税率ごとに1回だけ行います。行ごとに端数処理をすると、適格請求書として認められる方法から外れます。",
+};
+
+/* 見積書の有効期限（発行日からの日数） */
+const QUOTE_VALID_DAYS = 30;
+
+/* 帳票番号の採番規則。連番の続きは、いま持っている帳票から自動で決まります。 */
+const NUMBERING = {
+  quote: { prefix: "見-2026-", digits: 4, label: "見積番号" },
+  invoice: { prefix: "請-2026-", digits: 4, label: "請求番号" },
+};
+
+/* 商品マスタ。単価・単位・税区分をここで1か所に持ちます。
+   前回のファイルを複製する運用をやめられるのは、この表があるためです。 */
+const ITEM_MASTER = [
+  { code: "商-01", name: "精米 5kg", unit: "袋", price: 4180, taxKey: "reduced" },
+  { code: "商-02", name: "焙煎コーヒー豆 1kg", unit: "袋", price: 3780, taxKey: "reduced" },
+  { code: "商-03", name: "ミネラルウォーター 2L 6本入", unit: "箱", price: 968, taxKey: "reduced" },
+  { code: "商-04", name: "業務用小麦粉 25kg", unit: "袋", price: 5640, taxKey: "reduced" },
+  { code: "商-05", name: "冷凍うどん 30食入", unit: "箱", price: 3270, taxKey: "reduced" },
+  { code: "商-06", name: "紙おしぼり 100本入", unit: "箱", price: 2380, taxKey: "standard" },
+  { code: "商-07", name: "業務用洗剤 18L", unit: "缶", price: 7850, taxKey: "standard" },
+  { code: "商-08", name: "保冷配送料", unit: "件", price: 1155, taxKey: "standard" },
+  { code: "商-09", name: "冷蔵ショーケース レンタル", unit: "台・月", price: 8000, taxKey: "standard" },
+  { code: "商-10", name: "店舗定期清掃", unit: "回", price: 15000, taxKey: "standard" },
+  { code: "商-11", name: "什器の設置・調整作業", unit: "時間", price: 5500, taxKey: "standard" },
+  { code: "商-12", name: "発注システム 保守サポート", unit: "月", price: 25000, taxKey: "standard" },
+];
+
+/* 取引先マスタ。支払条件をここに持たせておくと、支払期日が自動で決まります。
+   term の種類：endOfMonth（締めの翌月末）／day（締めの翌月の指定日）／days（発行日からの日数） */
+const CLIENTS = [
+  {
+    code: "取-01", name: "かすみ食堂 株式会社", honorific: "御中",
+    address: "東京都台東区浅草○○1-1-1",
+    term: { type: "endOfMonth", months: 1 }, termLabel: "月末締め・翌月末払い",
+  },
+  {
+    code: "取-02", name: "有限会社 みなと珈琲", honorific: "御中",
+    address: "神奈川県横浜市中区○○2-2-2",
+    term: { type: "day", months: 1, day: 10 }, termLabel: "月末締め・翌月10日払い",
+  },
+  {
+    code: "取-03", name: "株式会社 さくら弁当", honorific: "御中",
+    address: "埼玉県さいたま市大宮区○○3-3-3",
+    term: { type: "day", months: 1, day: 20 }, termLabel: "月末締め・翌月20日払い",
+  },
+  {
+    code: "取-04", name: "ひばりホテル 株式会社", honorific: "御中",
+    address: "千葉県千葉市中央区○○4-4-4",
+    term: { type: "endOfMonth", months: 1 }, termLabel: "月末締め・翌月末払い",
+  },
+  {
+    code: "取-05", name: "合同会社 あおば青果", honorific: "御中",
+    address: "東京都足立区○○5-5-5",
+    term: { type: "days", days: 30 }, termLabel: "発行日から30日以内",
+  },
+];
+
+/* 帳票の初期データ（15件）。すべて架空です。
+   kind    : quote（見積書）／invoice（請求書）
+   status  : draft（未発行）／issued（発行済）／paid（入金済・請求書のみ）
+   lines   : type が item の行は 単価×数量、discount の行は amount をそのまま加算します。 */
+const DOC_SEED = [
+  {
+    no: "見-2026-0007", kind: "quote", clientCode: "取-01", status: "issued",
+    issueDate: "2026-06-02", expiryDate: "2026-07-02", convertedTo: "請-2026-0004",
+    lines: [
+      { type: "item", code: "商-01", name: "精米 5kg", unit: "袋", price: 4180, qty: 20, taxKey: "reduced" },
+      { type: "item", code: "商-08", name: "保冷配送料", unit: "件", price: 1155, qty: 4, taxKey: "standard" },
+    ],
+  },
+  {
+    no: "見-2026-0008", kind: "quote", clientCode: "取-02", status: "issued",
+    issueDate: "2026-06-18", expiryDate: "2026-07-18", convertedTo: "請-2026-0005",
+    lines: [
+      { type: "item", code: "商-02", name: "焙煎コーヒー豆 1kg", unit: "袋", price: 3780, qty: 15, taxKey: "reduced" },
+      { type: "item", code: "商-09", name: "冷蔵ショーケース レンタル", unit: "台・月", price: 8000, qty: 1, taxKey: "standard" },
+    ],
+  },
+  {
+    no: "見-2026-0009", kind: "quote", clientCode: "取-03", status: "issued",
+    issueDate: "2026-07-03", expiryDate: "2026-08-02", convertedTo: null,
+    lines: [
+      { type: "item", code: "商-05", name: "冷凍うどん 30食入", unit: "箱", price: 3270, qty: 40, taxKey: "reduced" },
+      { type: "item", code: "商-06", name: "紙おしぼり 100本入", unit: "箱", price: 2380, qty: 10, taxKey: "standard" },
+      { type: "item", code: "商-08", name: "保冷配送料", unit: "件", price: 1155, qty: 8, taxKey: "standard" },
+    ],
+  },
+  {
+    no: "見-2026-0010", kind: "quote", clientCode: "取-04", status: "issued",
+    issueDate: "2026-07-22", expiryDate: "2026-08-21", convertedTo: null,
+    lines: [
+      { type: "item", code: "商-10", name: "店舗定期清掃", unit: "回", price: 15000, qty: 4, taxKey: "standard" },
+      { type: "item", code: "商-11", name: "什器の設置・調整作業", unit: "時間", price: 5500, qty: 12, taxKey: "standard" },
+    ],
+  },
+  {
+    no: "見-2026-0011", kind: "quote", clientCode: "取-05", status: "issued",
+    issueDate: "2026-08-05", expiryDate: "2026-09-04", convertedTo: null,
+    lines: [
+      { type: "item", code: "商-03", name: "ミネラルウォーター 2L 6本入", unit: "箱", price: 968, qty: 30, taxKey: "reduced" },
+      { type: "item", code: "商-04", name: "業務用小麦粉 25kg", unit: "袋", price: 5640, qty: 12, taxKey: "reduced" },
+      { type: "item", code: "商-07", name: "業務用洗剤 18L", unit: "缶", price: 7850, qty: 3, taxKey: "standard" },
+      { type: "discount", name: "初回お取引のお値引き", amount: -5000, taxKey: "standard" },
+    ],
+  },
+  {
+    no: "見-2026-0012", kind: "quote", clientCode: "取-01", status: "draft",
+    issueDate: "2026-08-14", expiryDate: "2026-09-13", convertedTo: null,
+    lines: [
+      { type: "item", code: "商-12", name: "発注システム 保守サポート", unit: "月", price: 25000, qty: 1, taxKey: "standard" },
+      { type: "item", code: "商-11", name: "什器の設置・調整作業", unit: "時間", price: 5500, qty: 4, taxKey: "standard" },
+    ],
+  },
+  {
+    no: "請-2026-0001", kind: "invoice", clientCode: "取-01", status: "paid",
+    issueDate: "2026-05-31", dueDate: "2026-06-30", paidDate: "2026-06-28", fromQuote: null,
+    lines: [
+      { type: "item", code: "商-01", name: "精米 5kg", unit: "袋", price: 4180, qty: 15, taxKey: "reduced" },
+      { type: "item", code: "商-08", name: "保冷配送料", unit: "件", price: 1155, qty: 6, taxKey: "standard" },
+    ],
+  },
+  {
+    no: "請-2026-0002", kind: "invoice", clientCode: "取-02", status: "paid",
+    issueDate: "2026-05-31", dueDate: "2026-06-10", paidDate: "2026-06-09", fromQuote: null,
+    lines: [
+      { type: "item", code: "商-02", name: "焙煎コーヒー豆 1kg", unit: "袋", price: 3780, qty: 10, taxKey: "reduced" },
+      { type: "item", code: "商-09", name: "冷蔵ショーケース レンタル", unit: "台・月", price: 8000, qty: 1, taxKey: "standard" },
+    ],
+  },
+  {
+    no: "請-2026-0003", kind: "invoice", clientCode: "取-03", status: "issued",
+    issueDate: "2026-06-30", dueDate: "2026-07-20", paidDate: null, fromQuote: null,
+    lines: [
+      { type: "item", code: "商-05", name: "冷凍うどん 30食入", unit: "箱", price: 3270, qty: 35, taxKey: "reduced" },
+      { type: "item", code: "商-06", name: "紙おしぼり 100本入", unit: "箱", price: 2380, qty: 8, taxKey: "standard" },
+    ],
+  },
+  {
+    no: "請-2026-0004", kind: "invoice", clientCode: "取-01", status: "paid",
+    issueDate: "2026-06-30", dueDate: "2026-07-31", paidDate: "2026-07-30", fromQuote: "見-2026-0007",
+    lines: [
+      { type: "item", code: "商-01", name: "精米 5kg", unit: "袋", price: 4180, qty: 20, taxKey: "reduced" },
+      { type: "item", code: "商-08", name: "保冷配送料", unit: "件", price: 1155, qty: 4, taxKey: "standard" },
+    ],
+  },
+  {
+    no: "請-2026-0005", kind: "invoice", clientCode: "取-02", status: "issued",
+    issueDate: "2026-06-30", dueDate: "2026-07-10", paidDate: null, fromQuote: "見-2026-0008",
+    lines: [
+      { type: "item", code: "商-02", name: "焙煎コーヒー豆 1kg", unit: "袋", price: 3780, qty: 15, taxKey: "reduced" },
+      { type: "item", code: "商-09", name: "冷蔵ショーケース レンタル", unit: "台・月", price: 8000, qty: 1, taxKey: "standard" },
+    ],
+  },
+  {
+    no: "請-2026-0006", kind: "invoice", clientCode: "取-04", status: "issued",
+    issueDate: "2026-07-31", dueDate: "2026-08-31", paidDate: null, fromQuote: null,
+    lines: [
+      { type: "item", code: "商-10", name: "店舗定期清掃", unit: "回", price: 15000, qty: 4, taxKey: "standard" },
+      { type: "item", code: "商-12", name: "発注システム 保守サポート", unit: "月", price: 25000, qty: 1, taxKey: "standard" },
+    ],
+  },
+  {
+    no: "請-2026-0007", kind: "invoice", clientCode: "取-05", status: "issued",
+    issueDate: "2026-07-05", dueDate: "2026-08-04", paidDate: null, fromQuote: null,
+    lines: [
+      { type: "item", code: "商-03", name: "ミネラルウォーター 2L 6本入", unit: "箱", price: 968, qty: 24, taxKey: "reduced" },
+      { type: "item", code: "商-07", name: "業務用洗剤 18L", unit: "缶", price: 7850, qty: 2, taxKey: "standard" },
+    ],
+  },
+  {
+    no: "請-2026-0008", kind: "invoice", clientCode: "取-01", status: "issued",
+    issueDate: "2026-07-31", dueDate: "2026-08-31", paidDate: null, fromQuote: null,
+    lines: [
+      { type: "item", code: "商-01", name: "精米 5kg", unit: "袋", price: 4180, qty: 25, taxKey: "reduced" },
+      { type: "item", code: "商-04", name: "業務用小麦粉 25kg", unit: "袋", price: 5640, qty: 7, taxKey: "reduced" },
+      { type: "item", code: "商-09", name: "冷蔵ショーケース レンタル", unit: "台・月", price: 8000, qty: 2, taxKey: "standard" },
+      { type: "item", code: "商-11", name: "什器の設置・調整作業", unit: "時間", price: 5500, qty: 6, taxKey: "standard" },
+      { type: "item", code: "商-08", name: "保冷配送料", unit: "件", price: 1155, qty: 3, taxKey: "standard" },
+      { type: "discount", name: "継続お取引のお値引き", amount: -8000, taxKey: "standard" },
+    ],
+  },
+  {
+    no: "請-2026-0009", kind: "invoice", clientCode: "取-03", status: "draft",
+    issueDate: "2026-08-10", dueDate: "2026-09-20", paidDate: null, fromQuote: null,
+    lines: [
+      { type: "item", code: "商-05", name: "冷凍うどん 30食入", unit: "箱", price: 3270, qty: 30, taxKey: "reduced" },
+      { type: "item", code: "商-08", name: "保冷配送料", unit: "件", price: 1155, qty: 6, taxKey: "standard" },
+    ],
+  },
+];
+
+/* 手作業との比較の初期値 */
+const MANUAL = {
+  docsPerMonth: 40,
+  minutesPerDoc: 12,
+  minutesAfter: 3,
+  monthlyCheckMinutes: 20,
+  hourlyCost: 2500,
+};
+
+/* 適格請求書（インボイス）の記載事項。どこに書かれているかを画面で対応づけます。 */
+const INVOICE_REQUIREMENTS = [
+  { no: "一", label: "発行者の名称および登録番号", place: "帳票の右上「発行者」欄" },
+  { no: "二", label: "取引を行った年月日", place: "帳票の左上「取引年月日」欄" },
+  { no: "三", label: "取引の内容（軽減税率の対象品目である旨）", place: "明細の品名欄。軽減税率の行に※を付けています" },
+  { no: "四", label: "税率ごとに区分して合計した対価の額および適用税率", place: "合計欄の「10%対象」「8%対象」の行" },
+  { no: "五", label: "税率ごとに区分した消費税額", place: "合計欄の「消費税（10%）」「消費税（8%）」の行" },
+  { no: "六", label: "交付を受ける事業者の名称", place: "帳票の左上、宛先欄" },
+];
+
+/* ==================================================================
+   計算
+================================================================== */
+function pad(n, digits) {
+  let s = String(n);
+  while (s.length < digits) s = "0" + s;
+  return s;
+}
+
+function parseDate(s) {
+  const p = s.split("-");
+  return new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
+}
+
+function toISO(d) {
+  return d.getFullYear() + "-" + pad(d.getMonth() + 1, 2) + "-" + pad(d.getDate(), 2);
+}
+
+function fmtDate(s) {
+  if (!s) return "—";
+  const d = parseDate(s);
+  return d.getFullYear() + "年" + (d.getMonth() + 1) + "月" + d.getDate() + "日";
+}
+
+function fmtDateShort(s) {
+  if (!s) return "—";
+  const d = parseDate(s);
+  return (d.getMonth() + 1) + "月" + d.getDate() + "日";
+}
+
+function addDays(s, days) {
+  const d = parseDate(s);
+  d.setDate(d.getDate() + days);
+  return toISO(d);
+}
+
+function diffDays(a, b) {
+  return Math.round((parseDate(a).getTime() - parseDate(b).getTime()) / 86400000);
+}
+
+/* 取引先の支払条件から支払期日を出します */
+function dueDateOf(client, issueDate) {
+  const term = client.term;
+  const d = parseDate(issueDate);
+  if (term.type === "days") return addDays(issueDate, term.days);
+  const y = d.getFullYear();
+  const m = d.getMonth() + term.months;
+  if (term.type === "day") return toISO(new Date(y, m, term.day));
+  return toISO(new Date(y, m + 1, 0));
+}
+
+function clientOf(code) {
+  const found = CLIENTS.filter(function (c) { return c.code === code; });
+  return found.length ? found[0] : CLIENTS[0];
+}
+
+function rateOf(key) {
+  const found = TAX_CONFIG.rates.filter(function (r) { return r.key === key; });
+  return found.length ? found[0] : TAX_CONFIG.rates[0];
+}
+
+function applyRounding(v, mode) {
+  if (mode === "round") return Math.round(v);
+  if (mode === "ceil") return Math.ceil(v);
+  return Math.floor(v);
+}
+
+function lineAmount(line) {
+  return line.type === "discount" ? line.amount : line.price * line.qty;
+}
+
+/* 帳票1枚の金額。税率ごとに小計を出し、税率ごとに1回だけ端数処理をします。 */
+function calcDoc(lines, rounding) {
+  const groups = [];
+  TAX_CONFIG.rates.forEach(function (r) {
+    let base = 0;
+    let used = false;
+    lines.forEach(function (l) {
+      if (l.taxKey === r.key) { base += lineAmount(l); used = true; }
+    });
+    if (!used) return;
+    const raw = base * r.rate;
+    groups.push({
+      key: r.key, label: r.label, short: r.short, rate: r.rate,
+      base: base, raw: raw, tax: applyRounding(raw, rounding),
+    });
+  });
+  let subtotal = 0;
+  let taxTotal = 0;
+  groups.forEach(function (g) { subtotal += g.base; taxTotal += g.tax; });
+  return { groups: groups, subtotal: subtotal, taxTotal: taxTotal, total: subtotal + taxTotal };
+}
+
+/* 一覧での状態。期日超過は、支払期日と基準日を比べて自動で付きます。 */
+function statusOf(doc) {
+  if (doc.kind === "quote") {
+    if (doc.status === "draft") return "quoteDraft";
+    if (doc.convertedTo) return "converted";
+    return "quotePending";
+  }
+  if (doc.status === "draft") return "invoiceDraft";
+  if (doc.status === "paid") return "paid";
+  if (doc.dueDate && diffDays(BASE_DATE, doc.dueDate) > 0) return "overdue";
+  return "issued";
+}
+
+const STATUS_DEFS = {
+  quoteDraft: { label: "未発行", caution: true },
+  invoiceDraft: { label: "未発行", caution: true },
+  quotePending: { label: "見積のまま", caution: true },
+  converted: { label: "請求へ変換済", caution: false },
+  issued: { label: "発行済・入金待ち", caution: false },
+  overdue: { label: "期日超過", caution: true },
+  paid: { label: "入金済", caution: false },
+};
+
+/* 集計の区分。一覧の上に出す5つの箱です。 */
+const TILE_DEFS = [
+  { key: "draft", label: "未発行", statuses: ["quoteDraft", "invoiceDraft"], caution: true, sub: "作ったまま出していないもの" },
+  { key: "issued", label: "発行済・入金待ち", statuses: ["issued"], caution: false, sub: "期日はまだ来ていません" },
+  { key: "overdue", label: "期日超過", statuses: ["overdue"], caution: true, sub: "期日を過ぎて入金がないもの" },
+  { key: "paid", label: "入金済", statuses: ["paid"], caution: false, sub: "回収が終わったもの" },
+  { key: "pending", label: "見積のまま", statuses: ["quotePending"], caution: true, sub: "請求に進んでいない見積書" },
+];
+
+function nextNo(docs, kind) {
+  const conf = NUMBERING[kind];
+  let max = 0;
+  docs.forEach(function (d) {
+    if (d.kind !== kind) return;
+    const n = parseInt(d.no.slice(conf.prefix.length), 10);
+    if (!isNaN(n) && n > max) max = n;
+  });
+  return conf.prefix + pad(max + 1, conf.digits);
+}
+
+function yen(n) {
+  const v = Math.abs(Math.round(n));
+  return (n < 0 ? "△" : "") + v.toLocaleString("ja-JP");
+}
+
+function yenRaw(n) {
+  const fixed = Math.round(n * 100) / 100;
+  const int = Math.floor(Math.abs(fixed));
+  const frac = Math.round((Math.abs(fixed) - int) * 100);
+  const head = (fixed < 0 ? "△" : "") + int.toLocaleString("ja-JP");
+  return frac === 0 ? head : head + "." + pad(frac, 2);
+}
+
+/* ==================================================================
+   共通の部品
+================================================================== */
+function Tile(props) {
+  return (
+    <div className={"p-tile" + (props.caution ? " p-tile--caution" : "")}>
+      <p className="p-tile__label">{props.label}</p>
+      <p className="p-tile__num">
+        {props.num}
+        <span className="p-tile__unit">{props.unit}</span>
+      </p>
+      <p className="p-tile__sub">{props.sub}</p>
+    </div>
+  );
+}
+
+function StatusBadge(props) {
+  const def = STATUS_DEFS[props.status];
+  return (
+    <span className={"p-badge" + (def.caution ? " p-badge--caution" : "")}>{def.label}</span>
+  );
+}
+
+/* 明細の表。見積書・請求書・作成中の下書きで共通に使います。 */
+function LineTable(props) {
+  const calc = calcDoc(props.lines, props.rounding);
+  return (
+    <div className="p-scroll">
+      <table className="p-table p-table--mid">
+        <thead>
+          <tr>
+            <th scope="col">品番</th>
+            <th scope="col">品名</th>
+            <th scope="col" className="p-table__num">数量</th>
+            <th scope="col">単位</th>
+            <th scope="col" className="p-table__num">単価（税抜）</th>
+            <th scope="col">税区分</th>
+            <th scope="col" className="p-table__num">金額（税抜）</th>
+          </tr>
+        </thead>
+        <tbody>
+          {props.lines.map(function (l, i) {
+            const r = rateOf(l.taxKey);
+            return (
+              <tr key={i}>
+                <td className="p-table__id">{l.type === "discount" ? "—" : l.code}</td>
+                <td className="p-table__name">
+                  {l.name}
+                  {r.mark ? <span className="p-table__mark">{r.mark}</span> : null}
+                </td>
+                <td className="p-table__num">{l.type === "discount" ? "—" : l.qty}</td>
+                <td>{l.type === "discount" ? "—" : l.unit}</td>
+                <td className="p-table__num">{l.type === "discount" ? "—" : yen(l.price)}</td>
+                <td className="p-table__no">{r.short}</td>
+                <td className="p-table__num">{yen(lineAmount(l))}</td>
+              </tr>
+            );
+          })}
+          <tr className="p-table__foot">
+            <td colSpan="6">税抜の合計</td>
+            <td className="p-table__num">{yen(calc.subtotal)}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/* 税率ごとの内訳と合計 */
+function SumBlock(props) {
+  const calc = props.calc;
+  return (
+    <ul className="p-doc__sum">
+      {calc.groups.map(function (g) {
+        return (
+          <li key={"base-" + g.key}>
+            <span>{g.short}対象の合計（税抜）</span>
+            <span className="p-doc__val">{yen(g.base)} 円</span>
+          </li>
+        );
+      })}
+      {calc.groups.map(function (g) {
+        return (
+          <li key={"tax-" + g.key}>
+            <span>消費税（{g.short}）</span>
+            <span className="p-doc__val">{yen(g.tax)} 円</span>
+          </li>
+        );
+      })}
+      <li className="is-total">
+        <span>合計（税込）</span>
+        <span className="p-doc__val">{yen(calc.total)} 円</span>
+      </li>
+    </ul>
+  );
+}
+
+/* ==================================================================
+   一 商品マスタ
+================================================================== */
+function ScreenMaster(props) {
+  const master = props.master;
+  const changed = master.filter(function (m, i) {
+    return m.price !== ITEM_MASTER[i].price || m.taxKey !== ITEM_MASTER[i].taxKey;
+  }).length;
+
+  return (
+    <section className="p-section">
+      <div className="p-heading">
+        <span className="p-heading__no">一</span>
+        <h2 className="p-heading__text">商品マスタ</h2>
+      </div>
+
+      <p className="p-lead">
+        商品・単価・単位・税区分を、1か所にまとめた表です。前回のファイルを複製して書き換える運用では、
+        単価はファイルの数だけ散らばります。この表が1つあれば、単価はここにしか存在しません。
+      </p>
+      <p className="p-lead">
+        <strong>単価と税区分は、この画面で直せます。</strong>直した値は、これから作る見積書・請求書に使われます。
+        すでに発行した帳票の金額は変わりません（発行時点の単価をそのまま持っているためです）。
+      </p>
+
+      <div className="p-scroll">
+        <table className="p-table p-table--mid">
+          <thead>
+            <tr>
+              <th scope="col">品番</th>
+              <th scope="col">品名</th>
+              <th scope="col">単位</th>
+              <th scope="col" className="p-table__num">単価（税抜）</th>
+              <th scope="col">税区分</th>
+              <th scope="col">状態</th>
+            </tr>
+          </thead>
+          <tbody>
+            {master.map(function (m, i) {
+              const org = ITEM_MASTER[i];
+              const isChanged = m.price !== org.price || m.taxKey !== org.taxKey;
+              return (
+                <tr key={m.code}>
+                  <td className="p-table__id">{m.code}</td>
+                  <td className="p-table__name">{m.name}</td>
+                  <td>{m.unit}</td>
+                  <td className="p-table__num">
+                    <input
+                      type="number"
+                      className="p-input p-input--num"
+                      value={m.price}
+                      min="0"
+                      step="10"
+                      aria-label={m.name + "の単価"}
+                      onChange={function (e) { props.onPrice(i, e.target.value); }}
+                    />
+                  </td>
+                  <td>
+                    <select
+                      className="p-select"
+                      value={m.taxKey}
+                      aria-label={m.name + "の税区分"}
+                      onChange={function (e) { props.onTax(i, e.target.value); }}
+                    >
+                      {TAX_CONFIG.rates.map(function (r) {
+                        return <option key={r.key} value={r.key}>{r.label}</option>;
+                      })}
+                    </select>
+                  </td>
+                  <td>
+                    {isChanged
+                      ? <span className="p-badge">変更あり　元は {yen(org.price)}円・{rateOf(org.taxKey).short}</span>
+                      : <span className="p-badge p-badge--quiet">初期値のまま</span>}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="p-actions">
+        <button type="button" className="p-btn" onClick={props.onReset}>マスタを初期値に戻す</button>
+        <span className="p-actions__note">変更した行 {changed} / {master.length}</span>
+      </div>
+
+      <p className="p-note">
+        単価を直したら、「三 見積書の作成」の画面を開いてください。商品を選んだ時点で、直した単価が入ります。
+        単価の間違いは、入力のたびに起きるのではなく、単価が1か所にないから起きます。
+      </p>
+
+      <div className="p-legend">
+        <dl>
+          <dt>税区分</dt>
+          <dd>
+            {TAX_CONFIG.rates.map(function (r) { return r.label; }).join("／")} の2つを持っています。
+            軽減税率の行は、帳票の品名の後ろに※が付き、税率ごとの内訳にも別の行として出ます。
+          </dd>
+          <dt>単位</dt>
+          <dd>袋・箱・件・回・時間・月など、その商品の数え方です。帳票にそのまま出ます。</dd>
+          <dt>取引先マスタ</dt>
+          <dd>
+            取引先{CLIENTS.length}社は、支払条件をあわせて持っています（
+            {CLIENTS.map(function (c) { return c.name + "＝" + c.termLabel; }).join("／")}）。
+            請求書の支払期日は、この条件から自動で決まります。
+          </dd>
+        </dl>
+      </div>
+    </section>
+  );
+}
+
+/* ==================================================================
+   二 発行状況の一覧
+================================================================== */
+function ScreenList(props) {
+  const docs = props.docs;
+  const rounding = props.rounding;
+  const rows = docs.map(function (d) {
+    return { doc: d, status: statusOf(d), calc: calcDoc(d.lines, rounding) };
+  });
+
+  const counts = {};
+  const sums = {};
+  TILE_DEFS.forEach(function (t) {
+    counts[t.key] = 0;
+    sums[t.key] = 0;
+  });
+  rows.forEach(function (r) {
+    TILE_DEFS.forEach(function (t) {
+      if (t.statuses.indexOf(r.status) >= 0) {
+        counts[t.key] += 1;
+        sums[t.key] += r.calc.total;
+      }
+    });
+  });
+
+  const FILTERS = [{ key: "all", label: "すべて" }]
+    .concat(TILE_DEFS.map(function (t) { return { key: t.key, label: t.label }; }))
+    .concat([{ key: "converted", label: "請求へ変換済" }]);
+
+  const shown = rows.filter(function (r) {
+    if (props.filter === "all") return true;
+    if (props.filter === "converted") return r.status === "converted";
+    const t = TILE_DEFS.filter(function (x) { return x.key === props.filter; })[0];
+    return t ? t.statuses.indexOf(r.status) >= 0 : true;
+  });
+
+  const overdueSum = sums.overdue;
+  const draftSum = sums.draft;
+
+  return (
+    <section className="p-section">
+      <div className="p-heading">
+        <span className="p-heading__no">二</span>
+        <h2 className="p-heading__text">発行状況の一覧</h2>
+      </div>
+
+      <p className="p-lead">
+        <strong>この画面が中心です。</strong>見積書と請求書を1つの表にまとめ、いまどの状態にあるかで分けています。
+        出していない帳票（発行漏れ）と、出したのに入金がない帳票（回収漏れ）が、探さなくても目に入る形にしました。
+      </p>
+      <p className="p-lead">
+        基準日は{fmtDate(BASE_DATE)}です。支払期日がこの日より前で入金がない請求書は、
+        自動で<strong>期日超過</strong>になります。人が印を付ける必要はありません。
+      </p>
+
+      {props.flash ? <p className="p-flash">{props.flash}</p> : null}
+
+      <div className="p-tiles">
+        {TILE_DEFS.map(function (t) {
+          return (
+            <Tile
+              key={t.key}
+              label={t.label}
+              num={counts[t.key]}
+              unit="件"
+              caution={t.caution}
+              sub={t.sub + "　" + yen(sums[t.key]) + "円"}
+            />
+          );
+        })}
+      </div>
+
+      <p className="p-note p-note--caution">
+        いま止まっている金額は、期日超過が{yen(overdueSum)}円、未発行が{yen(draftSum)}円です。
+        未発行の分は、請求書を出すまで入金されません。
+      </p>
+
+      <div className="p-legend">
+        <dl>
+          <dt className="is-caution">未発行</dt>
+          <dd>作ったまま、まだ相手に出していない帳票です。ここに残っているものが、発行漏れの候補です。</dd>
+          <dt>発行済・入金待ち</dt>
+          <dd>相手に出してあり、支払期日がまだ来ていない請求書です。いまは待つだけの状態です。</dd>
+          <dt className="is-caution">期日超過</dt>
+          <dd>支払期日を過ぎているのに、入金の記録がない請求書です。日数も出しているので、催促の順番が付けられます。</dd>
+          <dt>入金済</dt>
+          <dd>入金を確認して消し込んだ請求書です。ここに入れば、もう気にしなくて済みます。</dd>
+          <dt className="is-caution">見積のまま</dt>
+          <dd>見積書は出したのに、請求書に進んでいないものです。受注したのに請求し忘れている場合が、ここに現れます。</dd>
+        </dl>
+      </div>
+
+      <div className="p-tabs">
+        {FILTERS.map(function (f) {
+          const n = f.key === "all"
+            ? rows.length
+            : (f.key === "converted"
+              ? rows.filter(function (r) { return r.status === "converted"; }).length
+              : counts[f.key]);
+          return (
+            <button
+              key={f.key}
+              type="button"
+              className="p-tab"
+              aria-pressed={props.filter === f.key}
+              onClick={function () { props.onFilter(f.key); }}
+            >
+              {f.label}（{n}件）
+            </button>
+          );
+        })}
+      </div>
+
+      {shown.length === 0 ? (
+        <p className="p-empty">この区分に当てはまる帳票はありません。</p>
+      ) : (
+        <div className="p-scroll">
+          <table className="p-table p-table--wide">
+            <thead>
+              <tr>
+                <th scope="col">区分</th>
+                <th scope="col">番号</th>
+                <th scope="col">取引先</th>
+                <th scope="col">発行日</th>
+                <th scope="col">期日・有効期限</th>
+                <th scope="col">状態</th>
+                <th scope="col" className="p-table__num">税抜</th>
+                <th scope="col" className="p-table__num">消費税</th>
+                <th scope="col" className="p-table__num">合計（税込）</th>
+                <th scope="col">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {shown.map(function (r) {
+                const d = r.doc;
+                const c = clientOf(d.clientCode);
+                const isOpen = props.openNo === d.no;
+                const limit = d.kind === "quote" ? d.expiryDate : d.dueDate;
+                const over = d.kind === "invoice" && r.status === "overdue"
+                  ? diffDays(BASE_DATE, d.dueDate) : 0;
+                const expired = d.kind === "quote" && r.status === "quotePending"
+                  && diffDays(BASE_DATE, d.expiryDate) > 0;
+                const rowClass = r.status === "overdue" ? "is-overdue" : (isOpen ? "is-open" : "");
+                return (
+                  <React.Fragment key={d.no}>
+                    <tr className={rowClass}>
+                      <td className="p-table__kind">{d.kind === "quote" ? "見積書" : "請求書"}</td>
+                      <td className="p-table__no">{d.no}</td>
+                      <td className="p-table__name">{c.name}</td>
+                      <td className="p-table__date">{fmtDateShort(d.issueDate)}</td>
+                      <td className="p-table__date">
+                        {fmtDateShort(limit)}
+                        {over > 0 ? <span className="p-table__mark">　{over}日超過</span> : null}
+                        {expired ? <span className="p-table__mark">　期限切れ</span> : null}
+                      </td>
+                      <td><StatusBadge status={r.status} /></td>
+                      <td className="p-table__num">{yen(r.calc.subtotal)}</td>
+                      <td className="p-table__num">{yen(r.calc.taxTotal)}</td>
+                      <td className="p-table__num">{yen(r.calc.total)}</td>
+                      <td className="p-table__act">
+                        <button
+                          type="button"
+                          className="p-btn p-btn--mini"
+                          onClick={function () { props.onOpen(isOpen ? null : d.no); }}
+                        >
+                          {isOpen ? "内訳を閉じる" : "内訳"}
+                        </button>
+                        {d.status === "draft" ? (
+                          <button
+                            type="button"
+                            className="p-btn p-btn--mini"
+                            onClick={function () { props.onIssue(d.no); }}
+                          >
+                            発行する
+                          </button>
+                        ) : null}
+                        {d.kind === "invoice" && d.status === "issued" ? (
+                          <button
+                            type="button"
+                            className="p-btn p-btn--mini"
+                            onClick={function () { props.onPaid(d.no); }}
+                          >
+                            入金を消し込む
+                          </button>
+                        ) : null}
+                        {d.kind === "quote" && !d.convertedTo ? (
+                          <button
+                            type="button"
+                            className="p-btn p-btn--mini"
+                            onClick={function () { props.onGoConvert(d.no); }}
+                          >
+                            請求書に変換
+                          </button>
+                        ) : null}
+                      </td>
+                    </tr>
+                    {isOpen ? (
+                      <tr className="p-table__detail">
+                        <td colSpan="10">
+                          <p className="p-def__label">{d.no} の内訳</p>
+                          <LineTable lines={d.lines} rounding={rounding} />
+                          <SumBlock calc={r.calc} />
+                          <p className="p-note">
+                            取引先：{c.name}（{c.termLabel}）
+                            {d.kind === "invoice" && d.fromQuote ? "　この請求書は " + d.fromQuote + " から変換したものです。" : ""}
+                            {d.kind === "quote" && d.convertedTo ? "　この見積書は " + d.convertedTo + " に変換済みです。" : ""}
+                            {d.kind === "invoice" && d.paidDate ? "　入金日：" + fmtDate(d.paidDate) : ""}
+                          </p>
+                        </td>
+                      </tr>
+                    ) : null}
+                  </React.Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <p className="p-note">
+        表は横にスクロールできます。「発行する」「入金を消し込む」を押すと、その場で状態が変わり、上の集計も変わります。
+        期日超過の行は臙脂で塗っています。色を付けているのはこの1種類だけです。
+      </p>
+    </section>
+  );
+}
+
+/* ==================================================================
+   三 見積書の作成
+================================================================== */
+function ScreenCreate(props) {
+  const master = props.master;
+  const lines = props.draftLines.map(function (dl) {
+    if (dl.type === "discount") {
+      return { type: "discount", name: dl.name, amount: -Math.abs(Number(dl.amount) || 0), taxKey: dl.taxKey };
+    }
+    const m = master.filter(function (x) { return x.code === dl.code; })[0] || master[0];
+    return {
+      type: "item", code: m.code, name: m.name, unit: m.unit,
+      price: m.price, qty: Number(dl.qty) || 0, taxKey: m.taxKey,
+    };
+  });
+  const calc = calcDoc(lines, props.rounding);
+  const client = clientOf(props.draftClient);
+  const no = nextNo(props.docs, "quote");
+  const issue = BASE_DATE;
+  const expiry = addDays(issue, QUOTE_VALID_DAYS);
+  const empty = lines.filter(function (l) { return l.type === "item" && l.qty > 0; }).length === 0;
+
+  return (
+    <section className="p-section">
+      <div className="p-heading">
+        <span className="p-heading__no">三</span>
+        <h2 className="p-heading__text">見積書の作成</h2>
+      </div>
+
+      <p className="p-lead">
+        マスタから商品を選び、数量を入れるだけです。<strong>単価は入力しません。</strong>マスタの値が入ります。
+        小計・消費税・合計は入力のたびに計算しなおします。見積番号も、いま持っている帳票の続きから自動で付きます。
+      </p>
+
+      <div className="p-fields">
+        <div className="p-field">
+          <span className="p-field__label">取引先</span>
+          <select
+            className="p-select"
+            value={props.draftClient}
+            onChange={function (e) { props.onClient(e.target.value); }}
+          >
+            {CLIENTS.map(function (c) {
+              return <option key={c.code} value={c.code}>{c.name}</option>;
+            })}
+          </select>
+          <p className="p-field__note">支払条件：{client.termLabel}</p>
+        </div>
+        <div className="p-field">
+          <span className="p-field__label">{NUMBERING.quote.label}（自動採番）</span>
+          <p className="p-field__row" style={{ margin: 0 }}>
+            <span style={{ fontSize: "var(--fs-sub)", fontWeight: 700, fontFeatureSettings: '"tnum" 1' }}>{no}</span>
+          </p>
+          <p className="p-field__note">
+            いちばん大きい番号の次を割り当てます。番号の重複と抜けが起きません。
+          </p>
+        </div>
+        <div className="p-field">
+          <span className="p-field__label">発行日・有効期限</span>
+          <p className="p-field__row" style={{ margin: 0 }}>
+            <span>{fmtDate(issue)}　／　{fmtDate(expiry)}まで</span>
+          </p>
+          <p className="p-field__note">有効期限は発行日から{QUOTE_VALID_DAYS}日です。設定で変えられます。</p>
+        </div>
+      </div>
+
+      <h3 className="p-sub">明細</h3>
+
+      <div className="p-scroll">
+        <table className="p-table p-table--mid">
+          <thead>
+            <tr>
+              <th scope="col">商品（マスタから選ぶ）</th>
+              <th scope="col" className="p-table__num">数量</th>
+              <th scope="col">単位</th>
+              <th scope="col" className="p-table__num">単価（税抜）</th>
+              <th scope="col">税区分</th>
+              <th scope="col" className="p-table__num">金額（税抜）</th>
+              <th scope="col">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            {props.draftLines.map(function (dl, i) {
+              const l = lines[i];
+              const r = rateOf(l.taxKey);
+              if (dl.type === "discount") {
+                return (
+                  <tr key={dl.key}>
+                    <td>
+                      <input
+                        type="text"
+                        className="p-input"
+                        value={dl.name}
+                        aria-label="値引きの名目"
+                        onChange={function (e) { props.onLine(i, "name", e.target.value); }}
+                      />
+                    </td>
+                    <td className="p-table__num">—</td>
+                    <td>—</td>
+                    <td className="p-table__num">—</td>
+                    <td>
+                      <select
+                        className="p-select"
+                        value={dl.taxKey}
+                        aria-label="値引きの税区分"
+                        onChange={function (e) { props.onLine(i, "taxKey", e.target.value); }}
+                      >
+                        {TAX_CONFIG.rates.map(function (rr) {
+                          return <option key={rr.key} value={rr.key}>{rr.label}</option>;
+                        })}
+                      </select>
+                    </td>
+                    <td className="p-table__num">
+                      <span className="p-table__cut">
+                        <span>△</span>
+                        <input
+                          type="number"
+                          className="p-input p-input--num"
+                          value={dl.amount}
+                          min="0"
+                          step="100"
+                          aria-label="値引きの額"
+                          onChange={function (e) { props.onLine(i, "amount", e.target.value); }}
+                        />
+                      </span>
+                    </td>
+                    <td className="p-table__act">
+                      <button type="button" className="p-btn p-btn--mini" onClick={function () { props.onRemove(i); }}>削除</button>
+                    </td>
+                  </tr>
+                );
+              }
+              return (
+                <tr key={dl.key}>
+                  <td>
+                    <select
+                      className="p-select"
+                      value={dl.code}
+                      aria-label="商品"
+                      onChange={function (e) { props.onLine(i, "code", e.target.value); }}
+                    >
+                      {master.map(function (m) {
+                        return <option key={m.code} value={m.code}>{m.code}　{m.name}</option>;
+                      })}
+                    </select>
+                  </td>
+                  <td className="p-table__num">
+                    <input
+                      type="number"
+                      className="p-input p-input--num"
+                      value={dl.qty}
+                      min="0"
+                      step="1"
+                      aria-label="数量"
+                      onChange={function (e) { props.onLine(i, "qty", e.target.value); }}
+                    />
+                  </td>
+                  <td>{l.unit}</td>
+                  <td className="p-table__num">{yen(l.price)}</td>
+                  <td className="p-table__no">
+                    {r.short}
+                    {r.mark ? <span className="p-table__mark">{r.mark}</span> : null}
+                  </td>
+                  <td className="p-table__num">{yen(lineAmount(l))}</td>
+                  <td className="p-table__act">
+                    <button type="button" className="p-btn p-btn--mini" onClick={function () { props.onRemove(i); }}>削除</button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="p-actions">
+        <button type="button" className="p-btn" onClick={props.onAddItem}>商品の行を追加</button>
+        <button type="button" className="p-btn" onClick={props.onAddDiscount}>値引きの行を追加</button>
+        <span className="p-actions__note">単価はマスタの値です。変えるときは「一 商品マスタ」で直します。</span>
+      </div>
+
+      <h3 className="p-sub">自動で出る金額</h3>
+
+      <SumBlock calc={calc} />
+
+      {calc.groups.filter(function (g) { return g.base < 0; }).length > 0 ? (
+        <p className="p-note p-note--caution">
+          値引きが、その税率の対象額を超えています。合計がマイナスの税率があります。
+          実際の運用では、この状態で発行しないよう入力の時点で止めます。
+        </p>
+      ) : null}
+
+      <p className="p-note">
+        税率ごとに小計を出し、税率ごとに1回だけ端数処理をしています（いまの設定：
+        {TAX_CONFIG.roundings.filter(function (x) { return x.key === props.rounding; })[0].label}）。
+        処理の方法は「五 インボイス対応」で切り替えられます。
+      </p>
+
+      <div className="p-actions">
+        <button
+          type="button"
+          className="p-btn p-btn--primary"
+          disabled={empty}
+          onClick={function () { props.onCreate(lines, no, issue, expiry); }}
+        >
+          この内容で見積書を作る
+        </button>
+        <button type="button" className="p-btn" onClick={props.onResetDraft}>入力をやり直す</button>
+        {empty ? <span className="p-actions__note">数量が1以上の商品の行が必要です。</span> : null}
+      </div>
+
+      {props.lastCreated ? (
+        <React.Fragment>
+          <p className="p-flash">
+            {props.lastCreated.no} を作りました。状態は「未発行」です。
+            「二 発行状況の一覧」に並んでいます。そこで発行するか、「四 見積書から請求書へ」で請求書に変換できます。
+          </p>
+          <div className="p-actions">
+            <button type="button" className="p-btn" onClick={function () { props.onGo("list"); }}>発行状況の一覧を見る</button>
+            <button type="button" className="p-btn" onClick={function () { props.onGoConvert(props.lastCreated.no); }}>この見積書を請求書に変換する</button>
+          </div>
+        </React.Fragment>
+      ) : null}
+    </section>
+  );
+}
+
+/* ==================================================================
+   四 見積書から請求書へ
+================================================================== */
+function ScreenConvert(props) {
+  const targets = props.docs.filter(function (d) { return d.kind === "quote" && !d.convertedTo; });
+  const selected = targets.filter(function (d) { return d.no === props.target; })[0] || targets[0] || null;
+  const invoiceNo = nextNo(props.docs, "invoice");
+
+  return (
+    <section className="p-section">
+      <div className="p-heading">
+        <span className="p-heading__no">四</span>
+        <h2 className="p-heading__text">見積書から請求書へ</h2>
+      </div>
+
+      <p className="p-lead">
+        受注が決まったら、見積書をそのまま請求書にします。<strong>金額を入力しなおす場面はありません。</strong>
+        品名・数量・単価・税区分・値引きを、そのまま引き継ぎます。支払期日は、取引先の支払条件から自動で入ります。
+      </p>
+
+      {props.flash ? <p className="p-flash">{props.flash}</p> : null}
+
+      {targets.length === 0 ? (
+        <p className="p-empty">変換できる見積書がありません。すべて請求書に変換済みです。</p>
+      ) : (
+        <React.Fragment>
+          <div className="p-fields">
+            <div className="p-field">
+              <span className="p-field__label">変換する見積書</span>
+              <select
+                className="p-select"
+                value={selected ? selected.no : ""}
+                onChange={function (e) { props.onTarget(e.target.value); }}
+              >
+                {targets.map(function (d) {
+                  const c = clientOf(d.clientCode);
+                  return (
+                    <option key={d.no} value={d.no}>
+                      {d.no}　{c.name}　{yen(calcDoc(d.lines, props.rounding).total)}円
+                    </option>
+                  );
+                })}
+              </select>
+              <p className="p-field__note">請求書に進んでいない見積書だけが並びます（{targets.length}件）。</p>
+            </div>
+            <div className="p-field">
+              <span className="p-field__label">{NUMBERING.invoice.label}（自動採番）</span>
+              <p className="p-field__row" style={{ margin: 0 }}>
+                <span style={{ fontSize: "var(--fs-sub)", fontWeight: 700, fontFeatureSettings: '"tnum" 1' }}>{invoiceNo}</span>
+              </p>
+              <p className="p-field__note">請求書の番号は、見積書とは別の連番で付きます。</p>
+            </div>
+          </div>
+
+          {selected ? <ConvertPreview doc={selected} invoiceNo={invoiceNo} rounding={props.rounding} onConvert={props.onConvert} /> : null}
+        </React.Fragment>
+      )}
+
+      {props.lastConverted ? (
+        <React.Fragment>
+          <h3 className="p-sub">変換した結果</h3>
+          <p className="p-lead">
+            {props.lastConverted.from} を {props.lastConverted.to} に変換しました。状態は「未発行」です。
+            発行するのは「二 発行状況の一覧」の「発行する」を押したときです。出すまでは未発行のまま一覧に残ります。
+          </p>
+          <div className="p-actions">
+            <button type="button" className="p-btn" onClick={function () { props.onGo("list"); }}>発行状況の一覧を見る</button>
+            <button type="button" className="p-btn" onClick={function () { props.onGoInvoice(props.lastConverted.to); }}>適格請求書の体裁で見る</button>
+          </div>
+        </React.Fragment>
+      ) : null}
+    </section>
+  );
+}
+
+function ConvertPreview(props) {
+  const d = props.doc;
+  const c = clientOf(d.clientCode);
+  const calc = calcDoc(d.lines, props.rounding);
+  const issue = BASE_DATE;
+  const due = dueDateOf(c, issue);
+
+  return (
+    <React.Fragment>
+      <div className="p-pair">
+        <div>
+          <p className="p-pair__head">いまある見積書</p>
+          <ul className="p-doc__sum" style={{ marginLeft: 0, maxWidth: "none" }}>
+            <li><span>番号</span><span className="p-doc__val">{d.no}</span></li>
+            <li><span>取引先</span><span className="p-doc__val">{c.name}</span></li>
+            <li><span>発行日</span><span className="p-doc__val">{fmtDate(d.issueDate)}</span></li>
+            <li><span>有効期限</span><span className="p-doc__val">{fmtDate(d.expiryDate)}</span></li>
+            <li><span>明細の行数</span><span className="p-doc__val">{d.lines.length}行</span></li>
+            <li><span>消費税</span><span className="p-doc__val">{yen(calc.taxTotal)} 円</span></li>
+            <li className="is-total"><span>合計（税込）</span><span className="p-doc__val">{yen(calc.total)} 円</span></li>
+          </ul>
+        </div>
+        <div>
+          <p className="p-pair__head">変換してできる請求書</p>
+          <ul className="p-doc__sum" style={{ marginLeft: 0, maxWidth: "none" }}>
+            <li><span>番号</span><span className="p-doc__val">{props.invoiceNo}</span></li>
+            <li><span>取引先</span><span className="p-doc__val">{c.name}</span></li>
+            <li><span>発行日</span><span className="p-doc__val">{fmtDate(issue)}</span></li>
+            <li><span>支払期日</span><span className="p-doc__val">{fmtDate(due)}</span></li>
+            <li><span>明細の行数</span><span className="p-doc__val">{d.lines.length}行</span></li>
+            <li><span>消費税</span><span className="p-doc__val">{yen(calc.taxTotal)} 円</span></li>
+            <li className="is-total"><span>合計（税込）</span><span className="p-doc__val">{yen(calc.total)} 円</span></li>
+          </ul>
+        </div>
+      </div>
+
+      <p className="p-note">
+        引き継ぐもの：品名・数量・単価・単位・税区分・値引き（{d.lines.length}行すべて）。
+        新しく決まるもの：請求番号・発行日・支払期日（{c.termLabel}）。
+        <strong>手で入力しなおす項目はありません。</strong>
+      </p>
+
+      <h3 className="p-sub">引き継ぐ明細</h3>
+      <LineTable lines={d.lines} rounding={props.rounding} />
+
+      <div className="p-actions">
+        <button
+          type="button"
+          className="p-btn p-btn--primary"
+          onClick={function () { props.onConvert(d.no, props.invoiceNo, issue, due); }}
+        >
+          この見積書を請求書に変換する
+        </button>
+        <span className="p-actions__note">変換すると、見積書の状態は「請求へ変換済」になります。</span>
+      </div>
+    </React.Fragment>
+  );
+}
+
+/* ==================================================================
+   五 インボイス対応
+================================================================== */
+function ScreenInvoice(props) {
+  const invoices = props.docs.filter(function (d) { return d.kind === "invoice"; });
+  const doc = invoices.filter(function (d) { return d.no === props.target; })[0] || invoices[0];
+  const c = clientOf(doc.clientCode);
+  const calc = calcDoc(doc.lines, props.rounding);
+  const roundingLabel = TAX_CONFIG.roundings.filter(function (x) { return x.key === props.rounding; })[0].label;
+  const hasReduced = calc.groups.filter(function (g) { return g.key === "reduced"; }).length > 0;
+
+  return (
+    <section className="p-section">
+      <div className="p-heading">
+        <span className="p-heading__no">五</span>
+        <h2 className="p-heading__text">インボイス対応</h2>
+      </div>
+
+      <p className="p-lead">
+        適格請求書として認められるために書かなければならない項目は6つです。
+        この画面では、その6つが請求書のどこに出ているかを、実際の帳票と並べて確認できます。
+        登録番号・税率ごとの内訳・端数処理は、人が毎回書くものではなく、設定から自動で出るものです。
+      </p>
+
+      <div className="p-fields">
+        <div className="p-field">
+          <span className="p-field__label">確認する請求書</span>
+          <select
+            className="p-select"
+            value={doc.no}
+            onChange={function (e) { props.onTarget(e.target.value); }}
+          >
+            {invoices.map(function (d) {
+              const cc = clientOf(d.clientCode);
+              return <option key={d.no} value={d.no}>{d.no}　{cc.name}</option>;
+            })}
+          </select>
+          <p className="p-field__note">
+            {props.target === "請-2026-0008" ? "この請求書は、軽減税率8%の行・標準税率10%の行・値引きが混ざっています。" : "税率が混ざっている請求書を選ぶと、内訳が2段になります。"}
+          </p>
+        </div>
+        <div className="p-field">
+          <span className="p-field__label">消費税の端数処理</span>
+          <div className="p-tabs" style={{ marginBottom: 0 }}>
+            {TAX_CONFIG.roundings.map(function (r) {
+              return (
+                <button
+                  key={r.key}
+                  type="button"
+                  className="p-tab"
+                  aria-pressed={props.rounding === r.key}
+                  onClick={function () { props.onRounding(r.key); }}
+                >
+                  {r.label}
+                </button>
+              );
+            })}
+          </div>
+          <p className="p-field__note">
+            切り替えると、下の帳票と一覧の金額がその場で変わります。どれを使うかは自社で決めて、以後そろえます。
+          </p>
+        </div>
+      </div>
+
+      <h3 className="p-sub">帳票の体裁</h3>
+
+      <div className="p-doc">
+        <p className="p-doc__title">請求書</p>
+
+        <div className="p-doc__head">
+          <div className="p-doc__to">
+            <p className="p-doc__client">{c.name}　{c.honorific}</p>
+            <p className="p-doc__line">{c.address}</p>
+            <p className="p-doc__line">取引年月日：<strong>{fmtDate(doc.issueDate)}</strong></p>
+            <p className="p-doc__line">支払期日：<strong>{fmtDate(doc.dueDate)}</strong>（{c.termLabel}）</p>
+            <p className="p-doc__line">{NUMBERING.invoice.label}：<strong>{doc.no}</strong></p>
+          </div>
+          <div className="p-doc__from">
+            <p className="p-doc__line"><strong>{COMPANY.name}</strong></p>
+            <p className="p-doc__line">{COMPANY.address}</p>
+            <p className="p-doc__line">電話 {COMPANY.tel}</p>
+            <p className="p-doc__line">登録番号：<strong>{COMPANY.registrationNo}</strong></p>
+            <p className="p-doc__line">振込先：{COMPANY.bank}</p>
+          </div>
+        </div>
+
+        <LineTable lines={doc.lines} rounding={props.rounding} />
+
+        <SumBlock calc={calc} />
+
+        <p className="p-doc__note">
+          {hasReduced ? "※印の付いた品目は、軽減税率8%の対象です。" : "この請求書には、軽減税率8%の対象品目はありません。"}
+          消費税は税率ごとに合計してから、{roundingLabel}で1回だけ端数処理をしています。
+        </p>
+      </div>
+
+      <h3 className="p-sub">端数処理の内訳</h3>
+
+      <div className="p-scroll">
+        <table className="p-table p-table--mid">
+          <thead>
+            <tr>
+              <th scope="col">税率</th>
+              <th scope="col" className="p-table__num">対象の合計（税抜）</th>
+              <th scope="col" className="p-table__num">税率をかけた値</th>
+              <th scope="col">処理</th>
+              <th scope="col" className="p-table__num">消費税額</th>
+              <th scope="col" className="p-table__num">端数処理による差</th>
+            </tr>
+          </thead>
+          <tbody>
+            {calc.groups.map(function (g) {
+              return (
+                <tr key={g.key}>
+                  <td>{g.label}</td>
+                  <td className="p-table__num">{yen(g.base)}</td>
+                  <td className="p-table__num">{yenRaw(g.raw)}</td>
+                  <td>{roundingLabel}</td>
+                  <td className="p-table__num">{yen(g.tax)}</td>
+                  <td className="p-table__num">{yenRaw(g.tax - g.raw)}</td>
+                </tr>
+              );
+            })}
+            <tr className="p-table__foot">
+              <td colSpan="4">消費税の合計</td>
+              <td className="p-table__num">{yen(calc.taxTotal)}</td>
+              <td className="p-table__num">—</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p className="p-note">{TAX_CONFIG.roundingRule}</p>
+
+      <h3 className="p-sub">記載事項の対応表</h3>
+
+      <div className="p-scroll">
+        <table className="p-table p-table--mid">
+          <thead>
+            <tr>
+              <th scope="col">項</th>
+              <th scope="col">書かなければならない項目</th>
+              <th scope="col">この帳票での記載箇所</th>
+              <th scope="col">状態</th>
+            </tr>
+          </thead>
+          <tbody>
+            {INVOICE_REQUIREMENTS.map(function (q) {
+              return (
+                <tr key={q.no}>
+                  <td>{q.no}</td>
+                  <td className="p-table__name">{q.label}</td>
+                  <td>{q.place}</td>
+                  <td><span className="p-badge">記載あり</span></td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      <p className="p-note">
+        登録番号は自社の情報として1か所に持っています。帳票ごとに打ち直さないため、書き漏れも打ち間違いも起きません。
+      </p>
+
+      <div className="p-notice">
+        <p className="p-notice__title">税制の取扱いについて</p>
+        <p className="p-notice__body">
+          この画面は、記載事項がそろっているかを形の上で確認するためのものです。
+          <strong>自社がどの端数処理を使うか、どの取引が軽減税率の対象か、返品や値引きをどう扱うかといった判断は、
+          顧問税理士に確認していただくことを前提としています。</strong>
+          こちらで税務上の判断を行うことはありません。決まった扱いを、そのとおりに帳票へ反映する部分を作ります。
+        </p>
+      </div>
+    </section>
+  );
+}
+
+/* ==================================================================
+   六 手作業との比較
+================================================================== */
+function ScreenCompare(props) {
+  const docsPerMonth = props.docsPerMonth;
+  const minutesPerDoc = props.minutesPerDoc;
+  const manualMin = docsPerMonth * minutesPerDoc;
+  const autoMin = docsPerMonth * MANUAL.minutesAfter + MANUAL.monthlyCheckMinutes;
+  const savedMin = Math.max(manualMin - autoMin, 0);
+  const savedRate = manualMin ? Math.round((savedMin / manualMin) * 100) : 0;
+  const hours = function (m) { return (m / 60).toFixed(1); };
+
+  return (
+    <section className="p-section">
+      <div className="p-heading">
+        <span className="p-heading__no">六</span>
+        <h2 className="p-heading__text">手作業との比較</h2>
+      </div>
+
+      <p className="p-lead">
+        月に何件出しているか、1件にどれくらいかかっているか。この2つを入れると、削減できる時間が出ます。
+        いまの件数と分数が分からない場合は、次に帳票を作るときに時計で測ってみてください。
+      </p>
+
+      <div className="p-fields">
+        <div className="p-field">
+          <span className="p-field__label">月間の発行件数</span>
+          <span className="p-field__row">
+            <input
+              type="number"
+              className="p-input p-input--num"
+              value={docsPerMonth}
+              min="0"
+              step="1"
+              onChange={function (e) { props.onDocs(e.target.value); }}
+            />
+            <span className="p-field__unit">件／月</span>
+          </span>
+          <p className="p-field__note">見積書と請求書を合わせた枚数です。</p>
+        </div>
+        <div className="p-field">
+          <span className="p-field__label">1件あたりの分数（いまの手作業）</span>
+          <span className="p-field__row">
+            <input
+              type="number"
+              className="p-input p-input--num"
+              value={minutesPerDoc}
+              min="0"
+              step="1"
+              onChange={function (e) { props.onMinutes(e.target.value); }}
+            />
+            <span className="p-field__unit">分／件</span>
+          </span>
+          <p className="p-field__note">前回のファイルを探す時間、単価を確かめる時間、見直す時間を含みます。</p>
+        </div>
+      </div>
+
+      <ul className="p-calc">
+        <li>
+          <span className="p-calc__label">いまの手作業（月）</span>
+          <span className="p-calc__value">{hours(manualMin)} 時間</span>
+          <span className="p-calc__detail">{docsPerMonth}件 × {minutesPerDoc}分 ＝ {manualMin}分</span>
+        </li>
+        <li>
+          <span className="p-calc__label">マスタから作る場合（月）</span>
+          <span className="p-calc__value p-calc__value--accent">{hours(autoMin)} 時間</span>
+          <span className="p-calc__detail">
+            {docsPerMonth}件 × {MANUAL.minutesAfter}分（選んで数量を入れる）＋ 発行状況の確認 {MANUAL.monthlyCheckMinutes}分 ＝ {autoMin}分
+          </span>
+        </li>
+        <li>
+          <span className="p-calc__label">削減できる時間（月）</span>
+          <span className="p-calc__value p-calc__value--caution">{hours(savedMin)} 時間</span>
+          <span className="p-calc__detail">削減率 {savedRate}%　年間では {hours(savedMin * 12)} 時間</span>
+        </li>
+        <li>
+          <span className="p-calc__label">人件費に置き換えた場合（年）</span>
+          <span className="p-calc__value p-calc__value--caution">
+            {yen(Math.round((savedMin * 12 / 60) * MANUAL.hourlyCost))} 円
+          </span>
+          <span className="p-calc__detail">1時間 {yen(MANUAL.hourlyCost)}円として計算しています。</span>
+        </li>
+      </ul>
+
+      <p className="p-note p-note--caution">
+        ここに出る数字は、すべて入力値から計算した想定値です。実際の削減時間は、扱う商品の数と確認の丁寧さで変わります。
+      </p>
+
+      <h3 className="p-sub">時間より先に効くこと</h3>
+
+      <div className="p-legend">
+        <dl>
+          <dt>単価の間違いが起きなくなる</dt>
+          <dd>
+            単価がマスタの1か所にしかないためです。複製したファイルが増えても、単価の出どころは増えません。
+            価格改定のときに直すのも1か所です。
+          </dd>
+          <dt>発行漏れが分かる</dt>
+          <dd>
+            作った帳票は、出すまで「未発行」として一覧に残ります。見積のまま止まっているものも別に数えます。
+            思い出す必要がなくなります。
+          </dd>
+          <dt>回収漏れが分かる</dt>
+          <dd>
+            支払期日を過ぎた請求書は、基準日と比べて自動で「期日超過」になります。何日超えているかも出ます。
+            催促の順番は、この日数で決められます。
+          </dd>
+          <dt>番号の重複と抜けがなくなる</dt>
+          <dd>
+            帳票番号は、いま持っている番号の次を自動で割り当てます。人が番号を決める場面をなくしています。
+          </dd>
+        </dl>
+      </div>
+    </section>
+  );
+}
+
+/* ==================================================================
+   画面の組み立て
+================================================================== */
+const SCREENS = [
+  { key: "master", label: "一 商品マスタ" },
+  { key: "list", label: "二 発行状況の一覧" },
+  { key: "create", label: "三 見積書の作成" },
+  { key: "convert", label: "四 見積書から請求書へ" },
+  { key: "invoice", label: "五 インボイス対応" },
+  { key: "compare", label: "六 手作業との比較" },
+];
+
+const INITIAL_DRAFT = [
+  { key: "d1", type: "item", code: "商-01", qty: 12 },
+  { key: "d2", type: "item", code: "商-08", qty: 2 },
+];
+
+function App() {
+  const [screen, setScreen] = useState("list");
+  const [master, setMaster] = useState(ITEM_MASTER);
+  const [docs, setDocs] = useState(DOC_SEED);
+  const [rounding, setRounding] = useState(TAX_CONFIG.defaultRounding);
+
+  const [filter, setFilter] = useState("all");
+  const [openNo, setOpenNo] = useState(null);
+  const [listFlash, setListFlash] = useState("");
+
+  const [draftClient, setDraftClient] = useState("取-01");
+  const [draftLines, setDraftLines] = useState(INITIAL_DRAFT);
+  const [draftSeq, setDraftSeq] = useState(3);
+  const [lastCreated, setLastCreated] = useState(null);
+
+  const [convertTarget, setConvertTarget] = useState("");
+  const [convertFlash, setConvertFlash] = useState("");
+  const [lastConverted, setLastConverted] = useState(null);
+
+  const [invoiceTarget, setInvoiceTarget] = useState("請-2026-0008");
+
+  const [docsPerMonth, setDocsPerMonth] = useState(MANUAL.docsPerMonth);
+  const [minutesPerDoc, setMinutesPerDoc] = useState(MANUAL.minutesPerDoc);
+
+  /* --- マスタ --- */
+  const setPrice = function (i, v) {
+    setMaster(master.map(function (m, j) {
+      return j === i ? Object.assign({}, m, { price: Math.max(0, Number(v) || 0) }) : m;
+    }));
+  };
+  const setTax = function (i, v) {
+    setMaster(master.map(function (m, j) {
+      return j === i ? Object.assign({}, m, { taxKey: v }) : m;
+    }));
+  };
+
+  /* --- 一覧の操作 --- */
+  const issueDoc = function (no) {
+    setDocs(docs.map(function (d) {
+      return d.no === no ? Object.assign({}, d, { status: "issued" }) : d;
+    }));
+    setListFlash(no + " を発行済にしました。上の集計が変わっています。");
+  };
+  const payDoc = function (no) {
+    setDocs(docs.map(function (d) {
+      return d.no === no ? Object.assign({}, d, { status: "paid", paidDate: BASE_DATE }) : d;
+    }));
+    setListFlash(no + " の入金を消し込みました。期日超過に入っていた場合は、その数からも外れます。");
+  };
+
+  /* --- 見積書の作成 --- */
+  const changeLine = function (i, field, v) {
+    setDraftLines(draftLines.map(function (l, j) {
+      if (j !== i) return l;
+      const next = Object.assign({}, l);
+      next[field] = field === "qty" ? Math.max(0, Number(v) || 0) : v;
+      return next;
+    }));
+  };
+  const removeLine = function (i) {
+    setDraftLines(draftLines.filter(function (l, j) { return j !== i; }));
+  };
+  const addItemLine = function () {
+    setDraftLines(draftLines.concat([{ key: "d" + draftSeq, type: "item", code: master[0].code, qty: 1 }]));
+    setDraftSeq(draftSeq + 1);
+  };
+  const addDiscountLine = function () {
+    setDraftLines(draftLines.concat([{ key: "d" + draftSeq, type: "discount", name: "お値引き", amount: 1000, taxKey: "standard" }]));
+    setDraftSeq(draftSeq + 1);
+  };
+  const createQuote = function (lines, no, issue, expiry) {
+    const doc = {
+      no: no, kind: "quote", clientCode: draftClient, status: "draft",
+      issueDate: issue, expiryDate: expiry, convertedTo: null,
+      lines: lines.filter(function (l) { return l.type === "discount" || l.qty > 0; }),
+    };
+    setDocs(docs.concat([doc]));
+    setLastCreated({ no: no });
+    setListFlash(no + " を作りました。まだ発行していません。");
+  };
+  const resetDraft = function () {
+    setDraftLines(INITIAL_DRAFT);
+    setLastCreated(null);
+  };
+
+  /* --- 変換 --- */
+  const goConvert = function (no) {
+    setConvertTarget(no);
+    setLastConverted(null);
+    setConvertFlash("");
+    setScreen("convert");
+  };
+  const convertDoc = function (quoteNo, invoiceNo, issue, due) {
+    const quote = docs.filter(function (d) { return d.no === quoteNo; })[0];
+    const invoice = {
+      no: invoiceNo, kind: "invoice", clientCode: quote.clientCode, status: "draft",
+      issueDate: issue, dueDate: due, paidDate: null, fromQuote: quoteNo,
+      lines: quote.lines.map(function (l) { return Object.assign({}, l); }),
+    };
+    setDocs(docs.map(function (d) {
+      return d.no === quoteNo ? Object.assign({}, d, { convertedTo: invoiceNo }) : d;
+    }).concat([invoice]));
+    setLastConverted({ from: quoteNo, to: invoiceNo });
+    setConvertTarget("");
+    setConvertFlash(quoteNo + " を " + invoiceNo + " に変換しました。金額の入力は1回もしていません。");
+    setListFlash(invoiceNo + " を作りました（" + quoteNo + " からの変換）。まだ発行していません。");
+  };
+
+  const goInvoice = function (no) {
+    setInvoiceTarget(no);
+    setScreen("invoice");
+  };
+
+  return (
+    <React.Fragment>
+      <div className="p-topbar" />
+
+      <div className="p-sheet">
+        <header className="p-masthead">
+          <p className="p-masthead__kicker">中小企業向け　業務改善・自動化サンプル　見積書・請求書</p>
+          <p className="p-masthead__back"><a href="../../index.html">業務の悩み 索引へ戻る</a></p>
+          <h1 className="p-masthead__title">見積書・請求書の作成 デモ</h1>
+          <p className="p-masthead__lead">
+            前回のファイルを複製して書き換える運用をやめて、<strong>商品マスタから帳票を作る</strong>形にした画面です。
+            単価はマスタにしかありません。見積書はそのまま請求書に変換できます。
+            出したかどうか、入金があったかどうかは、一覧で分かるようにしてあります。
+          </p>
+          <p className="p-masthead__meta">
+            画面：商品マスタ／発行状況の一覧／見積書の作成／見積書から請求書へ／インボイス対応／手作業との比較
+            {"　"}掲載データ：取引先{CLIENTS.length}社・商品{ITEM_MASTER.length}件・帳票{DOC_SEED.length}件
+            {"　"}基準日：{fmtDate(BASE_DATE)}
+          </p>
+
+          <div className="p-notice">
+            <p className="p-notice__title">この画面について</p>
+            <p className="p-notice__body">
+              表示している会社名・商品名・金額・日付は、すべてデモ用の架空のものです。実在する企業・取引とは関係ありません。
+              削減時間などの数字も、入力した条件から計算した想定値です。
+            </p>
+            <p className="p-notice__body">
+              <strong>税制の取扱い（端数処理の方法、軽減税率の対象、値引きや返品の扱いなど）は、
+              顧問税理士に確認していただくことを前提としています。</strong>
+              こちらで税務上の判断を行うことはありません。決まった扱いを帳票に反映する部分を作ります。
+            </p>
+            <p className="p-notice__body">
+              実際にお渡しするものは、お手元のExcelや会計ソフトの様式に合わせた形になります。
+              この画面は、仕組みの動きを確認していただくためのものです。ブラウザの中だけで動いており、
+              保存や外部への送信は行っていません（localStorage・Cookie・外部通信のいずれも使っていません）。
+              ページを開き直すと最初の状態に戻ります。
+            </p>
+          </div>
+        </header>
+
+        <nav className="p-nav" aria-label="画面の切り替え">
+          {SCREENS.map(function (s) {
+            return (
+              <button
+                key={s.key}
+                type="button"
+                className="p-tab"
+                aria-pressed={screen === s.key}
+                onClick={function () { setScreen(s.key); }}
+              >
+                {s.label}
+              </button>
+            );
+          })}
+        </nav>
+
+        {screen === "master" ? (
+          <ScreenMaster
+            master={master}
+            onPrice={setPrice}
+            onTax={setTax}
+            onReset={function () { setMaster(ITEM_MASTER); }}
+          />
+        ) : null}
+
+        {screen === "list" ? (
+          <ScreenList
+            docs={docs}
+            rounding={rounding}
+            filter={filter}
+            onFilter={setFilter}
+            openNo={openNo}
+            onOpen={setOpenNo}
+            flash={listFlash}
+            onIssue={issueDoc}
+            onPaid={payDoc}
+            onGoConvert={goConvert}
+          />
+        ) : null}
+
+        {screen === "create" ? (
+          <ScreenCreate
+            master={master}
+            docs={docs}
+            rounding={rounding}
+            draftClient={draftClient}
+            draftLines={draftLines}
+            lastCreated={lastCreated}
+            onClient={setDraftClient}
+            onLine={changeLine}
+            onRemove={removeLine}
+            onAddItem={addItemLine}
+            onAddDiscount={addDiscountLine}
+            onCreate={createQuote}
+            onResetDraft={resetDraft}
+            onGo={setScreen}
+            onGoConvert={goConvert}
+          />
+        ) : null}
+
+        {screen === "convert" ? (
+          <ScreenConvert
+            docs={docs}
+            rounding={rounding}
+            target={convertTarget}
+            onTarget={setConvertTarget}
+            onConvert={convertDoc}
+            flash={convertFlash}
+            lastConverted={lastConverted}
+            onGo={setScreen}
+            onGoInvoice={goInvoice}
+          />
+        ) : null}
+
+        {screen === "invoice" ? (
+          <ScreenInvoice
+            docs={docs}
+            rounding={rounding}
+            onRounding={setRounding}
+            target={invoiceTarget}
+            onTarget={setInvoiceTarget}
+          />
+        ) : null}
+
+        {screen === "compare" ? (
+          <ScreenCompare
+            docsPerMonth={docsPerMonth}
+            minutesPerDoc={minutesPerDoc}
+            onDocs={function (v) { setDocsPerMonth(Math.max(0, Number(v) || 0)); }}
+            onMinutes={function (v) { setMinutesPerDoc(Math.max(0, Number(v) || 0)); }}
+          />
+        ) : null}
+
+        <section className="p-section">
+          <div className="p-heading">
+            <span className="p-heading__no">七</span>
+            <h2 className="p-heading__text">実際にお渡しするもの</h2>
+          </div>
+
+          <div className="p-def">
+            <p className="p-def__label">納品物</p>
+            <p className="p-def__body">
+              お手元のExcelや会計ソフトの様式に合わせた、見積書・請求書の作成の仕組みです。
+              商品マスタと取引先マスタを1つ持ち、そこから帳票を作る形にします。
+              いまお使いの帳票の見た目を変えずに、中身の作り方だけを変えることもできます。
+            </p>
+          </div>
+
+          <div className="p-def">
+            <p className="p-def__label">マスタと税率の持ち方</p>
+            <p className="p-def__body">
+              この画面のプログラムは、品名や単価を直接持っていません。冒頭の設定を差し替えるだけで、
+              別の会社・別の商品構成の帳票になります。税率が変わったときに直すのも、設定の1か所だけです。
+            </p>
+            <p className="p-code">{`商品マスタ：品番／品名／単位／単価／税区分
+取引先マスタ：取引先名／住所／支払条件（締めと支払日）
+自社情報：名称／住所／登録番号／振込先
+税率設定：標準10%／軽減8%／端数処理（切り捨て・四捨五入・切り上げ）
+採番規則：見積 ${NUMBERING.quote.prefix}0000／請求 ${NUMBERING.invoice.prefix}0000`}</p>
+          </div>
+
+          <div className="p-def">
+            <p className="p-def__label">この画面と納品物の違い</p>
+            <p className="p-def__body">
+              この画面はブラウザの中だけで動いており、ファイルの読み書きはしていません。
+              サンプルデータを埋め込んで、動きだけをお見せしています。実装時は、
+              帳票をPDFやExcelとして書き出す、発行済の帳票を保存する、期日超過を自動で知らせる、といった部分が加わります。
+            </p>
+          </div>
+
+          <div className="p-def">
+            <p className="p-def__label">はじめにお預かりするもの</p>
+            <p className="p-def__body">
+              いまお使いの見積書・請求書のファイルを1枚と、商品の一覧（品名・単価・単位・税区分）です。
+              この2つがあれば、マスタの形を決められます。ファイルの様式はそのままで構いません。
+            </p>
+          </div>
+
+          <div className="p-colophon">
+            <p>掲載しているデータは、すべてデモ用の架空のものです。実在する企業・取引とは関係ありません。</p>
+            <p>税制の取扱いは、顧問税理士に確認していただくことを前提としています。</p>
+            <p>
+              ほかのサンプルは
+              <a href="../../index.html">業務の悩み 索引</a>
+              から見られます。
+            </p>
+          </div>
+        </section>
+      </div>
+    </React.Fragment>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>

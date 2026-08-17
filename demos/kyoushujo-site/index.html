@@ -1,0 +1,1267 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>自動車教習所サイト TOPデザイン案 | 学生に刺さる訴求と保護者向けの明朗な料金の両立</title>
+<meta name="description" content="教習所ホームページのTOPページデザイン案2案。上半分は高校生・大学生向けの訴求、料金セクション以降は保護者向けの明朗会計に切り替える設計。案A（写真主体）と案B（情報整理主体）を画面上部で切り替えられます。">
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body>
+<div id="root"></div>
+<script>Babel.registerPreset("react-classic", { presets: [[Babel.availablePresets["react"], { runtime: "classic" }]] });</script>
+<script type="text/babel" data-presets="react-classic">
+const { useState, useMemo, useRef } = React;
+
+/* ==================================================================
+   サイト定義。校名・料金・コース・FAQ まですべてここに集約しています。
+   コードには一切べた書きしていません。
+   実案件では WordPress のテーマオプション + カスタムフィールドに
+   この構造をそのまま対応させます。
+================================================================== */
+const SITE = {
+  school: {
+    name: "みどり自動車学校",
+    nameEn: "MIDORI DRIVING SCHOOL",
+    tel: "0120-330-889",
+    telHours: "受付 9:00〜19:00（日曜・祝日も受付）",
+    address: "◯◯県△△市緑町 2-14-8",
+    access: "△△駅から送迎バス 12分 / 無料駐車場 80台",
+    designated: "◯◯県公安委員会指定 第00-00号",
+  },
+
+  /* ---- 上半分（学生向け）で使う数字と訴求 ---- */
+  hero: {
+    catchA: ["夏休みのうちに、", "免許を取り切る。"],
+    catchB: "高校3年生・大学生のための、最短14日プラン",
+    leadA: "部活も、バイトも、受験も止めない。空き時間に合わせて組める学生専用スケジュール。卒業までの日数を、入校前に出します。",
+    leadB: "免許取得までの期間・総額・追加料金の有無を、入校前にすべて開示します。学生プランの総額は下の料金表のとおりです。",
+    stats: [
+      { num: "14", unit: "日〜", label: "最短卒業（普通車AT・短期集中）" },
+      { num: "0", unit: "円", label: "追加技能・再検定の追加料金" },
+      { num: "22,000", unit: "円OFF", label: "学生応援キャンペーン" },
+    ],
+  },
+
+  campaigns: [
+    { tag: "学生限定", title: "学生応援キャンペーン", off: "22,000円OFF", note: "高校・大学・専門学校の学生証提示で適用。2月〜3月／7月〜9月の入校が対象です。" },
+    { tag: "2名以上", title: "友だち割", off: "5,500円OFF", note: "同時申込で全員に適用。学生応援キャンペーンとの併用ができます。" },
+    { tag: "早割", title: "3か月前予約", off: "11,000円OFF", note: "入校希望日の3か月前までのお申込みが対象。繁忙期の枠を確保できます。" },
+  ],
+
+  reasons: [
+    {
+      icon: "schedule",
+      title: "空き時間に合わせて組める",
+      lead: "1限だけ・夕方だけでもOK",
+      body: "技能教習はスマホから24時間予約・変更ができます。放課後の1時間や、バイトの前後だけでも進められる組み方をします。",
+      forParent: "予約状況と進み具合は、保護者の方にも月1回まとめてご連絡します。",
+    },
+    {
+      icon: "bus",
+      title: "送迎バスが自宅近くまで",
+      lead: "17ルート・1日84便",
+      body: "△△市内の高校5校・大学2校の前を経由します。授業終わりにそのまま乗れるので、通学の負担がありません。",
+      forParent: "送迎があるため、保護者の方の送り迎えは基本的に不要です。",
+    },
+    {
+      icon: "yen",
+      title: "追加料金は0円",
+      lead: "技能が延びても総額は変わりません",
+      body: "教習が規定時限を超えた場合の追加技能料金・再検定料は、学生プランではいただきません。",
+      forParent: "入校時にお伝えした総額から、あとで金額が増えることはありません。",
+    },
+    {
+      icon: "instructor",
+      title: "担当指導員をご指名いただけます",
+      lead: "同じ指導員が最後まで",
+      body: "初回の教習で相性を確認したうえで、卒業まで同じ指導員が担当します。途中での変更もできます。",
+      forParent: "誰が担当しているかが分かるため、ご相談の窓口がはっきりします。",
+    },
+  ],
+
+  courses: [
+    {
+      id: "at",
+      name: "普通車 AT",
+      sub: "オートマ限定",
+      popular: true,
+      forWho: "いちばん選ばれているコース",
+      lesson: "技能31時限 / 学科26時限",
+      shortest: "最短14日",
+      point: ["軽自動車から普通車まで運転できます", "教習時限が最も少なく、費用も期間も抑えられます"],
+      color: 0,
+    },
+    {
+      id: "mt",
+      name: "普通車 MT",
+      sub: "マニュアル",
+      forWho: "就職で運転業務がある方",
+      lesson: "技能34時限 / 学科26時限",
+      shortest: "最短16日",
+      point: ["AT車・MT車の両方を運転できます", "配送・建設・農業など、社用車がMTの職種向け"],
+      color: 1,
+    },
+    {
+      id: "bike",
+      name: "普通二輪 MT",
+      sub: "〜400cc",
+      forWho: "通学・ツーリング",
+      lesson: "技能19時限 / 学科26時限",
+      shortest: "最短9日",
+      point: ["普通免許をお持ちの場合、学科は1時限のみです", "高校生の場合は在学校の許可書が必要です"],
+      color: 2,
+    },
+    {
+      id: "bigbike",
+      name: "大型二輪 MT",
+      sub: "排気量制限なし",
+      forWho: "普通二輪をお持ちの方",
+      lesson: "技能12時限 / 学科なし",
+      shortest: "最短7日",
+      point: ["普通二輪免許をお持ちの方が対象です", "教習車はNC750Lを使用します"],
+      color: 3,
+    },
+    {
+      id: "junchugata",
+      name: "準中型",
+      sub: "5t限定なし",
+      forWho: "18歳から取得できます",
+      lesson: "技能41時限 / 学科27時限",
+      shortest: "最短20日",
+      point: ["2tトラック・3tトラックまで運転できます", "運送・建設業への就職で有利になります"],
+      color: 4,
+    },
+  ],
+
+  /* ---- ここから下半分（保護者向け）---- */
+  prices: [
+    { id: "at", name: "普通車 AT", student: 283800, normal: 305800, monthly: 12300 },
+    { id: "mt", name: "普通車 MT", student: 299200, normal: 321200, monthly: 12900 },
+    { id: "bike", name: "普通二輪 MT", student: 118800, normal: 129800, monthly: 5200 },
+    { id: "bigbike", name: "大型二輪 MT", student: 96800, normal: 107800, monthly: 4300 },
+    { id: "junchugata", name: "準中型", student: 385000, normal: 407000, monthly: 16600 },
+  ],
+
+  included: [
+    "入学金・適性検査料", "学科教習料（全時限）", "技能教習料（規定時限）",
+    "教材費・写真代", "修了検定料・卒業検定料", "効果測定料",
+    "追加技能教習料（時限数の上限なし）", "再検定料（回数の上限なし）",
+    "送迎バス利用料", "任意保険・教習中の事故対応",
+  ],
+
+  /* 「追加料金なし」と言い切るなら、当校では受け取らない費用も同じ場所に書きます。
+     ここを書かないサイトは、あとで金額が動いたと受け取られます。 */
+  notIncluded: [
+    { name: "仮免許試験 受験料", amt: "1,700円", who: "当校でお預かりし、県証紙で納付します" },
+    { name: "仮免許証 交付料", amt: "1,150円", who: "同上" },
+    { name: "本免許試験 受験料", amt: "1,750円", who: "運転免許センターでお支払いいただきます" },
+    { name: "免許証 交付料", amt: "2,050円", who: "同上" },
+  ],
+
+  payments: [
+    { name: "現金一括", detail: "入校日にお支払いいただきます。分割手数料はかかりません。" },
+    { name: "クレジットカード", detail: "VISA / Mastercard / JCB / AMEX。一括・分割どちらも選べます（分割手数料は各カード会社の規定によります）。" },
+    { name: "運転免許ローン", detail: "最大36回まで。頭金0円から組めます。学生ご本人名義の場合は保護者の方の連帯保証が必要です。審査は最短30分です。" },
+    { name: "銀行振込", detail: "入校日の3営業日前までにお振込みください。振込手数料はご負担をお願いしています。" },
+  ],
+
+  cancel: [
+    { when: "入校日の前日まで", rule: "全額をご返金します（振込手数料のみご負担ください）", tone: "ok" },
+    { when: "入校後・教習開始前", rule: "入学金 22,000円を差し引いてご返金します", tone: "ok" },
+    { when: "教習開始後", rule: "入学金と、受講済みの技能・学科教習分を差し引いてご返金します。残額は10営業日以内にお振込みします", tone: "warn" },
+    { when: "教習期限（9か月）超過", rule: "受講済み分は無効となります。期限の2か月前・1か月前に、ご本人と保護者の方の両方にご連絡します", tone: "warn" },
+  ],
+
+  steps: [
+    { n: 1, title: "入校のお申込み", days: "所要 40分", body: "窓口・電話・Webから。18歳未満の場合は保護者の方の同意書が必要です。視力・色彩の適性検査を行います。" },
+    { n: 2, title: "第一段階（場内）", days: "技能15時限 / 学科10時限", body: "教習所内のコースで基本操作を学びます。学科はオンライン受講にも対応しています。" },
+    { n: 3, title: "修了検定・仮免許試験", days: "半日", body: "場内での技能検定と学科試験です。不合格の場合の再受験料は、学生プランではいただきません。" },
+    { n: 4, title: "第二段階（路上）", days: "技能19時限 / 学科16時限", body: "実際の道路での教習に入ります。高速道路教習・応急救護もこの段階です。" },
+    { n: 5, title: "卒業検定", days: "半日", body: "路上での技能検定です。合格すると卒業証明書を交付します（有効期限1年）。" },
+    { n: 6, title: "本免許試験", days: "1日", body: "◯◯県運転免許センターで学科試験を受けます。当日中に免許証が交付されます。" },
+  ],
+
+  faqs: [
+    {
+      q: "「追加料金なし」とありますが、本当に総額から増えることはありませんか。",
+      a: "学生プラン（29歳以下）では、技能教習が規定時限を超えた場合の追加料金と、検定の再受験料をいただきません。時限数・回数の上限も設けていません。ただし、仮免許・本免許の試験手数料（合計6,650円）は公的な費用のため教習料金には含まれません。金額と支払先は料金表のすぐ下に明記しています。",
+      for: "parent",
+    },
+    {
+      q: "部活動や受験勉強と両立できますか。",
+      a: "技能教習は1日2時限まで受けられますが、週1回のペースでも進められます。入校時に、いつまでに卒業したいかをうかがい、そこから逆算した予定表をお渡しします。試験期間中に教習を止めることもできます（教習期限は9か月です）。",
+      for: "parent",
+    },
+    {
+      q: "支払いは分割にできますか。保護者名義でなくても組めますか。",
+      a: "運転免許ローンは最大36回まで、頭金0円から組めます。学生ご本人名義でお申込みいただけますが、その場合は保護者の方の連帯保証が必要です。保護者の方名義でお申込みいただくこともできます。審査は最短30分、金利は年3.9%（実質年率）です。",
+      for: "parent",
+    },
+    {
+      q: "途中でやめた場合、支払ったお金はどうなりますか。",
+      a: "受講済みの分と入学金を差し引いた残額をご返金します。返金額の計算根拠は書面でお渡しし、10営業日以内にお振込みします。詳しくは料金セクションの「キャンセル・返金の規定」をご確認ください。",
+      for: "parent",
+    },
+    {
+      q: "教習の進み具合を、保護者にも知らせてもらえますか。",
+      a: "月1回、教習の進捗と残り時限数、卒業見込み時期をご登録の連絡先にお送りします。ご希望があれば、検定の合否をその都度ご連絡することもできます。ご本人の同意のうえで運用しています。",
+      for: "parent",
+    },
+    {
+      q: "教習中に事故を起こした場合はどうなりますか。",
+      a: "教習車には対人無制限・対物無制限の任意保険をかけています。教習中の事故について、ご本人・保護者の方に修理費等をご請求することはありません。指導員が同乗しているため、事故そのものが起きにくい体制です。",
+      for: "parent",
+    },
+    {
+      q: "高校生でも入校できますか。",
+      a: "普通車は18歳の誕生日の2か月前から入校でき、18歳の誕生日以降に修了検定を受けられます。卒業の時期から逆算すると、高校3年生の夏休みからのお申込みが最も余裕のある進み方です。在学中の入校には学校の許可が必要な場合があります。",
+      for: "both",
+    },
+    {
+      q: "送迎バスはどこまで来てくれますか。",
+      a: "△△市内17ルート・1日84便を運行しています。高校5校・大学2校の前を経由し、ご自宅近くのバス停まで送ります。ルート表は窓口でお渡ししているほか、お電話でもご案内できます。",
+      for: "both",
+    },
+  ],
+
+  contactReasons: ["料金・支払い方法について", "スケジュールの相談", "コース選びの相談", "送迎バスのルート確認", "その他"],
+};
+
+/* ==================================================================
+   デザイン案。案A / 案B で配色とレイアウトの方向性を切り替えます。
+================================================================== */
+const PLANS = {
+  A: {
+    key: "A",
+    label: "案A",
+    title: "写真主体・勢い重視",
+    aim: "学生の共感を優先",
+    desc: "全画面の写真と大きな文字で、まず「自分ごと」にさせる案です。スクロールの速度感を上げ、キャンペーンとスピード感を前に出します。",
+    theme: {
+      pri: "#FF4B2B", priDark: "#D62E10", accent: "#FFC93C",
+      ink: "#12131A", sub: "#5B5F6B", tint: "#FFF3EF", line: "#EDE6E2",
+    },
+    round: "rounded-3xl", roundSm: "rounded-2xl",
+    heroKind: "photo",
+    courseKind: "cards",
+    display: "font-black tracking-tight",
+  },
+  B: {
+    key: "B",
+    label: "案B",
+    title: "情報整理・比較重視",
+    aim: "保護者の納得を優先",
+    desc: "料金とコースの比較表をファーストビューの近くに置く案です。写真は補助にとどめ、数字と条件を先に読ませます。",
+    theme: {
+      pri: "#12658C", priDark: "#0B4763", accent: "#1E9E78",
+      ink: "#1A2027", sub: "#5A6472", tint: "#F1F6F9", line: "#DDE5EB",
+    },
+    round: "rounded-lg", roundSm: "rounded-md",
+    heroKind: "split",
+    courseKind: "table",
+    display: "font-bold tracking-normal",
+  },
+};
+
+const yen = (n) => "¥" + n.toLocaleString("ja-JP");
+
+/* ---------- 写真プレースホルダ ---------- */
+const PHOTO_TONES = [
+  ["#8FB8D6", "#3E6E96"], ["#E2A98F", "#B4643E"], ["#93C6AE", "#41846A"],
+  ["#B7A5D6", "#6E5698"], ["#E0C57F", "#B08E32"], ["#8FA8C8", "#43597A"],
+];
+function Photo({ label, tone = 0, className = "", round = "rounded-2xl", overlay = false }) {
+  const [a, b] = PHOTO_TONES[tone % PHOTO_TONES.length];
+  return (
+    <div className={`relative overflow-hidden ${round} ${className}`}
+         style={{ background: `linear-gradient(135deg, ${a} 0%, ${b} 100%)` }}>
+      <div className="absolute inset-0 opacity-25"
+           style={{ backgroundImage: "repeating-linear-gradient(45deg, rgba(255,255,255,.35) 0 1px, transparent 1px 9px)" }} />
+      {overlay && <div className="absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(0,0,0,.20) 0%, rgba(0,0,0,.62) 100%)" }} />}
+      <div className="absolute inset-0 flex items-center justify-center p-3">
+        <span className="text-[11px] md:text-xs text-white/85 font-medium text-center leading-relaxed">{label}</span>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- 読み手ラベル ---------- */
+function Audience({ who }) {
+  const isS = who === "student";
+  return (
+    <span className={`inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-full ${
+      isS ? "bg-[var(--pri)]/10 text-[var(--pri)]" : "bg-[var(--ink)]/10 text-[var(--ink)]"}`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${isS ? "bg-[var(--pri)]" : "bg-[var(--ink)]"}`} />
+      {isS ? "この区間は 学生ご本人 に向けて書いています" : "この区間は 保護者の方 に向けて書いています"}
+    </span>
+  );
+}
+
+function SectionHead({ eyebrow, title, lead, who, center = false, plan }) {
+  return (
+    <div className={`${center ? "text-center mx-auto max-w-2xl" : "max-w-3xl"} mb-8 md:mb-12`}>
+      {who && <div className="mb-4"><Audience who={who} /></div>}
+      <div className="text-[13px] font-bold text-[var(--pri)] tracking-widest mb-2">{eyebrow}</div>
+      <h2 className={`text-2xl md:text-[34px] leading-tight text-[var(--ink)] ${plan.display}`}>{title}</h2>
+      {lead && <p className="mt-4 text-[15px] leading-relaxed text-[var(--sub)]">{lead}</p>}
+    </div>
+  );
+}
+
+/* ==================================================================
+   案の切り替えバー（提案用のUI。実サイトには載りません）
+================================================================== */
+function PlanSwitch({ plan, setPlan, showIntent, setShowIntent }) {
+  return (
+    <div className="sticky top-0 z-50 bg-[#0F1115] text-white border-b border-white/10">
+      <div className="max-w-6xl mx-auto px-4 py-2.5 flex items-center gap-3 flex-wrap">
+        <span className="text-[11px] font-bold text-white/50 tracking-wider hidden sm:inline">TOPデザイン案</span>
+        <div className="flex bg-white/10 rounded-full p-1 gap-1">
+          {Object.values(PLANS).map((p) => (
+            <button key={p.key} onClick={() => { setPlan(p.key); window.scrollTo({ top: 0 }); }}
+              className={`px-3.5 py-1.5 rounded-full text-[13px] font-bold transition ${
+                plan === p.key ? "bg-white text-[#0F1115]" : "text-white/70 hover:text-white"}`}>
+              {p.label}｜{p.title}
+            </button>
+          ))}
+        </div>
+        <span className="text-[11px] text-white/45 hidden md:inline">{PLANS[plan].aim}</span>
+        <button onClick={() => setShowIntent(!showIntent)}
+          className="ml-auto text-[12px] font-bold px-3 py-1.5 rounded-full border border-white/25 hover:bg-white/10 transition">
+          {showIntent ? "設計意図をとじる" : "設計意図をひらく"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ==================================================================
+   設計意図パネル
+================================================================== */
+function IntentPanel({ open, onClose, plan }) {
+  if (!open) return null;
+  const p = PLANS[plan];
+  return (
+    <div className="fixed inset-0 z-[60] flex justify-end">
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div className="relative w-full max-w-md bg-white h-full overflow-y-auto shadow-2xl">
+        <div className="sticky top-0 bg-[#0F1115] text-white px-5 py-4 flex items-center justify-between">
+          <div>
+            <div className="text-[11px] text-white/50 font-bold tracking-wider">設計意図</div>
+            <div className="font-bold">{p.label}｜{p.title}</div>
+          </div>
+          <button onClick={onClose} className="text-white/60 hover:text-white text-2xl leading-none px-2">×</button>
+        </div>
+        <div className="px-5 py-6 space-y-7 text-[14px] leading-relaxed text-[#3A3F4A]">
+          <div>
+            <h3 className="font-bold text-[#12131A] mb-2">この案がやろうとしていること</h3>
+            <p>{p.desc}</p>
+          </div>
+          <div className="border-t border-[#E6E9ED] pt-6">
+            <h3 className="font-bold text-[#12131A] mb-2">両立させたい2つの要求</h3>
+            <p>ご依頼の核は「若者に刺さる」と「保護者が安心できる料金の明朗さ」の両立です。この2つは同じ表現では成立しません。写真とスピード感で振り切ると保護者は不安になり、条件と数字で固めると学生は読み始めません。</p>
+            <p className="mt-3">そこで<strong className="text-[#12131A]">トーンを混ぜず、ページの上下で読み手を分けました</strong>。ファーストビューから中盤までは学生ご本人、料金セクション以降は保護者の方に向けて書いています。この切り替えは画面上でも注記として明示しています。読み手が自分の読むべき場所を判断できるようにするためです。</p>
+          </div>
+          <div className="border-t border-[#E6E9ED] pt-6">
+            <h3 className="font-bold text-[#12131A] mb-2">上半分（学生向け）でやること</h3>
+            <ul className="space-y-2 list-disc pl-5">
+              <li>最初に出す数字は「何日で終わるか」。学生の意思決定は費用より予定です</li>
+              <li>キャンペーンは金額そのものを大きく出します</li>
+              <li>コースは時限数より「どんな人向けか」を先に書きます</li>
+            </ul>
+          </div>
+          <div className="border-t border-[#E6E9ED] pt-6">
+            <h3 className="font-bold text-[#12131A] mb-2">下半分（保護者向け）でやること</h3>
+            <ul className="space-y-2 list-disc pl-5">
+              <li>総額を税込で1つだけ大きく出します。「〜円から」は使いません</li>
+              <li>追加料金なしと書く以上、<strong className="text-[#12131A]">教習料金に含まれない公的費用も同じ場所に金額付きで書きます</strong>。ここを書かないサイトは、あとで金額が動いたと受け取られます</li>
+              <li>支払い方法・分割回数・連帯保証の要否まで先に書きます</li>
+              <li>キャンセル規定と返金の計算方法を、問い合わせ前に読める場所に置きます</li>
+              <li>FAQは保護者の不安（追加費用・両立・返金・進捗連絡・事故対応）から並べます</li>
+            </ul>
+          </div>
+          <div className="border-t border-[#E6E9ED] pt-6">
+            <h3 className="font-bold text-[#12131A] mb-2">元サイトの3つの課題への対応</h3>
+            <table className="w-full text-[13px]">
+              <tbody>
+                {[
+                  ["ページ遷移が悪い", "判断に必要な情報をTOP1枚で完結させ、下層は詳細確認だけにします"],
+                  ["スマホファーストでない", "スマホ幅を先に組み、電話とフォームを画面下に常時固定します"],
+                  ["ターゲットが不明確", "上下で読み手を分け、どちらにも中途半端にならない構成にします"],
+                ].map(([a, b], i) => (
+                  <tr key={i} className="border-t border-[#E6E9ED]">
+                    <td className="py-2.5 pr-3 font-bold text-[#12131A] whitespace-nowrap align-top">{a}</td>
+                    <td className="py-2.5 text-[#5B5F6B]">{b}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="border-t border-[#E6E9ED] pt-6">
+            <h3 className="font-bold text-[#12131A] mb-2">2案の違い</h3>
+            <p className="mb-3"><strong className="text-[#12131A]">案A</strong>は写真を全画面で使い、キャッチと数字を大きく出します。学生の反応は取りやすい一方、保護者は料金まで到達しないと安心材料に触れません。</p>
+            <p><strong className="text-[#12131A]">案B</strong>はファーストビューの右側に総額とコース比較を置きます。保護者が最初の画面で判断できますが、学生に対する引きは案Aより弱くなります。</p>
+            <p className="mt-3 text-[13px] text-[#5B5F6B]">どちらも下半分の構成（料金・支払い・キャンセル・FAQ）は同じです。変えているのは上半分の強さと、料金の見せ方です。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ==================================================================
+   ヘッダー
+================================================================== */
+function Header({ plan, onContact }) {
+  const p = PLANS[plan];
+  const dark = p.heroKind === "photo";
+  const [open, setOpen] = useState(false);
+  const nav = [["選ばれる理由", "reasons"], ["コース", "courses"], ["料金", "price"], ["流れ", "flow"], ["よくある質問", "faq"]];
+  const go = (id) => { setOpen(false); const el = document.getElementById(id); if (el) el.scrollIntoView({ behavior: "smooth" }); };
+  return (
+    <header className={`sticky top-[49px] z-40 ${dark ? "bg-[#12131A]/92 text-white" : "bg-white/95 text-[var(--ink)] border-b border-[var(--line)]"} backdrop-blur`}>
+      <div className="max-w-6xl mx-auto px-4 h-16 flex items-center gap-4">
+        <div className="flex items-center gap-2.5 mr-auto">
+          <div className={`w-9 h-9 ${p.roundSm} flex items-center justify-center font-black text-white text-lg`} style={{ background: "var(--pri)" }}>み</div>
+          <div className="leading-tight">
+            <div className="font-bold text-[15px]">{SITE.school.name}</div>
+            <div className={`text-[10px] tracking-widest ${dark ? "text-white/45" : "text-[var(--sub)]"}`}>{SITE.school.nameEn}</div>
+          </div>
+        </div>
+        <nav className="hidden lg:flex items-center gap-6 text-[13px] font-bold">
+          {nav.map(([l, id]) => (
+            <button key={id} onClick={() => go(id)} className="hover:text-[var(--pri)] transition">{l}</button>
+          ))}
+        </nav>
+        <a href={`tel:${SITE.school.tel.replace(/-/g, "")}`} className="hidden md:block text-right leading-tight">
+          <div className={`text-[10px] ${dark ? "text-white/45" : "text-[var(--sub)]"}`}>お電話でのご相談</div>
+          <div className="font-black text-[17px] tracking-tight">{SITE.school.tel}</div>
+        </a>
+        <button onClick={onContact} className={`hidden sm:block px-4 py-2.5 ${p.roundSm} text-white text-[13px] font-bold`} style={{ background: "var(--pri)" }}>
+          資料請求・無料相談
+        </button>
+        <button onClick={() => setOpen(!open)} className="lg:hidden w-9 h-9 flex flex-col items-center justify-center gap-1.5">
+          <span className={`block w-5 h-0.5 ${dark ? "bg-white" : "bg-[var(--ink)]"}`} />
+          <span className={`block w-5 h-0.5 ${dark ? "bg-white" : "bg-[var(--ink)]"}`} />
+        </button>
+      </div>
+      {open && (
+        <div className={`lg:hidden border-t ${dark ? "border-white/10 bg-[#12131A]" : "border-[var(--line)] bg-white"} px-4 py-2`}>
+          {nav.map(([l, id]) => (
+            <button key={id} onClick={() => go(id)} className="block w-full text-left py-3 text-[15px] font-bold border-b border-white/10 last:border-0">{l}</button>
+          ))}
+        </div>
+      )}
+    </header>
+  );
+}
+
+/* ==================================================================
+   1. ファーストビュー（学生向け）
+================================================================== */
+function Hero({ plan, onContact }) {
+  const p = PLANS[plan];
+  const h = SITE.hero;
+
+  if (p.heroKind === "photo") {
+    /* 案A：全画面写真。キャッチと数字だけを乗せます。 */
+    return (
+      <section className="relative">
+        <Photo label="［写真］校舎前で教習車に乗り込む学生（横位置・夕方の光）" tone={0} round="rounded-none" overlay
+               className="absolute inset-0 w-full h-full" />
+        <div className="relative max-w-6xl mx-auto px-4 pt-16 pb-20 md:pt-28 md:pb-32">
+          <div className="inline-flex items-center gap-2 bg-[var(--accent)] text-[#12131A] text-[12px] font-black px-3.5 py-2 rounded-full mb-6">
+            <span className="w-2 h-2 rounded-full bg-[#12131A]" />学生応援キャンペーン 実施中｜22,000円OFF
+          </div>
+          <h1 className="text-white font-black tracking-tight leading-[1.08] text-[40px] sm:text-6xl md:text-7xl">
+            {h.catchA[0]}<br />
+            <span className="text-[var(--accent)]">{h.catchA[1]}</span>
+          </h1>
+          <p className="mt-6 text-white/85 text-[15px] md:text-lg leading-relaxed max-w-xl">{h.leadA}</p>
+
+          <div className="mt-10 grid grid-cols-3 gap-2 md:gap-4 max-w-2xl">
+            {h.stats.map((s, i) => (
+              <div key={i} className="bg-white/10 backdrop-blur border border-white/20 rounded-2xl p-3 md:p-5">
+                <div className="text-white font-black leading-none">
+                  <span className="text-[26px] md:text-[42px]">{s.num}</span>
+                  <span className="text-[12px] md:text-base ml-0.5">{s.unit}</span>
+                </div>
+                <div className="text-[10px] md:text-[12px] text-white/70 mt-2 leading-snug">{s.label}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-10 flex flex-col sm:flex-row gap-3 max-w-xl">
+            <button onClick={onContact} className="flex-1 bg-[var(--pri)] text-white font-black text-[16px] py-4 rounded-full shadow-lg shadow-black/20">
+              無料で卒業予定日を出す
+            </button>
+            <a href={`tel:${SITE.school.tel.replace(/-/g, "")}`}
+               className="flex-1 bg-white/95 text-[var(--ink)] font-black text-[16px] py-4 rounded-full text-center">
+              電話で相談 {SITE.school.tel}
+            </a>
+          </div>
+          <p className="mt-4 text-[12px] text-white/60">{SITE.school.telHours}／{SITE.school.access}</p>
+        </div>
+      </section>
+    );
+  }
+
+  /* 案B：左に訴求、右に総額とコースの要点。最初の画面で判断材料を出します。 */
+  return (
+    <section className="bg-[var(--tint)] border-b border-[var(--line)]">
+      <div className="max-w-6xl mx-auto px-4 py-12 md:py-20 grid lg:grid-cols-[1.05fr_.95fr] gap-10 items-start">
+        <div>
+          <div className="inline-flex items-center gap-2 bg-[var(--pri)] text-white text-[12px] font-bold px-3 py-1.5 rounded mb-5">
+            学生応援キャンペーン 22,000円OFF
+          </div>
+          <h1 className="text-[32px] sm:text-5xl font-bold tracking-tight leading-[1.15] text-[var(--ink)]">
+            {SITE.hero.catchB}
+          </h1>
+          <p className="mt-5 text-[15px] leading-relaxed text-[var(--sub)] max-w-lg">{SITE.hero.leadB}</p>
+          <div className="mt-7 grid grid-cols-3 gap-3 max-w-lg">
+            {SITE.hero.stats.map((s, i) => (
+              <div key={i} className="bg-white border border-[var(--line)] rounded-lg p-3.5">
+                <div className="text-[var(--pri)] font-bold leading-none">
+                  <span className="text-[24px] md:text-[32px]">{s.num}</span><span className="text-[12px] ml-0.5">{s.unit}</span>
+                </div>
+                <div className="text-[11px] text-[var(--sub)] mt-2 leading-snug">{s.label}</div>
+              </div>
+            ))}
+          </div>
+          <div className="mt-8 flex flex-col sm:flex-row gap-3 max-w-lg">
+            <button onClick={onContact} className="flex-1 bg-[var(--pri)] text-white font-bold text-[15px] py-3.5 rounded">
+              資料請求・無料相談
+            </button>
+            <a href={`tel:${SITE.school.tel.replace(/-/g, "")}`}
+               className="flex-1 border-2 border-[var(--pri)] text-[var(--pri)] font-bold text-[15px] py-3.5 rounded text-center">
+              {SITE.school.tel}
+            </a>
+          </div>
+          <p className="mt-3 text-[12px] text-[var(--sub)]">{SITE.school.telHours}</p>
+        </div>
+
+        <div className="bg-white border border-[var(--line)] rounded-lg overflow-hidden shadow-sm">
+          <Photo label="［写真］教習コースの俯瞰（横位置）" tone={2} round="rounded-none" className="h-36 md:h-44" />
+          <div className="px-5 py-4 border-b border-[var(--line)] bg-[var(--tint)]">
+            <div className="text-[13px] font-bold text-[var(--ink)]">学生プラン 総額（税込）</div>
+            <div className="text-[11px] text-[var(--sub)] mt-0.5">追加技能・再検定の追加料金はいただきません</div>
+          </div>
+          <table className="w-full text-[13px]">
+            <tbody>
+              {SITE.prices.slice(0, 4).map((pr) => (
+                <tr key={pr.id} className="border-b border-[var(--line)]">
+                  <td className="px-5 py-3 font-bold text-[var(--ink)]">{pr.name}</td>
+                  <td className="px-2 py-3 text-right text-[11px] text-[var(--sub)] line-through whitespace-nowrap">{yen(pr.normal)}</td>
+                  <td className="px-5 py-3 text-right font-bold text-[var(--pri)] text-[15px] whitespace-nowrap">{yen(pr.student)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <button onClick={() => { const el = document.getElementById("price"); if (el) el.scrollIntoView({ behavior: "smooth" }); }}
+            className="w-full px-5 py-3.5 text-[13px] font-bold text-[var(--pri)] hover:bg-[var(--tint)] transition text-left">
+            料金の内訳・支払い方法を見る（保護者の方向け）→
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ==================================================================
+   キャンペーン帯（学生向け）
+================================================================== */
+function Campaigns({ plan }) {
+  const p = PLANS[plan];
+  const dark = p.heroKind === "photo";
+  return (
+    <section className={dark ? "bg-[var(--ink)] py-10" : "bg-white py-12 border-b border-[var(--line)]"}>
+      <div className="max-w-6xl mx-auto px-4">
+        <div className={`text-[12px] font-bold tracking-widest mb-5 ${dark ? "text-white/50" : "text-[var(--sub)]"}`}>
+          CAMPAIGN｜併用できます
+        </div>
+        <div className="grid sm:grid-cols-3 gap-3 md:gap-4">
+          {SITE.campaigns.map((c, i) => (
+            <div key={i} className={`p-5 ${p.round} ${
+              dark ? "bg-white/[.07] border border-white/15 text-white" : "bg-[var(--tint)] border border-[var(--line)]"}`}>
+              <span className="inline-block text-[10px] font-black px-2 py-1 rounded bg-[var(--pri)] text-white mb-3">{c.tag}</span>
+              <div className={`font-bold text-[15px] ${dark ? "" : "text-[var(--ink)]"}`}>{c.title}</div>
+              <div className={`font-black mt-1 ${dark ? "text-[var(--accent)] text-[28px]" : "text-[var(--pri)] text-[26px]"}`}>{c.off}</div>
+              <p className={`text-[12px] mt-2 leading-relaxed ${dark ? "text-white/60" : "text-[var(--sub)]"}`}>{c.note}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ==================================================================
+   2. 選ばれる理由（学生向け）
+================================================================== */
+const ICONS = {
+  schedule: "M8 2v3M16 2v3M3.5 9h17M4 5h16a1 1 0 011 1v14a1 1 0 01-1 1H4a1 1 0 01-1-1V6a1 1 0 011-1z",
+  bus: "M4 16V6a2 2 0 012-2h12a2 2 0 012 2v10M4 16h16M4 16v2a1 1 0 001 1h1a1 1 0 001-1v-2M20 16v2a1 1 0 01-1 1h-1a1 1 0 01-1-1v-2M4 11h16M7.5 13.5h.01M16.5 13.5h.01",
+  yen: "M12 21V11m0 0L6.5 4M12 11l5.5-7M7 13h10M7 17h10",
+  instructor: "M12 12a4 4 0 100-8 4 4 0 000 8zM4 21v-1a6 6 0 016-6h4a6 6 0 016 6v1",
+};
+function Reasons({ plan }) {
+  const p = PLANS[plan];
+  const withPhoto = p.courseKind === "cards";
+  return (
+    <section id="reasons" className="py-16 md:py-24 bg-white">
+      <div className="max-w-6xl mx-auto px-4">
+        <SectionHead plan={p} who="student" eyebrow="REASON" title="みどりが選ばれている4つの理由"
+          lead="学校もバイトも止めずに、決めた時期までに卒業するための体制です。" />
+        <div className={`grid gap-4 md:gap-5 ${withPhoto ? "md:grid-cols-2" : "md:grid-cols-4"}`}>
+          {SITE.reasons.map((r, i) => (
+            <div key={i} className={`${p.round} border border-[var(--line)] overflow-hidden bg-white`}>
+              {withPhoto && <Photo label={`［写真］${r.title}`} tone={i + 1} round="rounded-none" className="h-36" />}
+              <div className="p-5 md:p-6">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className={`w-10 h-10 shrink-0 ${p.roundSm} flex items-center justify-center`} style={{ background: "var(--tint)" }}>
+                    <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="var(--pri)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <path d={ICONS[r.icon]} />
+                    </svg>
+                  </div>
+                  <div className="text-[12px] font-bold text-[var(--pri)]">{r.lead}</div>
+                </div>
+                <h3 className="font-bold text-[17px] text-[var(--ink)] mb-2">{r.title}</h3>
+                <p className="text-[13px] leading-relaxed text-[var(--sub)]">{r.body}</p>
+                <div className="mt-4 pt-3 border-t border-dashed border-[var(--line)] flex gap-2">
+                  <span className="text-[10px] font-bold text-[var(--ink)] bg-[var(--tint)] px-2 py-0.5 rounded shrink-0 h-fit">保護者の方へ</span>
+                  <p className="text-[12px] leading-relaxed text-[var(--sub)]">{r.forParent}</p>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ==================================================================
+   3. コース一覧（学生向け）
+================================================================== */
+function Courses({ plan, onContact }) {
+  const p = PLANS[plan];
+  const priceOf = (id) => SITE.prices.find((x) => x.id === id);
+
+  return (
+    <section id="courses" className={`py-16 md:py-24 ${p.courseKind === "cards" ? "bg-[var(--tint)]" : "bg-white"}`}>
+      <div className="max-w-6xl mx-auto px-4">
+        <SectionHead plan={p} who="student" eyebrow="COURSE" title="取れる免許とコース"
+          lead="迷ったときは、いま乗りたい車ではなく「就職してから乗る車」で選ぶと外れません。窓口でも一緒に決められます。" />
+
+        {p.courseKind === "cards" ? (
+          /* 案A：写真カード。どんな人向けかを先に読ませます。 */
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
+            {SITE.courses.map((c) => {
+              const pr = priceOf(c.id);
+              return (
+                <div key={c.id} className={`bg-white ${p.round} overflow-hidden border-2 ${c.popular ? "border-[var(--pri)]" : "border-transparent"} shadow-sm`}>
+                  <div className="relative">
+                    <Photo label={`［写真］${c.name}の教習車`} tone={c.color} round="rounded-none" className="h-40" />
+                    {c.popular && (
+                      <span className="absolute top-3 left-3 bg-[var(--pri)] text-white text-[11px] font-black px-2.5 py-1 rounded-full">人気No.1</span>
+                    )}
+                    <span className="absolute bottom-3 right-3 bg-[#12131A]/85 text-white text-[11px] font-bold px-2.5 py-1 rounded-full">{c.shortest}</span>
+                  </div>
+                  <div className="p-5">
+                    <div className="flex items-baseline gap-2">
+                      <h3 className="font-black text-[20px] text-[var(--ink)]">{c.name}</h3>
+                      <span className="text-[12px] text-[var(--sub)]">{c.sub}</span>
+                    </div>
+                    <div className="text-[12px] font-bold text-[var(--pri)] mt-1">{c.forWho}</div>
+                    <ul className="mt-3 space-y-1.5">
+                      {c.point.map((t, i) => (
+                        <li key={i} className="text-[12.5px] leading-relaxed text-[var(--sub)] flex gap-1">
+                          <span className="text-[var(--pri)] font-bold">・</span>{t}
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="mt-4 pt-4 border-t border-[var(--line)] flex items-end justify-between">
+                      <div>
+                        <div className="text-[11px] text-[var(--sub)]">{c.lesson}</div>
+                        <div className="text-[11px] text-[var(--sub)] mt-1">学生プラン 総額（税込）</div>
+                      </div>
+                      <div className="text-right leading-none">
+                        <div className="text-[11px] text-[var(--sub)] line-through">{yen(pr.normal)}</div>
+                        <div className="font-black text-[22px] text-[var(--pri)] mt-1">{yen(pr.student)}</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          /* 案B：比較表。並べて比べられることを優先します。 */
+          <div className="border border-[var(--line)] rounded-lg overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-[13px] min-w-[720px]">
+                <thead>
+                  <tr className="bg-[var(--tint)] text-[var(--ink)]">
+                    {["コース", "こんな方向け", "教習時限", "最短期間", "学生プラン総額（税込）"].map((h, i) => (
+                      <th key={i} className={`px-4 py-3 font-bold border-b border-[var(--line)] ${i === 4 ? "text-right" : "text-left"}`}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {SITE.courses.map((c) => {
+                    const pr = priceOf(c.id);
+                    return (
+                      <tr key={c.id} className="border-b border-[var(--line)] last:border-0">
+                        <td className="px-4 py-4">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-[15px] text-[var(--ink)]">{c.name}</span>
+                            {c.popular && <span className="text-[10px] font-bold bg-[var(--pri)] text-white px-1.5 py-0.5 rounded">人気</span>}
+                          </div>
+                          <div className="text-[11px] text-[var(--sub)] mt-0.5">{c.sub}</div>
+                        </td>
+                        <td className="px-4 py-4 text-[var(--sub)]">
+                          <div className="font-bold text-[var(--ink)] text-[12.5px]">{c.forWho}</div>
+                          <div className="text-[12px] mt-1 leading-relaxed">{c.point[0]}</div>
+                        </td>
+                        <td className="px-4 py-4 text-[var(--sub)] whitespace-nowrap text-[12px]">
+                          {c.lesson.split(" / ").map((x, i) => <div key={i}>{x}</div>)}
+                        </td>
+                        <td className="px-4 py-4 font-bold text-[var(--accent)] whitespace-nowrap">{c.shortest}</td>
+                        <td className="px-4 py-4 text-right whitespace-nowrap">
+                          <div className="text-[11px] text-[var(--sub)] line-through">{yen(pr.normal)}</div>
+                          <div className="font-bold text-[18px] text-[var(--pri)]">{yen(pr.student)}</div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div className="grid sm:grid-cols-3 gap-px bg-[var(--line)]">
+              {["［写真］普通車の教習風景", "［写真］二輪コース", "［写真］送迎バス"].map((l, i) => (
+                <Photo key={i} label={l} tone={[0, 2, 4][i]} round="rounded-none" className="h-28" />
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="mt-8 flex flex-col sm:flex-row gap-3 items-center justify-center">
+          <button onClick={onContact} className={`px-8 py-4 ${p.round} bg-[var(--pri)] text-white font-bold text-[15px]`}>
+            コース選びを相談する（無料）
+          </button>
+          <span className="text-[12px] text-[var(--sub)]">迷っている段階でのご相談で構いません</span>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ==================================================================
+   ★ 読み手の切り替え帯（この提案の中心）
+================================================================== */
+function AudienceSwitch() {
+  return (
+    <section className="bg-[var(--ink)] text-white">
+      <div className="max-w-4xl mx-auto px-4 py-10 md:py-14">
+        <div className="flex items-center gap-3 justify-center mb-6">
+          <span className="h-px flex-1 bg-white/20" />
+          <span className="text-[11px] font-black tracking-[.2em] text-white/50 text-center">ここから読み手が変わります</span>
+          <span className="h-px flex-1 bg-white/20" />
+        </div>
+        <div className="grid sm:grid-cols-2 gap-3 md:gap-4">
+          <div className="rounded-2xl border border-white/15 bg-white/[.06] p-5">
+            <div className="text-[11px] font-bold text-white/45 mb-2">ここまで（上半分）</div>
+            <div className="font-bold text-[17px] text-[var(--accent)] mb-2">学生ご本人へ</div>
+            <p className="text-[13px] leading-relaxed text-white/70">
+              いつ免許が取れるか、学校やバイトと両立できるか、いくら安くなるか。決めるために必要なのはこの3つだと考え、写真と数字で先に出しました。
+            </p>
+          </div>
+          <div className="rounded-2xl border border-white/15 bg-white/[.06] p-5">
+            <div className="text-[11px] font-bold text-white/45 mb-2">ここから下（下半分）</div>
+            <div className="font-bold text-[17px] text-white mb-2">保護者の方へ</div>
+            <p className="text-[13px] leading-relaxed text-white/70">
+              総額はいくらか、あとから増えないか、どう支払うか、やめたらどうなるか。ここから先は、この4点にすべて答える書き方に切り替えます。
+            </p>
+          </div>
+        </div>
+        <p className="mt-6 text-[12px] leading-relaxed text-white/45 text-center max-w-2xl mx-auto">
+          ※ この注記は、同じ1ページの中で読み手が入れ替わる設計であることを示すためのものです。
+          高校生の場合、申込みを決めるのはご本人でも、支払いを判断するのは保護者の方であることが多いためです。
+          実装時は、保護者の方がスマホでこの位置から読み始められるよう、ここをメニュー「料金」からの着地点にします。
+        </p>
+      </div>
+    </section>
+  );
+}
+
+/* ==================================================================
+   4. 料金（保護者向け）
+================================================================== */
+function Pricing({ plan }) {
+  const p = PLANS[plan];
+  const [sel, setSel] = useState("at");
+  const cur = SITE.prices.find((x) => x.id === sel);
+  const course = SITE.courses.find((x) => x.id === sel);
+  const extra = SITE.notIncluded.reduce((s, x) => s + parseInt(x.amt.replace(/[^0-9]/g, ""), 10), 0);
+
+  return (
+    <section id="price" className="py-16 md:py-24 bg-white">
+      <div className="max-w-5xl mx-auto px-4">
+        <SectionHead plan={p} who="parent" eyebrow="PRICE" title="料金｜表示している金額が、お支払いの総額です"
+          lead="教習所の料金は、あとから追加費用が出ることを不安に思われる方が多い項目です。当校では、教習料金に含まれるものと、含まれない公的費用の両方を、同じ場所に金額付きで記載しています。" />
+
+        <div className="flex flex-wrap gap-2 mb-6">
+          {SITE.prices.map((pr) => (
+            <button key={pr.id} onClick={() => setSel(pr.id)}
+              className={`px-4 py-2.5 ${p.roundSm} text-[13px] font-bold border-2 transition ${
+                sel === pr.id ? "border-[var(--pri)] bg-[var(--pri)] text-white" : "border-[var(--line)] text-[var(--sub)] hover:border-[var(--pri)]"}`}>
+              {pr.name}
+            </button>
+          ))}
+        </div>
+
+        <div className={`${p.round} border-2 border-[var(--pri)] overflow-hidden`}>
+          <div className="bg-[var(--pri)] text-white px-6 py-3 flex flex-wrap items-center gap-x-4 gap-y-1">
+            <span className="font-bold text-[15px]">{cur.name}｜学生プラン</span>
+            <span className="text-[12px] text-white/80">{course.lesson}・{course.shortest}</span>
+          </div>
+          <div className="p-6 md:p-8 grid md:grid-cols-[1fr_auto] gap-6 items-center">
+            <div>
+              <div className="text-[13px] text-[var(--sub)] mb-1">お支払い総額（税込・キャンペーン適用後）</div>
+              <div className="flex items-end gap-3 flex-wrap">
+                <span className="text-[var(--sub)] line-through text-[16px]">{yen(cur.normal)}</span>
+                <span className={`text-[40px] md:text-[54px] leading-none text-[var(--pri)] ${p.display}`}>{yen(cur.student)}</span>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {["追加技能教習料 0円", "再検定料 0円", "時限数の上限なし"].map((t) => (
+                  <span key={t} className="text-[12px] font-bold bg-[var(--tint)] text-[var(--ink)] px-2.5 py-1 rounded">{t}</span>
+                ))}
+              </div>
+            </div>
+            <div className={`bg-[var(--tint)] ${p.roundSm} p-5 text-center md:min-w-[210px]`}>
+              <div className="text-[12px] text-[var(--sub)]">運転免許ローン 24回払いの場合</div>
+              <div className="text-[26px] font-bold text-[var(--ink)] mt-1 leading-none">月々 {yen(cur.monthly)}</div>
+              <div className="text-[11px] text-[var(--sub)] mt-2">頭金0円・実質年率3.9%での概算です</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid md:grid-cols-2 gap-4 md:gap-5 mt-5">
+          <div className={`${p.round} border border-[var(--line)] p-6`}>
+            <h3 className="font-bold text-[16px] text-[var(--ink)] mb-1">この総額に含まれるもの</h3>
+            <p className="text-[12px] text-[var(--sub)] mb-4">下記はすべて総額に含まれます。別途の請求はありません。</p>
+            <ul className="grid sm:grid-cols-2 gap-x-4 gap-y-2">
+              {SITE.included.map((t, i) => (
+                <li key={i} className="text-[13px] text-[var(--sub)] flex gap-2 items-start">
+                  <svg viewBox="0 0 20 20" className="w-4 h-4 mt-0.5 shrink-0" fill="none" stroke="var(--accent)" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M4 10.5l4 4 8-9" />
+                  </svg>{t}
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className={`${p.round} border-2 border-dashed border-[var(--line)] p-6 bg-[var(--tint)]`}>
+            <h3 className="font-bold text-[16px] text-[var(--ink)] mb-1">この総額に含まれない費用</h3>
+            <p className="text-[12px] text-[var(--sub)] mb-4">
+              公的な手数料のため、教習料金には含められません。金額と支払先を先に記載します。
+            </p>
+            <table className="w-full text-[13px]">
+              <tbody>
+                {SITE.notIncluded.map((x, i) => (
+                  <tr key={i} className="border-b border-[var(--line)]">
+                    <td className="py-2.5 pr-2 text-[var(--ink)] font-medium align-top">
+                      {x.name}
+                      <div className="text-[11px] text-[var(--sub)] font-normal mt-0.5">{x.who}</div>
+                    </td>
+                    <td className="py-2.5 text-right font-bold text-[var(--ink)] whitespace-nowrap align-top">{x.amt}</td>
+                  </tr>
+                ))}
+                <tr>
+                  <td className="pt-3 font-bold text-[var(--ink)]">合計</td>
+                  <td className="pt-3 text-right font-bold text-[var(--ink)]">{yen(extra)}</td>
+                </tr>
+              </tbody>
+            </table>
+            <p className="mt-4 text-[12px] leading-relaxed text-[var(--sub)] border-t border-[var(--line)] pt-3">
+              つまり、{cur.name}の場合に必要になる金額は
+              <strong className="text-[var(--ink)]">{yen(cur.student)} ＋ {yen(extra)} ＝ {yen(cur.student + extra)}</strong>
+              です。これ以外の費用は発生しません。
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-12">
+          <h3 className="font-bold text-[20px] text-[var(--ink)] mb-1">お支払い方法</h3>
+          <p className="text-[13px] text-[var(--sub)] mb-5">4つの方法からお選びいただけます。入校のお申込み後に変更することもできます。</p>
+          <div className="grid sm:grid-cols-2 gap-4">
+            {SITE.payments.map((pm, i) => (
+              <div key={i} className={`${p.roundSm} border border-[var(--line)] p-5 bg-white`}>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="w-6 h-6 rounded-full bg-[var(--pri)] text-white text-[12px] font-bold flex items-center justify-center shrink-0">{i + 1}</span>
+                  <h4 className="font-bold text-[15px] text-[var(--ink)]">{pm.name}</h4>
+                </div>
+                <p className="text-[13px] leading-relaxed text-[var(--sub)]">{pm.detail}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-12">
+          <h3 className="font-bold text-[20px] text-[var(--ink)] mb-1">キャンセル・返金の規定</h3>
+          <p className="text-[13px] text-[var(--sub)] mb-5">
+            進路の変更や体調で続けられなくなる場合があります。どの時点でいくら戻るかを、お申込み前にご確認ください。
+          </p>
+          <div className={`${p.round} border border-[var(--line)] overflow-hidden`}>
+            {SITE.cancel.map((c, i) => (
+              <div key={i} className="flex flex-col sm:flex-row gap-1 sm:gap-4 px-5 py-4 border-b border-[var(--line)] last:border-0">
+                <div className="sm:w-52 shrink-0 font-bold text-[13.5px] text-[var(--ink)] flex items-start gap-2">
+                  <span className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${c.tone === "ok" ? "bg-[var(--accent)]" : "bg-[var(--pri)]"}`} />
+                  {c.when}
+                </div>
+                <div className="text-[13.5px] leading-relaxed text-[var(--sub)] pl-4 sm:pl-0">{c.rule}</div>
+              </div>
+            ))}
+          </div>
+          <p className="mt-3 text-[12px] text-[var(--sub)]">
+            ※ 返金額の計算根拠は書面でお渡しします。ご不明な点は、お申込み前でも窓口・お電話でご確認いただけます。
+          </p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ==================================================================
+   5. 免許取得までの流れ
+================================================================== */
+function Flow({ plan }) {
+  const p = PLANS[plan];
+  return (
+    <section id="flow" className="py-16 md:py-24 bg-[var(--tint)]">
+      <div className="max-w-5xl mx-auto px-4">
+        <SectionHead plan={p} who="parent" eyebrow="FLOW" title="免許取得までの流れ"
+          lead="お申込みから免許証の交付まで、6つの段階に分かれています。普通車ATの場合、通学で平均2〜3か月、最短14日です。" />
+        <div className="relative">
+          <div className="absolute left-[19px] md:left-1/2 top-2 bottom-2 w-0.5 bg-[var(--line)] md:-translate-x-1/2" />
+          <div className="space-y-4 md:space-y-6">
+            {SITE.steps.map((s, i) => (
+              <div key={s.n} className={`relative flex gap-4 md:gap-0 md:items-center ${i % 2 ? "md:flex-row-reverse" : ""}`}>
+                <div className="relative z-10 md:absolute md:left-1/2 md:-translate-x-1/2 shrink-0">
+                  <div className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-white text-[15px] ring-4 ring-[var(--tint)]"
+                       style={{ background: "var(--pri)" }}>{s.n}</div>
+                </div>
+                <div className={`flex-1 md:w-[calc(50%-2.5rem)] md:flex-none bg-white ${p.round} border border-[var(--line)] p-5 ${i % 2 ? "md:mr-auto" : "md:ml-auto"}`}>
+                  <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 mb-2">
+                    <h3 className="font-bold text-[16px] text-[var(--ink)]">{s.title}</h3>
+                    <span className="text-[11px] font-bold text-[var(--pri)] bg-[var(--tint)] px-2 py-0.5 rounded">{s.days}</span>
+                  </div>
+                  <p className="text-[13px] leading-relaxed text-[var(--sub)]">{s.body}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className={`mt-8 bg-white ${p.round} border border-[var(--line)] p-5 flex flex-col sm:flex-row gap-4 items-start`}>
+          <span className="text-[10px] font-bold text-white bg-[var(--ink)] px-2 py-1 rounded shrink-0">保護者の方へ</span>
+          <p className="text-[13px] leading-relaxed text-[var(--sub)]">
+            各段階の進み具合と残り時限数、卒業見込み時期を、月1回ご登録の連絡先にお送りします。
+            教習期限（9か月）が近づいた場合は、期限の2か月前・1か月前にご本人と保護者の方の両方へご連絡します。
+          </p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ==================================================================
+   6. よくある質問
+================================================================== */
+function Faq({ plan }) {
+  const p = PLANS[plan];
+  const [open, setOpen] = useState(0);
+  return (
+    <section id="faq" className="py-16 md:py-24 bg-white">
+      <div className="max-w-3xl mx-auto px-4">
+        <SectionHead plan={p} who="parent" eyebrow="FAQ" title="よくあるご質問"
+          lead="お問い合わせの多い順に並べています。保護者の方からいただくご質問を上に置いています。" />
+        <div className={`${p.round} border border-[var(--line)] overflow-hidden`}>
+          {SITE.faqs.map((f, i) => (
+            <div key={i} className="border-b border-[var(--line)] last:border-0">
+              <button onClick={() => setOpen(open === i ? -1 : i)}
+                className="w-full text-left px-5 py-4 flex items-start gap-3 hover:bg-[var(--tint)] transition">
+                <span className="font-bold text-[var(--pri)] text-[15px] shrink-0">Q</span>
+                <span className="flex-1 font-bold text-[14.5px] leading-relaxed text-[var(--ink)]">{f.q}</span>
+                {f.for === "parent" && (
+                  <span className="hidden sm:inline text-[10px] font-bold text-[var(--sub)] bg-[var(--tint)] px-2 py-0.5 rounded shrink-0 mt-0.5">保護者の方から</span>
+                )}
+                <span className={`shrink-0 text-[var(--sub)] transition-transform mt-0.5 ${open === i ? "rotate-45" : ""}`}>＋</span>
+              </button>
+              {open === i && (
+                <div className="px-5 pb-5 pl-[3.1rem]">
+                  <p className="text-[13.5px] leading-relaxed text-[var(--sub)]">{f.a}</p>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ==================================================================
+   7. 問い合わせ導線（電話とフォームを併記）
+================================================================== */
+function Contact({ plan, formRef }) {
+  const p = PLANS[plan];
+  const [f, setF] = useState({ name: "", rel: "本人（学生）", course: "普通車 AT", tel: "", email: "", reason: SITE.contactReasons[0], when: "指定なし", body: "", agree: false });
+  const [err, setErr] = useState({});
+  const [done, setDone] = useState(false);
+  const set = (k, v) => { setF({ ...f, [k]: v }); setErr({ ...err, [k]: "" }); };
+
+  const submit = (e) => {
+    e.preventDefault();
+    const n = {};
+    if (!f.name.trim()) n.name = "お名前をご入力ください";
+    if (!f.tel.trim() && !f.email.trim()) { n.tel = "電話番号かメールアドレスのどちらかをご入力ください"; n.email = " "; }
+    if (f.tel.trim() && !/^[0-9-]{10,14}$/.test(f.tel.trim())) n.tel = "電話番号の形式をご確認ください";
+    if (f.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email.trim())) n.email = "メールアドレスの形式をご確認ください";
+    if (!f.agree) n.agree = "個人情報の取り扱いへの同意が必要です";
+    setErr(n);
+    if (Object.keys(n).length === 0) setDone(true);
+  };
+
+  const inputCls = (k) => `w-full px-3.5 py-3 ${p.roundSm} border text-[14px] bg-white outline-none focus:border-[var(--pri)] ${err[k] && err[k] !== " " ? "border-[#D93838]" : "border-[var(--line)]"}`;
+
+  return (
+    <section id="contact" ref={formRef} className="py-16 md:py-24 bg-[var(--tint)]">
+      <div className="max-w-5xl mx-auto px-4">
+        <SectionHead plan={p} center eyebrow="CONTACT" title="ご相談・資料請求"
+          lead="学生ご本人・保護者の方、どちらからでもご相談いただけます。しつこい勧誘の電話はいたしません。" />
+
+        <div className="grid lg:grid-cols-[.85fr_1.15fr] gap-4 md:gap-5">
+          <div className={`bg-white ${p.round} border border-[var(--line)] p-6 md:p-7 h-fit`}>
+            <div className="text-[12px] font-bold text-[var(--pri)] tracking-widest mb-2">お電話でのご相談</div>
+            <h3 className="font-bold text-[18px] text-[var(--ink)] mb-4">その場で聞いて決めたい方へ</h3>
+            <a href={`tel:${SITE.school.tel.replace(/-/g, "")}`} className="block">
+              <div className={`text-[30px] md:text-[36px] leading-none text-[var(--ink)] ${p.display}`}>{SITE.school.tel}</div>
+            </a>
+            <div className="text-[12px] text-[var(--sub)] mt-2">{SITE.school.telHours}</div>
+            <a href={`tel:${SITE.school.tel.replace(/-/g, "")}`}
+               className={`mt-5 md:hidden block text-center py-3.5 ${p.roundSm} bg-[var(--pri)] text-white font-bold text-[15px]`}>
+              タップして発信する
+            </a>
+            <div className="mt-6 pt-5 border-t border-[var(--line)] space-y-3">
+              {[["料金と支払い方法のご相談", "保護者の方からのお電話が最も多い内容です"],
+                ["卒業までの予定の相談", "希望の時期をお伝えいただければ、その場で可否をお答えします"],
+                ["送迎バスのルート確認", "ご自宅の最寄りをお伝えください"]].map(([a, b], i) => (
+                <div key={i}>
+                  <div className="text-[13px] font-bold text-[var(--ink)]">{a}</div>
+                  <div className="text-[12px] text-[var(--sub)] mt-0.5">{b}</div>
+                </div>
+              ))}
+            </div>
+            <Photo label="［写真］受付カウンター（横位置）" tone={2} round={p.roundSm} className="h-28 mt-6" />
+          </div>
+
+          <div className={`bg-white ${p.round} border border-[var(--line)] p-6 md:p-7`}>
+            <div className="text-[12px] font-bold text-[var(--pri)] tracking-widest mb-2">フォームでのご相談</div>
+            <h3 className="font-bold text-[18px] text-[var(--ink)] mb-1">24時間受付・翌営業日までにご返信します</h3>
+            <p className="text-[12px] text-[var(--sub)] mb-5">ご希望の連絡時間帯を選べます。授業中・勤務中の着信を避けられます。</p>
+
+            {done ? (
+              <div className={`${p.roundSm} bg-[var(--tint)] border border-[var(--line)] p-8 text-center`}>
+                <div className="w-14 h-14 rounded-full bg-[var(--accent)] mx-auto flex items-center justify-center mb-4">
+                  <svg viewBox="0 0 24 24" className="w-7 h-7" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 13l4 4 10-11" /></svg>
+                </div>
+                <div className="font-bold text-[17px] text-[var(--ink)]">入力内容の確認が完了しました</div>
+                <p className="text-[13px] text-[var(--sub)] mt-2 leading-relaxed">
+                  これはデモのため、送信は行われません。実装時は自動返信メールと管理者通知を設定します。
+                </p>
+                <button onClick={() => setDone(false)} className="mt-5 text-[13px] font-bold text-[var(--pri)] underline">入力画面に戻る</button>
+              </div>
+            ) : (
+              <form onSubmit={submit} className="space-y-4">
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[12px] font-bold text-[var(--ink)] mb-1.5">お名前 <span className="text-[#D93838]">必須</span></label>
+                    <input className={inputCls("name")} value={f.name} onChange={(e) => set("name", e.target.value)} placeholder="緑川 大地" />
+                    {err.name && <p className="text-[11px] text-[#D93838] mt-1">{err.name}</p>}
+                  </div>
+                  <div>
+                    <label className="block text-[12px] font-bold text-[var(--ink)] mb-1.5">ご記入者</label>
+                    <select className={inputCls("rel")} value={f.rel} onChange={(e) => set("rel", e.target.value)}>
+                      {["本人（学生）", "本人（一般）", "保護者"].map((o) => <option key={o}>{o}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[12px] font-bold text-[var(--ink)] mb-1.5">ご希望のコース</label>
+                    <select className={inputCls("course")} value={f.course} onChange={(e) => set("course", e.target.value)}>
+                      {SITE.courses.map((c) => <option key={c.id}>{c.name}</option>)}
+                      <option>まだ決めていない</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[12px] font-bold text-[var(--ink)] mb-1.5">ご相談の内容</label>
+                    <select className={inputCls("reason")} value={f.reason} onChange={(e) => set("reason", e.target.value)}>
+                      {SITE.contactReasons.map((o) => <option key={o}>{o}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[12px] font-bold text-[var(--ink)] mb-1.5">電話番号</label>
+                    <input className={inputCls("tel")} value={f.tel} onChange={(e) => set("tel", e.target.value)} placeholder="090-0000-0000" inputMode="tel" />
+                    {err.tel && err.tel !== " " && <p className="text-[11px] text-[#D93838] mt-1">{err.tel}</p>}
+                  </div>
+                  <div>
+                    <label className="block text-[12px] font-bold text-[var(--ink)] mb-1.5">メールアドレス</label>
+                    <input className={inputCls("email")} value={f.email} onChange={(e) => set("email", e.target.value)} placeholder="example@mail.com" inputMode="email" />
+                    {err.email && err.email !== " " && <p className="text-[11px] text-[#D93838] mt-1">{err.email}</p>}
+                  </div>
+                </div>
+                <p className="text-[11px] text-[var(--sub)] -mt-1">電話・メールのどちらか一方のご入力で送信できます。</p>
+
+                <div>
+                  <label className="block text-[12px] font-bold text-[var(--ink)] mb-1.5">ご連絡しやすい時間帯</label>
+                  <div className="flex flex-wrap gap-2">
+                    {["指定なし", "午前", "午後", "17時以降", "メールのみ希望"].map((o) => (
+                      <button type="button" key={o} onClick={() => set("when", o)}
+                        className={`px-3.5 py-2 ${p.roundSm} text-[13px] font-bold border transition ${
+                          f.when === o ? "border-[var(--pri)] bg-[var(--pri)] text-white" : "border-[var(--line)] text-[var(--sub)]"}`}>{o}</button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[12px] font-bold text-[var(--ink)] mb-1.5">ご質問・ご要望</label>
+                  <textarea className={`${inputCls("body")} h-24 resize-none`} value={f.body} onChange={(e) => set("body", e.target.value)}
+                    placeholder="例）高校3年の子の入校を検討しています。部活が11月まであるのですが、卒業までどのくらいかかりますか。" />
+                </div>
+
+                <label className="flex items-start gap-2.5 cursor-pointer">
+                  <input type="checkbox" checked={f.agree} onChange={(e) => set("agree", e.target.checked)} className="mt-1 w-4 h-4 accent-[var(--pri)]" />
+                  <span className="text-[12.5px] leading-relaxed text-[var(--sub)]">
+                    個人情報の取り扱いに同意します。ご入力いただいた内容は、ご相談への回答以外には使用しません。
+                    {err.agree && <span className="block text-[#D93838] font-bold mt-1">{err.agree}</span>}
+                  </span>
+                </label>
+
+                <button type="submit" className={`w-full py-4 ${p.roundSm} bg-[var(--pri)] text-white font-bold text-[16px]`}>
+                  入力内容を確認する
+                </button>
+                <p className="text-[11px] text-center text-[var(--sub)]">
+                  ※ デモのため、送信内容はどこにも保存・送信されません（入力チェックのみ動作します）
+                </p>
+              </form>
+            )}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ==================================================================
+   フッター / スマホ固定バー
+================================================================== */
+function Footer() {
+  return (
+    <footer className="bg-[var(--ink)] text-white pt-14 pb-28 md:pb-14">
+      <div className="max-w-6xl mx-auto px-4">
+        <div className="grid md:grid-cols-[1.2fr_1fr_1fr] gap-8">
+          <div>
+            <div className="flex items-center gap-2.5 mb-4">
+              <div className="w-9 h-9 rounded flex items-center justify-center font-black text-white text-lg" style={{ background: "var(--pri)" }}>み</div>
+              <div>
+                <div className="font-bold">{SITE.school.name}</div>
+                <div className="text-[10px] tracking-widest text-white/40">{SITE.school.nameEn}</div>
+              </div>
+            </div>
+            <p className="text-[13px] text-white/60 leading-relaxed">
+              {SITE.school.address}<br />{SITE.school.access}<br />{SITE.school.designated}
+            </p>
+          </div>
+          <div>
+            <div className="text-[12px] font-bold text-white/40 mb-3 tracking-wider">サイト内</div>
+            <ul className="space-y-2 text-[13px] text-white/70">
+              {["選ばれる理由", "コース一覧", "料金・支払い方法", "免許取得までの流れ", "よくある質問", "アクセス・送迎バス"].map((l) => <li key={l}>{l}</li>)}
+            </ul>
+          </div>
+          <div>
+            <div className="text-[12px] font-bold text-white/40 mb-3 tracking-wider">お問い合わせ</div>
+            <a href={`tel:${SITE.school.tel.replace(/-/g, "")}`} className="text-[24px] font-black block leading-none">{SITE.school.tel}</a>
+            <div className="text-[12px] text-white/50 mt-2">{SITE.school.telHours}</div>
+          </div>
+        </div>
+        <div className="mt-10 pt-6 border-t border-white/10 text-[11px] text-white/35 leading-relaxed">
+          校名・料金・実績・写真はすべて架空のものです。写真は色付きの枠で代用しています。本ページは提案用のTOPデザイン案です。
+        </div>
+      </div>
+    </footer>
+  );
+}
+
+function MobileBar({ onContact }) {
+  return (
+    <div className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white border-t border-[var(--line)] px-3 py-2.5 flex gap-2 shadow-[0_-4px_16px_rgba(0,0,0,.08)]">
+      <a href={`tel:${SITE.school.tel.replace(/-/g, "")}`}
+         className="flex-1 border-2 border-[var(--pri)] text-[var(--pri)] font-bold text-[14px] py-3 rounded-full text-center">
+        電話で相談
+      </a>
+      <button onClick={onContact} className="flex-1 bg-[var(--pri)] text-white font-bold text-[14px] py-3 rounded-full">
+        資料請求・無料相談
+      </button>
+    </div>
+  );
+}
+
+/* ==================================================================
+   アプリ本体
+================================================================== */
+function App() {
+  const [plan, setPlan] = useState("A");
+  const [showIntent, setShowIntent] = useState(false);
+  const formRef = useRef(null);
+  const p = PLANS[plan];
+
+  const vars = useMemo(() => ({
+    "--pri": p.theme.pri, "--pri-dark": p.theme.priDark, "--accent": p.theme.accent,
+    "--ink": p.theme.ink, "--sub": p.theme.sub, "--tint": p.theme.tint, "--line": p.theme.line,
+  }), [plan]);
+
+  const toContact = () => formRef.current && formRef.current.scrollIntoView({ behavior: "smooth" });
+
+  return (
+    <div style={vars} className="min-h-screen bg-white antialiased">
+      <PlanSwitch plan={plan} setPlan={setPlan} showIntent={showIntent} setShowIntent={setShowIntent} />
+      <Header plan={plan} onContact={toContact} />
+      <Hero plan={plan} onContact={toContact} />
+      <Campaigns plan={plan} />
+      <Reasons plan={plan} />
+      <Courses plan={plan} onContact={toContact} />
+      <AudienceSwitch />
+      <Pricing plan={plan} />
+      <Flow plan={plan} />
+      <Faq plan={plan} />
+      <Contact plan={plan} formRef={formRef} />
+      <Footer />
+      <MobileBar onContact={toContact} />
+      <IntentPanel open={showIntent} onClose={() => setShowIntent(false)} plan={plan} />
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>

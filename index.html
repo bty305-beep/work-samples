@@ -1,0 +1,974 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>業務の悩み 索引 | 中小企業の業務改善・自動化サンプル集</title>
+<meta name="description" content="中小企業の現場で起きている業務の詰まりを、症状から引ける形に並べた索引です。14件の悩みごとに、公開データによる裏づけ、何が起きているか、解決の型、動くデモの場所を記載しています。">
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+:root {
+  --c-base:         #ffffff;
+  --c-paper:        #f5f1e8;
+  --c-ink:          #1b1c1e;
+  --c-ink-2:        #4c4f54;
+  --c-ink-3:        #7d8087;
+  --c-rule:         #ddd7c8;
+  --c-rule-strong:  #b3ab98;
+  --c-accent:       #2d4257;
+  --c-accent-tint:  #eef1f3;
+  --c-caution:      #9c463b;
+  --c-caution-tint: #f3e9e6;
+  --font-mincho: "Hiragino Mincho ProN","Yu Mincho","YuMincho","MS PMincho","Noto Serif JP",serif;
+  --font-gothic: "Hiragino Kaku Gothic ProN","Hiragino Sans","Yu Gothic","YuGothic",Meiryo,"Noto Sans JP",sans-serif;
+  --fs-note:  13px;  --fs-body: 15px;  --fs-sub: 18px;  --fs-head: 24px;  --fs-title: 33px;
+  --lh-body: 1.9;  --lh-head: 1.45;  --ls-body: 0.04em;  --ls-head: 0.06em;
+  --sp-1: 4px;  --sp-2: 8px;  --sp-3: 16px;  --sp-4: 32px;  --sp-5: 64px;
+  --rule-1: 1px;  --rule-2: 2px;
+}
+
+html { -webkit-text-size-adjust: 100%; }
+
+/* Tailwind の preflight は実行時に head の末尾へ挿入されるため、
+   body と a はセレクタの詳細度を上げて上書きされないようにしています。 */
+html body {
+  margin: 0;
+  background: var(--c-base);
+  color: var(--c-ink);
+  font-family: var(--font-gothic);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  letter-spacing: var(--ls-body);
+  text-align: left;
+}
+
+*, *::before, *::after { border-radius: 0; box-shadow: none; }
+
+body a {
+  color: var(--c-accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+body a:hover { text-decoration-thickness: 2px; }
+
+:focus-visible { outline: var(--rule-2) solid var(--c-accent); outline-offset: 2px; }
+
+/* ------------------------------------------------------------------
+   版面
+------------------------------------------------------------------ */
+.p-topbar { border-top: 3px solid var(--c-accent); }
+
+.p-sheet {
+  max-width: 940px;
+  margin: 0 auto;
+  padding: 0 var(--sp-3);
+}
+
+.p-section { padding-top: var(--sp-5); }
+.p-section:last-of-type { padding-bottom: var(--sp-5); }
+
+/* ------------------------------------------------------------------
+   ヘッダー
+------------------------------------------------------------------ */
+.p-masthead { padding-top: var(--sp-4); padding-bottom: var(--sp-4); }
+
+.p-masthead__kicker {
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-head);
+  color: var(--c-ink-3);
+  margin: 0 0 var(--sp-2);
+}
+
+.p-masthead__title {
+  font-family: var(--font-mincho);
+  font-size: var(--fs-title);
+  line-height: var(--lh-head);
+  letter-spacing: var(--ls-head);
+  font-weight: 600;
+  color: var(--c-ink);
+  margin: 0;
+  padding-bottom: var(--sp-3);
+  border-bottom: var(--rule-2) solid var(--c-accent);
+}
+
+.p-masthead__lead {
+  margin: var(--sp-3) 0 0;
+  max-width: 40em;
+  color: var(--c-ink-2);
+}
+
+.p-masthead__meta {
+  margin: var(--sp-3) 0 0;
+  font-size: var(--fs-note);
+  color: var(--c-ink-3);
+}
+
+/* ------------------------------------------------------------------
+   注記帯
+------------------------------------------------------------------ */
+.p-notice {
+  margin-top: var(--sp-4);
+  background: var(--c-caution-tint);
+  border-left: 3px solid var(--c-caution);
+  padding: var(--sp-3);
+}
+
+.p-notice__title {
+  margin: 0 0 var(--sp-1);
+  font-size: var(--fs-note);
+  font-weight: 700;
+  letter-spacing: var(--ls-head);
+  color: var(--c-caution);
+}
+
+.p-notice__body {
+  margin: 0;
+  font-size: var(--fs-note);
+  line-height: 1.8;
+  color: var(--c-ink-2);
+}
+
+/* ------------------------------------------------------------------
+   節見出し
+------------------------------------------------------------------ */
+.p-heading {
+  margin: 0 0 var(--sp-3);
+  padding-bottom: var(--sp-2);
+  border-bottom: var(--rule-2) solid var(--c-rule-strong);
+}
+
+.p-heading__no {
+  display: block;
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-head);
+  color: var(--c-accent);
+  margin-bottom: var(--sp-1);
+}
+
+.p-heading__text {
+  font-family: var(--font-mincho);
+  font-size: var(--fs-head);
+  line-height: var(--lh-head);
+  letter-spacing: var(--ls-head);
+  font-weight: 600;
+  margin: 0;
+}
+
+.p-lead {
+  margin: 0 0 var(--sp-3);
+  max-width: 42em;
+  color: var(--c-ink-2);
+}
+
+/* ------------------------------------------------------------------
+   索引の操作
+------------------------------------------------------------------ */
+.p-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+  font-size: var(--fs-note);
+  color: var(--c-ink-3);
+}
+
+.p-toolbar__spacer { flex: 1 1 auto; }
+
+.p-btn {
+  font-family: var(--font-gothic);
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-body);
+  color: var(--c-accent);
+  background: var(--c-accent-tint);
+  border: var(--rule-1) solid var(--c-rule-strong);
+  padding: var(--sp-1) var(--sp-2);
+  cursor: pointer;
+}
+
+.p-btn:hover { background: var(--c-base); }
+
+/* ------------------------------------------------------------------
+   悩み一覧
+------------------------------------------------------------------ */
+.p-list {
+  border-top: var(--rule-2) solid var(--c-rule-strong);
+  border-bottom: var(--rule-2) solid var(--c-rule-strong);
+}
+
+.p-item { border-bottom: var(--rule-1) solid var(--c-rule); }
+.p-item:last-child { border-bottom: 0; }
+
+.p-item__btn {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: var(--c-base);
+  border: 0;
+  padding: var(--sp-3) 0;
+  cursor: pointer;
+  font-family: inherit;
+  color: inherit;
+}
+
+.p-item__btn:hover { background: var(--c-accent-tint); }
+.p-item__btn[aria-expanded="true"] { background: var(--c-accent-tint); }
+
+.p-item__row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-3);
+  padding: 0 var(--sp-2);
+}
+
+.p-item__no {
+  flex: 0 0 auto;
+  width: 2.6em;
+  font-family: var(--font-mincho);
+  font-size: var(--fs-sub);
+  color: var(--c-accent);
+  letter-spacing: 0;
+}
+
+.p-item__main { flex: 1 1 auto; min-width: 0; }
+
+.p-item__title {
+  font-family: var(--font-mincho);
+  font-size: var(--fs-sub);
+  line-height: var(--lh-head);
+  letter-spacing: var(--ls-head);
+  font-weight: 600;
+  margin: 0;
+}
+
+.p-item__cat {
+  display: block;
+  margin-top: var(--sp-1);
+  font-size: var(--fs-note);
+  color: var(--c-ink-3);
+}
+
+.p-item__state {
+  flex: 0 0 auto;
+  font-size: var(--fs-note);
+  color: var(--c-ink-3);
+  white-space: nowrap;
+}
+
+/* 展開部 */
+.p-panel {
+  background: var(--c-paper);
+  border-top: var(--rule-1) solid var(--c-rule);
+  padding: var(--sp-4) var(--sp-3) var(--sp-4);
+}
+
+.p-panel__inner { max-width: 44em; }
+
+.p-figure {
+  border-top: var(--rule-2) solid var(--c-accent);
+  border-bottom: var(--rule-1) solid var(--c-rule-strong);
+  padding: var(--sp-2) 0 var(--sp-3);
+  margin-bottom: var(--sp-4);
+}
+
+.p-figure__label {
+  margin: 0 0 var(--sp-1);
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-head);
+  color: var(--c-ink-2);
+}
+
+.p-figure__num {
+  margin: 0;
+  font-size: var(--fs-title);
+  line-height: 1.25;
+  font-weight: 700;
+  color: var(--c-accent);
+  letter-spacing: 0.01em;
+  font-feature-settings: "tnum" 1;
+}
+
+.p-figure__unit {
+  font-size: var(--fs-sub);
+  font-weight: 500;
+  margin-left: 2px;
+}
+
+.p-figure__text {
+  margin: 0;
+  font-size: var(--fs-body);
+  color: var(--c-ink);
+}
+
+.p-figure__note {
+  margin: var(--sp-1) 0 0;
+  font-size: var(--fs-note);
+  line-height: 1.8;
+  color: var(--c-ink-2);
+}
+
+.p-figure__src {
+  margin: var(--sp-2) 0 0;
+  font-size: var(--fs-note);
+  line-height: 1.7;
+  color: var(--c-ink-3);
+}
+
+.p-def { margin: 0 0 var(--sp-4); }
+
+.p-def__label {
+  margin: 0 0 var(--sp-1);
+  font-size: var(--fs-note);
+  font-weight: 700;
+  letter-spacing: var(--ls-head);
+  color: var(--c-accent);
+}
+
+.p-def__body { margin: 0; color: var(--c-ink); }
+
+.p-demo {
+  border-top: var(--rule-1) solid var(--c-rule-strong);
+  padding-top: var(--sp-3);
+}
+
+.p-demo__label {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-note);
+  font-weight: 700;
+  letter-spacing: var(--ls-head);
+  color: var(--c-accent);
+}
+
+.p-demo__list { margin: 0; padding: 0; list-style: none; }
+.p-demo__list li { margin-bottom: var(--sp-2); }
+.p-demo__list li:last-child { margin-bottom: 0; }
+
+.p-demo__kind {
+  font-size: var(--fs-note);
+  color: var(--c-ink-3);
+  margin-left: var(--sp-2);
+}
+
+.p-demo__none { margin: 0; color: var(--c-ink-2); }
+
+.p-demo__caution {
+  margin: var(--sp-3) 0 0;
+  font-size: var(--fs-note);
+  line-height: 1.8;
+  color: var(--c-caution);
+}
+
+/* ------------------------------------------------------------------
+   進め方
+------------------------------------------------------------------ */
+.p-steps {
+  margin: 0 0 var(--sp-4);
+  padding: 0;
+  list-style: none;
+  border-top: var(--rule-1) solid var(--c-rule);
+}
+
+.p-steps li {
+  display: flex;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-2);
+  border-bottom: var(--rule-1) solid var(--c-rule);
+}
+
+.p-steps__no {
+  flex: 0 0 auto;
+  width: 2.2em;
+  font-family: var(--font-mincho);
+  font-size: var(--fs-sub);
+  color: var(--c-accent);
+}
+
+.p-steps__body { flex: 1 1 auto; }
+.p-steps__body p { margin: 0; }
+
+.p-steps__note {
+  margin-top: var(--sp-1) !important;
+  font-size: var(--fs-note);
+  color: var(--c-ink-2);
+}
+
+.p-terms {
+  background: var(--c-paper);
+  border-top: var(--rule-2) solid var(--c-rule-strong);
+  padding: var(--sp-3);
+}
+
+.p-terms dl { margin: 0; }
+
+.p-terms dt {
+  font-size: var(--fs-note);
+  font-weight: 700;
+  letter-spacing: var(--ls-head);
+  color: var(--c-accent);
+  margin-bottom: var(--sp-1);
+}
+
+.p-terms dd {
+  margin: 0 0 var(--sp-3);
+  color: var(--c-ink);
+}
+
+.p-terms dd:last-of-type { margin-bottom: 0; }
+
+/* ------------------------------------------------------------------
+   出典と注記
+------------------------------------------------------------------ */
+.p-sources {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: var(--rule-1) solid var(--c-rule);
+}
+
+.p-sources li {
+  display: flex;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-2);
+  border-bottom: var(--rule-1) solid var(--c-rule);
+  font-size: var(--fs-note);
+  line-height: 1.85;
+  color: var(--c-ink-2);
+}
+
+.p-sources__no {
+  flex: 0 0 auto;
+  width: 3.2em;
+  color: var(--c-ink-3);
+}
+
+.p-sources__body { flex: 1 1 auto; }
+.p-sources__body strong { font-weight: 700; color: var(--c-ink); }
+
+.p-colophon {
+  margin-top: var(--sp-4);
+  padding-top: var(--sp-3);
+  border-top: var(--rule-2) solid var(--c-rule-strong);
+  font-size: var(--fs-note);
+  color: var(--c-ink-3);
+}
+
+.p-colophon p { margin: 0 0 var(--sp-1); }
+.p-colophon p:last-child { margin-bottom: 0; }
+
+/* ------------------------------------------------------------------
+   スマートフォン
+------------------------------------------------------------------ */
+@media (max-width: 640px) {
+  :root {
+    --fs-title: 26px;
+    --fs-head: 20px;
+    --fs-sub: 17px;
+    --sp-5: 48px;
+  }
+
+  .p-item__row { flex-wrap: wrap; gap: var(--sp-2); }
+  .p-item__no { width: auto; }
+  .p-item__main { flex: 1 1 100%; order: 3; }
+  .p-item__state { margin-left: auto; }
+  .p-panel { padding-left: var(--sp-2); padding-right: var(--sp-2); }
+  .p-figure__num { font-size: 28px; }
+}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>Babel.registerPreset("react-classic", { presets: [[Babel.availablePresets["react"], { runtime: "classic" }]] });</script>
+<script type="text/babel" data-presets="react-classic">
+const { useState } = React;
+
+/* ------------------------------------------------------------------
+   掲載する悩み。数値はすべて公開データの実測値です。
+   figure が null の項目は、件数による裏づけを用いていません。
+------------------------------------------------------------------ */
+const ITEMS = [
+  {
+    no: "01",
+    cat: "受注・商談",
+    title: "見積り後に連絡が途切れて、失注する",
+    figureLabel: "独自に分類した公開レビュー",
+    figure: "120",
+    unit: "社",
+    figureNote: "うち「連絡が来ない・進捗が分からない」が、否定的な指摘の最多分類でした。工程が長い受注型の業種に集中しています。",
+    source: "出典：公開レビュー120社の独自分類（注記4）",
+    what: "情報は社内にあります。担当者も状況を知っています。ただし顧客が催促するまで外に出てきません。",
+    how: "工程が進んだ時点で自動送信します。担当者が思い出す必要をなくします。",
+    demos: [
+      { label: "受付一元化＋進捗自動連絡 デモ", href: "demos/uketsuke-ichigenka/", kind: "ブラウザで開く" },
+    ],
+  },
+  {
+    no: "02",
+    cat: "問い合わせ・電話",
+    title: "電話が鳴りっぱなしで、手が止まる",
+    figureLabel: "求人票に「電話対応」の記載",
+    figure: "618",
+    unit: "万件",
+    figureNote: "全求人およそ2,000万件のうち、3割強の求人票に「電話対応」が業務として書かれています。",
+    source: "出典：求人ボックスの全文検索件数（注記3）",
+    what: "一次受けが人に固定されていて、聞く・メモする・渡すが全部手作業になっています。",
+    how: "フォームと自動分類で一次受けを機械に寄せます。営業時間外も受付が止まりません。",
+    demos: [
+      { label: "受付一元化＋進捗自動連絡 デモ", href: "demos/uketsuke-ichigenka/", kind: "ブラウザで開く" },
+    ],
+  },
+  {
+    no: "03",
+    cat: "導入の進め方",
+    title: "AIが良いのは分かるが、うちの何に使うのか分からない",
+    figureLabel: "導入の障壁 第1位「具体的な活用場面が不明」",
+    figure: "35.6",
+    unit: "%",
+    figureNote: "同じ調査で、中小企業のAI導入率は20.4%です。導入していない理由の最多が、道具の値段でも人手でもなく「使い道が分からない」でした。",
+    source: "出典：中小企業基盤整備機構「中小企業のAI等の利活用に係る実態調査」（注記1）",
+    what: "道具から入っていて、使い道の特定を飛ばしています。",
+    how: "工程×所要時間×件数で棚卸しし、自動化できる／半分できる／人がやるべき、の3分類に振り分けます。",
+    demos: [
+      { label: "受付一元化＋進捗自動連絡 デモ（①業務棚卸しの画面）", href: "demos/uketsuke-ichigenka/", kind: "ブラウザで開く" },
+    ],
+  },
+  {
+    no: "04",
+    cat: "事務処理",
+    title: "Excelへの転記に毎月何十時間も使っている",
+    figureLabel: "求人票に「データ入力」の記載",
+    figure: "202",
+    unit: "万件",
+    figureNote: "同じ検索で「伝票入力」は34万件です。入力そのものを職務として書いている求人が、この規模で存在します。",
+    source: "出典：求人ボックスの全文検索件数（注記3）",
+    what: "入力の起点が構造化されていないため、人が読み替えて転記しています。",
+    how: "受付・申込の時点で構造化します。既存データはスクリプトで変換します。",
+    demos: [
+      { label: "Excel業務の自動化キット（コードとサンプル出力）", href: "https://github.com/bty305-beep/work-samples/tree/main/excel-kit", kind: "GitHubで見る" },
+    ],
+  },
+  {
+    no: "05",
+    cat: "予約・在庫",
+    title: "ネット予約と電話予約が二重に入る",
+    figureLabel: "独自に分類した公開レビュー",
+    figure: "120",
+    unit: "社",
+    figureNote: "この分類の中で、歯科医院の二重予約が実例として現れました。二重予約の指摘は、来店型の業種に集中しています。",
+    source: "出典：公開レビュー120社の独自分類（注記4）",
+    what: "電話・ネット・窓口・LINEがそれぞれ別の台帳で動いていて、同期していません。",
+    how: "入口が何であれ1つの台帳に集約し、枠の残数を単一のデータで管理します。",
+    demos: [
+      { label: "受付一元化＋進捗自動連絡 デモ", href: "demos/uketsuke-ichigenka/", kind: "ブラウザで開く" },
+      { label: "予約・受付システム デモ", href: "html/yoyaku-system.html", kind: "ブラウザで開く" },
+    ],
+  },
+  {
+    no: "06",
+    cat: "事務処理",
+    title: "突合作業が終わらない",
+    figureLabel: "ココナラでRPA・自動化の出品に付いた販売件数",
+    figure: "158",
+    unit: "件",
+    figureNote: "他の出品者の公開数値です。外注してでも片付けたい作業として需要がある、という目安として引用しています。",
+    source: "出典：ココナラの公開出品情報（注記5）",
+    what: "表記ゆれがあるため機械照合できないと思われています。実際は正規化すれば大半が自動化できます。",
+    how: "突合ルールを定義し、一致・不一致・要確認の3分類で出力します。人は要確認だけを見ます。",
+    demos: [
+      { label: "Excel業務の自動化キット（突合ジョブ・サンプル出力つき）", href: "https://github.com/bty305-beep/work-samples/tree/main/excel-kit", kind: "GitHubで見る" },
+    ],
+  },
+  {
+    no: "07",
+    cat: "問い合わせ・電話",
+    title: "問い合わせに毎回同じ返信を書いている",
+    figureLabel: "求人票に「問い合わせ対応」の記載",
+    figure: "359",
+    unit: "万件",
+    figureNote: "受け答えそのものが職務として書かれている求人が、この規模で存在します。",
+    source: "出典：求人ボックスの全文検索件数（注記3）",
+    what: "質問の大半が定型なのに、全件を人が読んで書いています。",
+    how: "頻出質問を自動応答に寄せ、判断が要るものだけ人に回します。",
+    demos: [
+      { label: "EC向け問い合わせ自動応答 デモ", href: "demos/ec-faq-bot/", kind: "ブラウザで開く" },
+    ],
+  },
+  {
+    no: "08",
+    cat: "予約・在庫",
+    title: "在庫や進捗を誰も把握していない",
+    figureLabel: "求人票に「在庫管理」の記載",
+    figure: "136",
+    unit: "万件",
+    figureNote: "在庫の状態を人が追いかける仕事が、この規模で募集されています。",
+    source: "出典：求人ボックスの全文検索件数（注記3）",
+    what: "管理表が個人のExcelにあり、共有されていません。",
+    how: "状態を1箇所に集約し、更新すると全員に見える形にします。",
+    demos: [
+      { label: "業務管理システム デモ", href: "html/gyomu-kanri.html", kind: "ブラウザで開く" },
+    ],
+  },
+  {
+    no: "09",
+    cat: "情報収集",
+    title: "毎日同じサイトを見て、手で記録している",
+    figureLabel: "件数による裏づけは用いていません",
+    figure: null,
+    unit: null,
+    figureNote: "定期的な情報収集を外部に委託する案件が、継続して発生しています。実務での頻出という水準の記載にとどめます。",
+    source: "出典：クラウドソーシング各社の公開募集情報（注記5）",
+    what: "情報収集が人の習慣に依存していて、抜けても気づきません。",
+    how: "対象・項目・頻度を設定ファイルで定義し、変更点だけをレポートします。",
+    demos: [
+      { label: "データ収集ツール（コードとサンプル出力）", href: "https://github.com/bty305-beep/work-samples/tree/main/scrape-report", kind: "GitHubで見る" },
+    ],
+  },
+  {
+    no: "10",
+    cat: "問い合わせ・電話",
+    title: "LINE公式を作ったが、放置されている",
+    figureLabel: "ココナラでLINE公式アカウント構築の出品に付いた販売件数",
+    figure: "335",
+    unit: "件",
+    figureNote: "他の出品者の公開数値です。関連カテゴリの中で突出しており、作るところまでは需要が大きいことを示しています。",
+    source: "出典：ココナラの公開出品情報（注記5）",
+    what: "顧客接点はLINEに移っているのに、運用の設計がないまま置かれています。",
+    how: "LINEを受付台帳の入口の1つとして統合し、自動応答と有人対応を切り分けます。",
+    demos: [],
+  },
+  {
+    no: "11",
+    cat: "導入の進め方",
+    title: "AIを導入したが、誰も使っていない",
+    figureLabel: "導入支援100社を分析した公開記事",
+    figure: "100",
+    unit: "社",
+    figureNote: "成功した企業は導入前に30〜50業務を棚卸ししていた一方、失敗した企業は棚卸しなしで全社一斉導入していた、と整理されています。",
+    source: "出典：導入支援100社の分析（公開記事／注記6）",
+    what: "全社一斉に入れてしまい、誰の何が楽になるかが伝わっていません。",
+    how: "1部門・1工程から始めます。導入前に測定指標を決めておきます。",
+    demos: [
+      { label: "受付一元化＋進捗自動連絡 デモ（④導入後の数字の画面）", href: "demos/uketsuke-ichigenka/", kind: "ブラウザで開く" },
+    ],
+  },
+  {
+    no: "12",
+    cat: "事務処理",
+    title: "見積書・請求書を毎回手で作っている",
+    figureLabel: "求人票に「見積書作成」の記載",
+    figure: "17",
+    unit: "万件",
+    figureNote: "同じ検索で「請求書発行」は5万件です。書類を作る作業そのものが職務として書かれています。",
+    source: "出典：求人ボックスの全文検索件数（注記3）",
+    what: "マスタがなく、都度ファイルを複製しています。",
+    how: "単価・条件をマスタ化し、選択で生成します。発行状況を一覧化します。",
+    demos: [],
+  },
+  {
+    no: "13",
+    cat: "事務処理",
+    title: "シフト作成に毎月半日かかる",
+    figureLabel: "求人票に「シフト作成」の記載",
+    figure: "165",
+    unit: "万件",
+    figureNote: "人員配置を組む作業が、これだけの求人票に業務として書かれています。",
+    source: "出典：求人ボックスの全文検索件数（注記3）",
+    what: "制約条件（人数・資格・希望）を人が頭の中で解いています。",
+    how: "制約を定義して自動生成し、最終調整だけ人が行います。",
+    demos: [],
+  },
+  {
+    no: "14",
+    cat: "導入の進め方",
+    title: "担当者しか手順を知らない",
+    figureLabel: "件数による裏づけは用いていません",
+    figure: null,
+    unit: null,
+    figureNote: "求人票やレビューでは表に出にくい種類の問題のため、実務で頻出する相談として掲載しています。",
+    source: null,
+    what: "工程が人の記憶に入っていて、外に出ていません。",
+    how: "まず工程を書き出して時間を測ります。そのうえで、自動化するか手順書にするかを分けます。",
+    demos: [
+      { label: "受付一元化＋進捗自動連絡 デモ（①業務棚卸しの画面）", href: "demos/uketsuke-ichigenka/", kind: "ブラウザで開く" },
+    ],
+  },
+];
+
+const SOURCES = [
+  {
+    no: "注記1",
+    body: "中小企業基盤整備機構「中小企業のAI等の利活用に係る実態調査」2026年3月公表。AI導入率20.4%、導入の障壁の第1位「具体的な活用場面が不明」35.6%は本調査による。",
+  },
+  {
+    no: "注記2",
+    body: "商工中金「中小企業の生成AIの利用にかかる調査」2026年1月調査。中小企業における生成AIの利用状況の把握にあたり参照した。",
+  },
+  {
+    no: "注記3",
+    body: "求人票の件数は、求人ボックスの全文検索でその語を含む求人の件数である。付随業務としての記載も含むため、その業務を主業務とする求人の件数ではない。母数となる全求人件数はおよそ2,000万件。",
+  },
+  {
+    no: "注記4",
+    body: "クチコミ分析は、公開されているレビュー120社分を独自に分類したものである。標本の抽出方法が無作為ではないため、統計的代表性は主張しない。件数の多寡ではなく、指摘の内容の傾向を読む目的で用いている。",
+  },
+  {
+    no: "注記5",
+    body: "ココナラおよびクラウドソーシング各社の件数は、各サイトが公開している出品・募集情報の数値である。いずれも他の出品者の数値であり、当方の受注実績ではない。需要の所在を示す目安として引用している。",
+  },
+  {
+    no: "注記6",
+    body: "導入支援100社の分析は、公開記事として発表されている整理を参照したものである。当方が実施した調査ではない。",
+  },
+  {
+    no: "注記7",
+    body: "各デモの画面に表示される件数・金額・削減時間は、すべて動作確認のための想定値である。実在する企業の実績値ではない。",
+  },
+  {
+    no: "注記8",
+    body: "本ページは業務改善・自動化のサンプルを提示するものであり、受注実績を示すものではない。現時点で受注実績はない。",
+  },
+];
+
+/* ------------------------------------------------------------------
+   表示
+------------------------------------------------------------------ */
+function Figure({ item }) {
+  return (
+    <div className="p-figure">
+      <p className="p-figure__label">{item.figureLabel}</p>
+      {item.figure ? (
+        <p className="p-figure__num">
+          {item.figure}
+          <span className="p-figure__unit">{item.unit}</span>
+        </p>
+      ) : null}
+      <p className="p-figure__note">{item.figureNote}</p>
+      {item.source ? <p className="p-figure__src">{item.source}</p> : null}
+    </div>
+  );
+}
+
+function Panel({ item }) {
+  return (
+    <div className="p-panel" id={`panel-${item.no}`} role="region" aria-label={item.title}>
+      <div className="p-panel__inner">
+        <Figure item={item} />
+
+        <div className="p-def">
+          <p className="p-def__label">何が起きているか</p>
+          <p className="p-def__body">{item.what}</p>
+        </div>
+
+        <div className="p-def">
+          <p className="p-def__label">解決の型</p>
+          <p className="p-def__body">{item.how}</p>
+        </div>
+
+        <div className="p-demo">
+          <p className="p-demo__label">動くデモ</p>
+          {item.demos.length > 0 ? (
+            <React.Fragment>
+              <ul className="p-demo__list">
+                {item.demos.map((d) => (
+                  <li key={d.href + d.label}>
+                    <a href={d.href}>{d.label}</a>
+                    <span className="p-demo__kind">{d.kind}</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="p-demo__caution">
+                デモ画面に表示される数値は、すべて動作確認のための想定値です。実在する企業の実績値ではありません。
+              </p>
+            </React.Fragment>
+          ) : (
+            <p className="p-demo__none">
+              現時点で公開しているデモはありません。仕組みとしては対応可能です。
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Item({ item, open, onToggle }) {
+  return (
+    <div className="p-item">
+      <button
+        type="button"
+        className="p-item__btn"
+        aria-expanded={open}
+        aria-controls={`panel-${item.no}`}
+        onClick={onToggle}
+      >
+        <span className="p-item__row">
+          <span className="p-item__no">{item.no}</span>
+          <span className="p-item__main">
+            <span className="p-item__title">{item.title}</span>
+            <span className="p-item__cat">分類：{item.cat}</span>
+          </span>
+          <span className="p-item__state">{open ? "閉じる" : "開く"}</span>
+        </span>
+      </button>
+      {open ? <Panel item={item} /> : null}
+    </div>
+  );
+}
+
+function App() {
+  const [openKeys, setOpenKeys] = useState([]);
+
+  const toggle = (no) =>
+    setOpenKeys((prev) => (prev.includes(no) ? prev.filter((k) => k !== no) : [...prev, no]));
+
+  const openAll = () => setOpenKeys(ITEMS.map((i) => i.no));
+  const closeAll = () => setOpenKeys([]);
+
+  return (
+    <React.Fragment>
+      <div className="p-topbar" />
+
+      <div className="p-sheet">
+        {/* ---------------- ヘッダー ---------------- */}
+        <header className="p-masthead">
+          <p className="p-masthead__kicker">中小企業向け　業務改善・自動化サンプル集</p>
+          <h1 className="p-masthead__title">業務の悩み 索引</h1>
+          <p className="p-masthead__lead">
+            中小企業の現場で起きている業務の詰まりを、症状から引ける形に並べたページです。
+            項目ごとに、公開データによる裏づけ、何が起きているか、解決の型、動くデモの場所を記載しています。
+          </p>
+          <p className="p-masthead__meta">掲載14件／数値の取得時点：2026年8月</p>
+
+          <div className="p-notice">
+            <p className="p-notice__title">数値の扱いについて</p>
+            <p className="p-notice__body">
+              本文に記載した数値は、公開されている調査・求人検索・レビューから取得した実測値です。
+              一方、リンク先のデモ画面に表示される数値は、すべて動作確認のための想定値です。
+              また、本ページは受注実績を示すものではありません。現時点で受注実績はありません。
+            </p>
+          </div>
+        </header>
+
+        {/* ---------------- 悩み一覧 ---------------- */}
+        <section className="p-section">
+          <div className="p-heading">
+            <span className="p-heading__no">一</span>
+            <h2 className="p-heading__text">悩みの索引</h2>
+          </div>
+
+          <p className="p-lead">
+            当てはまる症状の行を選ぶと、その場で内訳が開きます。ページは移動しません。
+          </p>
+
+          <div className="p-toolbar">
+            <span>全{ITEMS.length}件</span>
+            <span className="p-toolbar__spacer" />
+            <button type="button" className="p-btn" onClick={openAll}>すべて開く</button>
+            <button type="button" className="p-btn" onClick={closeAll}>すべて閉じる</button>
+          </div>
+
+          <div className="p-list">
+            {ITEMS.map((item) => (
+              <Item
+                key={item.no}
+                item={item}
+                open={openKeys.includes(item.no)}
+                onToggle={() => toggle(item.no)}
+              />
+            ))}
+          </div>
+        </section>
+
+        {/* ---------------- 進め方 ---------------- */}
+        <section className="p-section">
+          <div className="p-heading">
+            <span className="p-heading__no">二</span>
+            <h2 className="p-heading__text">進め方</h2>
+          </div>
+
+          <p className="p-lead">
+            やりとりはテキストで完結します。通話は行いません。作業はフルリモートで、訪問も行いません。
+          </p>
+
+          <ol className="p-steps">
+            <li>
+              <span className="p-steps__no">一</span>
+              <span className="p-steps__body">
+                <p>当てはまる症状を1つ選びます。上の索引の番号だけでも構いません。</p>
+              </span>
+            </li>
+            <li>
+              <span className="p-steps__no">二</span>
+              <span className="p-steps__body">
+                <p>いま使っているファイルの列名、または工程の順番をテキストで送ります。</p>
+                <p className="p-steps__note">
+                  ファイル本体は不要です。列名と工程が分かれば、実現できるかどうかは判断できます。
+                </p>
+              </span>
+            </li>
+            <li>
+              <span className="p-steps__no">三</span>
+              <span className="p-steps__body">
+                <p>自動化できる／半分できる／人がやるべき、の3分類で返します。</p>
+                <p className="p-steps__note">
+                  「いまは自動化しないほうがよい」という結論もあり得ます。その場合はその旨をお伝えします。
+                </p>
+              </span>
+            </li>
+            <li>
+              <span className="p-steps__no">四</span>
+              <span className="p-steps__body">
+                <p>対象を1工程に絞って着手します。着手前に、何を測るかを決めておきます。</p>
+              </span>
+            </li>
+          </ol>
+
+          <div className="p-terms">
+            <dl>
+              <dt>やりとりの方法</dt>
+              <dd>すべてテキストで行います。通話・オンライン会議は行いません。</dd>
+              <dt>作業の形態</dt>
+              <dd>フルリモートです。訪問・常駐は行いません。</dd>
+              <dt>最初に必要なもの</dt>
+              <dd>現在お使いのファイルの列名、または工程の順番。この2つが分かれば検討を始められます。</dd>
+            </dl>
+          </div>
+        </section>
+
+        {/* ---------------- 出典と注記 ---------------- */}
+        <section className="p-section">
+          <div className="p-heading">
+            <span className="p-heading__no">三</span>
+            <h2 className="p-heading__text">出典と注記</h2>
+          </div>
+
+          <ul className="p-sources">
+            {SOURCES.map((s) => (
+              <li key={s.no}>
+                <span className="p-sources__no">{s.no}</span>
+                <span className="p-sources__body">{s.body}</span>
+              </li>
+            ))}
+          </ul>
+
+          <div className="p-colophon">
+            <p>数値の取得時点：2026年8月。求人検索・出品情報の件数は、取得時点以降に変動します。</p>
+            <p>
+              サンプル一覧は
+              <a href="https://github.com/bty305-beep/work-samples">GitHubのリポジトリ</a>
+              にまとめています。
+            </p>
+          </div>
+        </section>
+      </div>
+    </React.Fragment>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>

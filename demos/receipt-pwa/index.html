@@ -1,0 +1,1766 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>領収書まとめ｜撮影してPDFと会計ソフト取込用CSVを作る</title>
+<meta name="description" content="レシート・領収書をスマートフォンで撮影し、1つのPDFにまとめ、弥生・マネーフォワード・freeeの取込用CSVを作ります。画像もデータも外部に送信せず、端末内だけで処理します。">
+<meta name="theme-color" content="#2d4257">
+<link rel="manifest" href="./manifest.json">
+<link rel="icon" href="./icons/icon-192.png" sizes="192x192" type="image/png">
+<link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="領収書">
+<meta name="mobile-web-app-capable" content="yes">
+<script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.8/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com/3.4.16"></script>
+<script src="https://unpkg.com/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
+<script src="https://unpkg.com/encoding-japanese@2.2.0/encoding.min.js"></script>
+<style>
+:root {
+  --c-base:         #ffffff;
+  --c-paper:        #f5f1e8;
+  --c-ink:          #1b1c1e;
+  --c-ink-2:        #4c4f54;
+  --c-ink-3:        #7d8087;
+  --c-rule:         #ddd7c8;
+  --c-rule-strong:  #b3ab98;
+  --c-accent:       #2d4257;
+  --c-accent-tint:  #eef1f3;
+  --c-caution:      #9c463b;
+  --c-caution-tint: #f3e9e6;
+  --font-mincho: "Hiragino Mincho ProN","Yu Mincho","YuMincho","MS PMincho","Noto Serif JP",serif;
+  --font-gothic: "Hiragino Kaku Gothic ProN","Hiragino Sans","Yu Gothic","YuGothic",Meiryo,"Noto Sans JP",sans-serif;
+  --fs-note:  13px;  --fs-body: 15px;  --fs-sub: 18px;  --fs-head: 24px;  --fs-title: 33px;
+  --lh-body: 1.9;  --lh-head: 1.45;  --ls-body: 0.04em;  --ls-head: 0.06em;
+  --sp-1: 4px;  --sp-2: 8px;  --sp-3: 16px;  --sp-4: 32px;  --sp-5: 64px;
+  --rule-1: 1px;  --rule-2: 2px;
+}
+
+html { -webkit-text-size-adjust: 100%; }
+
+/* Tailwind の preflight は実行時に head の末尾へ挿入されるため、
+   body と a はセレクタの詳細度を上げて上書きされないようにしています。 */
+html body {
+  margin: 0;
+  background: var(--c-base);
+  color: var(--c-ink);
+  font-family: var(--font-gothic);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  letter-spacing: var(--ls-body);
+  text-align: left;
+  padding-bottom: calc(var(--sp-5) + var(--sp-4) + env(safe-area-inset-bottom, 0px));
+}
+
+*, *::before, *::after { border-radius: 0; box-shadow: none; }
+
+body a {
+  color: var(--c-accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+body a:hover { text-decoration-thickness: 2px; }
+
+:focus-visible { outline: var(--rule-2) solid var(--c-accent); outline-offset: 2px; }
+
+/* ------------------------------------------------------------------
+   版面
+------------------------------------------------------------------ */
+.p-topbar { border-top: 3px solid var(--c-accent); }
+
+.p-sheet {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 0 var(--sp-3);
+}
+
+.p-section { padding-top: var(--sp-4); padding-bottom: var(--sp-4); }
+
+/* ------------------------------------------------------------------
+   ヘッダー
+------------------------------------------------------------------ */
+.p-masthead { padding-top: var(--sp-3); padding-bottom: var(--sp-3); }
+
+.p-masthead__kicker {
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-head);
+  color: var(--c-ink-3);
+  margin: 0 0 var(--sp-1);
+}
+
+.p-masthead__title {
+  font-family: var(--font-mincho);
+  font-size: var(--fs-head);
+  line-height: var(--lh-head);
+  letter-spacing: var(--ls-head);
+  font-weight: 600;
+  color: var(--c-ink);
+  margin: 0;
+  padding-bottom: var(--sp-2);
+  border-bottom: var(--rule-2) solid var(--c-accent);
+}
+
+/* ------------------------------------------------------------------
+   注記帯
+------------------------------------------------------------------ */
+.p-notice {
+  margin-top: var(--sp-3);
+  background: var(--c-caution-tint);
+  border-left: 3px solid var(--c-caution);
+  padding: var(--sp-3);
+}
+
+.p-notice--calm {
+  background: var(--c-accent-tint);
+  border-left-color: var(--c-accent);
+}
+
+.p-notice__title {
+  margin: 0 0 var(--sp-1);
+  font-size: var(--fs-note);
+  font-weight: 700;
+  letter-spacing: var(--ls-head);
+  color: var(--c-caution);
+}
+
+.p-notice--calm .p-notice__title { color: var(--c-accent); }
+
+.p-notice__body {
+  margin: 0;
+  font-size: var(--fs-note);
+  line-height: 1.8;
+  color: var(--c-ink-2);
+}
+
+.p-notice__list {
+  margin: var(--sp-1) 0 0;
+  padding-left: 1.2em;
+  list-style: disc;
+  font-size: var(--fs-note);
+  line-height: 1.8;
+  color: var(--c-ink-2);
+}
+
+.p-notice__list li { margin-bottom: var(--sp-1); }
+.p-notice__list li:last-child { margin-bottom: 0; }
+
+/* ------------------------------------------------------------------
+   節見出し
+------------------------------------------------------------------ */
+.p-heading {
+  margin: 0 0 var(--sp-3);
+  padding-bottom: var(--sp-2);
+  border-bottom: var(--rule-2) solid var(--c-rule-strong);
+}
+
+.p-heading__text {
+  font-family: var(--font-mincho);
+  font-size: var(--fs-head);
+  line-height: var(--lh-head);
+  letter-spacing: var(--ls-head);
+  font-weight: 600;
+  margin: 0;
+}
+
+.p-subheading {
+  font-family: var(--font-mincho);
+  font-size: var(--fs-sub);
+  line-height: var(--lh-head);
+  letter-spacing: var(--ls-head);
+  font-weight: 600;
+  margin: var(--sp-4) 0 var(--sp-2);
+  padding-bottom: var(--sp-1);
+  border-bottom: var(--rule-1) solid var(--c-rule);
+}
+
+.p-lead {
+  margin: 0 0 var(--sp-3);
+  color: var(--c-ink-2);
+}
+
+.p-note {
+  margin: var(--sp-2) 0 0;
+  font-size: var(--fs-note);
+  line-height: 1.8;
+  color: var(--c-ink-3);
+}
+
+/* ------------------------------------------------------------------
+   ボタン（指で押すため、高さと間隔を広く取っています）
+------------------------------------------------------------------ */
+.p-btn {
+  display: block;
+  width: 100%;
+  min-height: 56px;
+  font-family: var(--font-gothic);
+  font-size: var(--fs-sub);
+  letter-spacing: var(--ls-body);
+  line-height: 1.4;
+  color: var(--c-accent);
+  background: var(--c-accent-tint);
+  border: var(--rule-2) solid var(--c-accent);
+  padding: var(--sp-2) var(--sp-3);
+  cursor: pointer;
+  text-align: center;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.p-btn:disabled { color: var(--c-ink-3); background: var(--c-paper); border-color: var(--c-rule-strong); cursor: default; }
+
+.p-btn--main {
+  min-height: 68px;
+  color: var(--c-base);
+  background: var(--c-accent);
+  font-size: var(--fs-head);
+  font-family: var(--font-mincho);
+  font-weight: 600;
+  letter-spacing: var(--ls-head);
+}
+
+.p-btn--main:disabled { color: var(--c-base); background: var(--c-rule-strong); border-color: var(--c-rule-strong); }
+
+.p-btn--small {
+  display: inline-block;
+  width: auto;
+  flex: 0 0 auto;
+  white-space: nowrap;
+  min-height: 44px;
+  font-size: var(--fs-body);
+  border-width: var(--rule-1);
+  border-color: var(--c-rule-strong);
+  padding: var(--sp-1) var(--sp-3);
+}
+
+.p-btn--danger { color: var(--c-caution); background: var(--c-caution-tint); border-color: var(--c-caution); }
+
+.p-btn + .p-btn { margin-top: var(--sp-3); }
+
+/* ------------------------------------------------------------------
+   入力欄
+------------------------------------------------------------------ */
+.p-field { margin-bottom: var(--sp-3); }
+
+.p-field__label {
+  display: block;
+  font-size: var(--fs-note);
+  font-weight: 700;
+  letter-spacing: var(--ls-head);
+  color: var(--c-accent);
+  margin-bottom: var(--sp-1);
+}
+
+.p-field__req {
+  margin-left: var(--sp-2);
+  font-weight: 400;
+  color: var(--c-caution);
+}
+
+.p-field__input,
+.p-field__select {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 52px;
+  font-family: var(--font-gothic);
+  font-size: var(--fs-sub);
+  line-height: 1.4;
+  color: var(--c-ink);
+  background: var(--c-base);
+  border: var(--rule-1) solid var(--c-rule-strong);
+  padding: var(--sp-2) var(--sp-3);
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.p-field__select {
+  background-image: linear-gradient(var(--c-base), var(--c-base));
+  padding-right: var(--sp-3);
+}
+
+.p-field__input--wrong { border: var(--rule-2) solid var(--c-caution); background: var(--c-caution-tint); }
+
+.p-field__note {
+  margin: var(--sp-1) 0 0;
+  font-size: var(--fs-note);
+  line-height: 1.7;
+  color: var(--c-ink-3);
+}
+
+.p-note + .p-field { margin-top: var(--sp-3); }
+
+/* ------------------------------------------------------------------
+   撮影
+------------------------------------------------------------------ */
+.p-cam {
+  border: var(--rule-2) solid var(--c-accent);
+  background: var(--c-ink);
+  margin-bottom: var(--sp-3);
+}
+
+.p-cam__video {
+  display: block;
+  width: 100%;
+  max-height: 60vh;
+  object-fit: contain;
+  background: var(--c-ink);
+}
+
+.p-count {
+  margin: 0 0 var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--c-paper);
+  border-top: var(--rule-2) solid var(--c-rule-strong);
+  border-bottom: var(--rule-1) solid var(--c-rule);
+  font-size: var(--fs-note);
+  color: var(--c-ink-2);
+}
+
+.p-count strong {
+  font-family: var(--font-mincho);
+  font-size: var(--fs-head);
+  font-weight: 700;
+  color: var(--c-accent);
+  letter-spacing: 0;
+  font-feature-settings: "tnum" 1;
+}
+
+.p-status {
+  margin: var(--sp-3) 0 0;
+  padding: var(--sp-2) var(--sp-3);
+  font-size: var(--fs-note);
+  line-height: 1.8;
+  border-left: 3px solid var(--c-accent);
+  background: var(--c-accent-tint);
+  color: var(--c-ink-2);
+}
+
+.p-status--ng { border-left-color: var(--c-caution); background: var(--c-caution-tint); color: var(--c-caution); }
+
+.p-empty {
+  padding: var(--sp-4) var(--sp-3);
+  border: var(--rule-1) solid var(--c-rule);
+  background: var(--c-paper);
+  color: var(--c-ink-2);
+  text-align: center;
+}
+
+/* ------------------------------------------------------------------
+   1枚ごとの札
+------------------------------------------------------------------ */
+.p-card {
+  border-top: var(--rule-2) solid var(--c-rule-strong);
+  padding: var(--sp-3) 0 var(--sp-4);
+}
+
+.p-card__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-3);
+}
+
+.p-card__no {
+  flex: 1 1 auto;
+  font-family: var(--font-mincho);
+  font-size: var(--fs-sub);
+  font-weight: 600;
+  letter-spacing: var(--ls-head);
+  color: var(--c-accent);
+  margin: 0;
+}
+
+.p-card__flag {
+  display: inline-block;
+  margin-left: var(--sp-2);
+  padding: 0 var(--sp-2);
+  font-family: var(--font-gothic);
+  font-size: var(--fs-note);
+  font-weight: 400;
+  color: var(--c-caution);
+  background: var(--c-caution-tint);
+  border: var(--rule-1) solid var(--c-caution);
+}
+
+.p-thumb {
+  display: block;
+  width: 100%;
+  max-height: 44vh;
+  object-fit: contain;
+  background: var(--c-paper);
+  border: var(--rule-1) solid var(--c-rule);
+  margin-bottom: var(--sp-3);
+}
+
+/* ------------------------------------------------------------------
+   設定の一覧
+------------------------------------------------------------------ */
+.p-rows { margin: 0 0 var(--sp-3); padding: 0; list-style: none; }
+
+.p-rows li {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: center;
+  padding: var(--sp-1) 0;
+  border-bottom: var(--rule-1) solid var(--c-rule);
+}
+
+.p-rows li .p-field__input { flex: 1 1 auto; }
+
+/* ------------------------------------------------------------------
+   下部の切り替え
+------------------------------------------------------------------ */
+.p-tabs {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10;
+  display: flex;
+  background: var(--c-base);
+  border-top: var(--rule-2) solid var(--c-accent);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.p-tabs__btn {
+  flex: 1 1 0;
+  min-height: 62px;
+  font-family: var(--font-gothic);
+  font-size: var(--fs-body);
+  letter-spacing: var(--ls-body);
+  color: var(--c-ink-2);
+  background: var(--c-base);
+  border: 0;
+  border-right: var(--rule-1) solid var(--c-rule);
+  cursor: pointer;
+  padding: var(--sp-1);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.p-tabs__btn:last-child { border-right: 0; }
+
+.p-tabs__btn[aria-current="true"] {
+  color: var(--c-base);
+  background: var(--c-accent);
+  font-weight: 700;
+}
+
+.p-tabs__n {
+  display: block;
+  font-size: var(--fs-note);
+  color: var(--c-ink-3);
+  font-feature-settings: "tnum" 1;
+}
+
+.p-tabs__btn[aria-current="true"] .p-tabs__n { color: var(--c-accent-tint); }
+
+/* ------------------------------------------------------------------
+   奥付
+------------------------------------------------------------------ */
+.p-colophon {
+  margin-top: var(--sp-4);
+  padding-top: var(--sp-3);
+  border-top: var(--rule-2) solid var(--c-rule-strong);
+  font-size: var(--fs-note);
+  color: var(--c-ink-3);
+}
+
+.p-colophon p { margin: 0 0 var(--sp-1); }
+.p-colophon p:last-child { margin-bottom: 0; }
+
+.p-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------
+   スマートフォン
+------------------------------------------------------------------ */
+@media (max-width: 640px) {
+  :root {
+    --fs-head: 21px;
+    --fs-sub: 17px;
+    --sp-5: 48px;
+  }
+}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>Babel.registerPreset("react-classic", { presets: [[Babel.availablePresets["react"], { runtime: "classic" }]] });</script>
+<script type="text/babel" data-presets="react-classic">
+const { useState, useEffect, useRef, useCallback, useMemo } = React;
+
+/* ==================================================================
+   1枚ごとのデータ構造
+
+   今後、自動読取・仕訳判定・振込データ出力を追加していく前提のため、
+   基礎版では使わない項目（記帳状態・支払期日・振込先）も
+   空の値で最初から持たせています。項目名の対応は次のとおりです。
+
+     id                … id
+     image             … 画像（JPEGのデータURL。メモリ上のみ）
+     capturedAt        … 撮影日時（ISO文字列）
+     date              … 日付
+     amount            … 金額（数字のみの文字列）
+     partner           … 取引先
+     taxCategory       … 税区分（"10" | "8" | "none"）
+     account           … 勘定科目
+     subAccount        … 補助科目
+     description       … 摘要
+     bookkeepingStatus … 記帳状態  ※基礎版では未使用
+     dueDate           … 支払期日  ※基礎版では未使用
+     payee             … 振込先    ※基礎版では未使用
+================================================================== */
+let seq = 0;
+
+function createEntry(image) {
+  const now = new Date();
+  seq += 1;
+  return {
+    id: "r" + now.getTime().toString(36) + "-" + seq,
+    image: image,
+    capturedAt: now.toISOString(),
+    date: toDateInput(now),
+    amount: "",
+    partner: "",
+    taxCategory: "10",
+    account: "",
+    subAccount: "",
+    description: "",
+    bookkeepingStatus: "",
+    dueDate: "",
+    payee: "",
+  };
+}
+
+/* ==================================================================
+   税区分。弥生のスマート取引取込に合わせ、
+   標準10%・軽減8%・対象外の3種だけを扱います。
+================================================================== */
+const TAX_KINDS = [
+  { id: "10", label: "標準　10%" },
+  { id: "8", label: "軽減　8%" },
+  { id: "none", label: "対象外" },
+];
+
+/* 会計ソフトごとの税区分の名称。
+   取込先に登録されている名称と一致していないと取り込みに失敗するため、
+   利用者が「設定」で書き換えられるようにしています。 */
+const DEFAULT_TAX_NAMES = {
+  yayoi: { "10": "課税仕入 10%", "8": "課税仕入 8%(軽)", none: "対象外" },
+  mf: { "10": "課対仕入 10%", "8": "課対仕入(軽) 8%", none: "対象外" },
+  freee: { "10": "課対仕入10%", "8": "課対仕入8%(軽)", none: "対象外" },
+};
+
+/* 個人事業主の帳簿でよく使う勘定科目を初期値として持たせています。
+   これも「設定」で追加・変更・削除できます。 */
+const DEFAULT_ACCOUNTS = [
+  "消耗品費",
+  "旅費交通費",
+  "通信費",
+  "接待交際費",
+  "会議費",
+  "新聞図書費",
+  "広告宣伝費",
+  "荷造運賃",
+  "水道光熱費",
+  "地代家賃",
+  "修繕費",
+  "支払手数料",
+  "外注工賃",
+  "租税公課",
+  "損害保険料",
+  "福利厚生費",
+  "仕入高",
+  "雑費",
+];
+
+const DEFAULT_SETTINGS = {
+  accounts: DEFAULT_ACCOUNTS.slice(),
+  taxNames: {
+    yayoi: Object.assign({}, DEFAULT_TAX_NAMES.yayoi),
+    mf: Object.assign({}, DEFAULT_TAX_NAMES.mf),
+    freee: Object.assign({}, DEFAULT_TAX_NAMES.freee),
+  },
+  freeeCredit: "現金",
+  freeeCreditTax: "対象外",
+  mfDepartment: "",
+  mfInvoice: "",
+};
+
+const CSV_FORMATS = [
+  { id: "yayoi", label: "弥生（スマート取引取込）" },
+  { id: "mf", label: "マネーフォワード（仕訳帳）" },
+  { id: "freee", label: "freee（振替伝票）" },
+];
+
+const MAX_PX = 1600; /* 画像の長辺。PDFが重くなりすぎないようにするため */
+
+/* ==================================================================
+   小さな道具
+================================================================== */
+function pad2(n) { return (n < 10 ? "0" : "") + n; }
+
+function toDateInput(d) {
+  return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate());
+}
+
+/* "2026-08-17" を会計ソフトが受け取る "2026/08/17" に変える */
+function toSlashDate(s) {
+  return String(s || "").replace(/-/g, "/");
+}
+
+function formatDateTime(iso) {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  return d.getFullYear() + "/" + pad2(d.getMonth() + 1) + "/" + pad2(d.getDate())
+    + " " + pad2(d.getHours()) + ":" + pad2(d.getMinutes());
+}
+
+function withComma(s) {
+  const t = String(s || "").replace(/[^0-9]/g, "");
+  return t === "" ? "" : t.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
+function todayStamp() {
+  const d = new Date();
+  return "" + d.getFullYear() + pad2(d.getMonth() + 1) + pad2(d.getDate());
+}
+
+/* ファイル名に使えない文字を落とす */
+function safeName(s, fallback) {
+  const t = String(s == null ? "" : s)
+    .replace(/[\\/:*?"<>|]/g, "")
+    .replace(/[\u0000-\u001f]/g, "")
+    .trim();
+  return t === "" ? fallback : t;
+}
+
+function loadImage(src) {
+  return new Promise(function (resolve, reject) {
+    const im = new Image();
+    im.onload = function () { resolve(im); };
+    im.onerror = function () { reject(new Error("画像を読み込めませんでした")); };
+    im.src = src;
+  });
+}
+
+/* 撮った写真をそのまま持つと重いので、長辺を縮めてJPEGにします。
+   縮小もすべて端末内（canvas）で行い、通信は発生しません。 */
+function drawToJpeg(source, w, h) {
+  const scale = Math.min(1, MAX_PX / Math.max(w, h));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(w * scale));
+  canvas.height = Math.max(1, Math.round(h * scale));
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#ffffff"; /* 透過画像の下地。紙色ではなく白で埋める */
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL("image/jpeg", 0.82);
+}
+
+function fileToJpeg(file) {
+  return new Promise(function (resolve, reject) {
+    const reader = new FileReader();
+    reader.onload = function () {
+      loadImage(reader.result).then(function (im) {
+        resolve(drawToJpeg(im, im.naturalWidth, im.naturalHeight));
+      }, reject);
+    };
+    reader.onerror = function () { reject(new Error("ファイルを読み込めませんでした")); };
+    reader.readAsDataURL(file);
+  });
+}
+
+/* ==================================================================
+   PDF
+
+   PDFの中の文字は canvas に描いてから貼り付けています。
+   PDFの部品に日本語の書体を持たせずに済み、読み込む部品が軽くなります。
+================================================================== */
+const PAGE_W = 1240;  /* A4縦・150dpi 相当 */
+const PAGE_H = 1754;
+const MARGIN = 90;
+
+/* PDFの中の色と書体も、画面と同じ :root の変数から取ります。
+   値を二重に持たないため、トークンを直せばPDFの見た目も一緒に変わります。 */
+function token(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+function wrapLines(ctx, text, maxWidth, maxLines) {
+  const out = [];
+  let line = "";
+  const chars = Array.from(String(text || ""));
+  for (let i = 0; i < chars.length; i++) {
+    const next = line + chars[i];
+    if (ctx.measureText(next).width > maxWidth && line !== "") {
+      out.push(line);
+      line = chars[i];
+      if (out.length >= maxLines) {
+        return { lines: out, truncated: i < chars.length - 1 };
+      }
+    } else {
+      line = next;
+    }
+  }
+  if (line !== "") out.push(line);
+  return { lines: out, truncated: false };
+}
+
+async function composePage(entry, index, total, settings) {
+  const canvas = document.createElement("canvas");
+  canvas.width = PAGE_W;
+  canvas.height = PAGE_H;
+  const ctx = canvas.getContext("2d");
+  const gothic = token("--font-gothic");
+  const mincho = token("--font-mincho");
+  const contentW = PAGE_W - MARGIN * 2;
+
+  ctx.fillStyle = token("--c-base");
+  ctx.fillRect(0, 0, PAGE_W, PAGE_H);
+  ctx.textBaseline = "alphabetic";
+
+  /* 天の罫 */
+  ctx.fillStyle = token("--c-accent");
+  ctx.fillRect(MARGIN, MARGIN, contentW, 4);
+
+  /* 通し番号と撮影日時 */
+  ctx.font = "24px " + gothic;
+  ctx.fillStyle = token("--c-ink-3");
+  ctx.textAlign = "left";
+  ctx.fillText(index + " / " + total, MARGIN, MARGIN + 44);
+  ctx.textAlign = "right";
+  ctx.fillText("撮影 " + formatDateTime(entry.capturedAt), PAGE_W - MARGIN, MARGIN + 44);
+  ctx.textAlign = "left";
+
+  /* 写真。縦横の比を保ったまま枠内に収めます */
+  const boxTop = MARGIN + 80;
+  const boxH = 1020;
+  try {
+    const im = await loadImage(entry.image);
+    const s = Math.min(contentW / im.naturalWidth, boxH / im.naturalHeight);
+    const w = im.naturalWidth * s;
+    const h = im.naturalHeight * s;
+    ctx.drawImage(im, MARGIN + (contentW - w) / 2, boxTop + (boxH - h) / 2, w, h);
+  } catch (e) {
+    ctx.font = "26px " + gothic;
+    ctx.fillStyle = token("--c-caution");
+    ctx.fillText("画像を表示できませんでした", MARGIN, boxTop + 60);
+  }
+
+  /* 地の記載欄 */
+  let y = boxTop + boxH + 46;
+  ctx.fillStyle = token("--c-rule-strong");
+  ctx.fillRect(MARGIN, y, contentW, 2);
+
+  y += 62;
+  ctx.font = "34px " + mincho;
+  ctx.fillStyle = token("--c-ink");
+  const partner = wrapLines(ctx, entry.partner || "取引先の記入なし", contentW, 1);
+  ctx.fillText(partner.lines[0] || "", MARGIN, y);
+
+  const rows = [
+    ["日付", toSlashDate(entry.date) || "未入力"],
+    ["金額", entry.amount === "" ? "未入力" : withComma(entry.amount) + " 円"],
+    ["勘定科目", entry.account || "未選択"],
+    ["補助科目", entry.subAccount || "—"],
+    ["税区分", taxLabel(entry.taxCategory)],
+    ["摘要", entry.description || "—"],
+  ];
+
+  y += 30;
+  const labelX = MARGIN;
+  const valueX = MARGIN + 200;
+  const valueW = contentW - 200;
+  for (let i = 0; i < rows.length; i++) {
+    y += 46;
+    ctx.font = "24px " + gothic;
+    ctx.fillStyle = token("--c-ink-3");
+    ctx.fillText(rows[i][0], labelX, y);
+    ctx.font = "27px " + gothic;
+    ctx.fillStyle = token("--c-ink");
+    const wrapped = wrapLines(ctx, rows[i][1], valueW, 2);
+    ctx.fillText(wrapped.lines[0] || "", valueX, y);
+    if (wrapped.lines.length > 1) {
+      y += 40;
+      ctx.fillText(wrapped.lines[1] + (wrapped.truncated ? "…" : ""), valueX, y);
+    }
+  }
+
+  /* 地の罫 */
+  ctx.fillStyle = token("--c-rule");
+  ctx.fillRect(MARGIN, PAGE_H - MARGIN, contentW, 1);
+
+  return canvas.toDataURL("image/jpeg", 0.85);
+}
+
+/* ==================================================================
+   CSV
+================================================================== */
+function csvCell(v) {
+  const s = v == null ? "" : String(v);
+  return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+
+function toCsv(rows) {
+  return rows.map(function (r) { return r.map(csvCell).join(","); }).join("\r\n") + "\r\n";
+}
+
+function taxLabel(id) {
+  for (let i = 0; i < TAX_KINDS.length; i++) {
+    if (TAX_KINDS[i].id === id) return TAX_KINDS[i].label;
+  }
+  return "";
+}
+
+/* 弥生：スマート取引取込の取引明細形式。
+   日付と金額が必須です。勘定科目・税区分の欄を持たない形式のため、
+   それらは備考にまとめて入れ、取込画面で確定してもらう作りにしています。 */
+function buildYayoi(entries, settings) {
+  const rows = [["識別フラグ", "取引日付", "出金額(円)", "入金額(円)", "摘要", "備考"]];
+  entries.forEach(function (e) {
+    const memo = [e.account, e.subAccount, settings.taxNames.yayoi[e.taxCategory], e.description]
+      .filter(function (v) { return v && v !== ""; })
+      .join(" / ");
+    rows.push(["0", toSlashDate(e.date), e.amount, "", e.partner || e.description || "", memo]);
+  });
+  return toCsv(rows);
+}
+
+/* マネーフォワード：仕訳帳形式 */
+function buildMf(entries, settings) {
+  const rows = [[
+    "取引No", "取引日", "勘定科目", "補助科目", "部門", "取引先",
+    "税区分", "インボイス", "金額(円)", "摘要", "タグ", "メモ",
+  ]];
+  entries.forEach(function (e, i) {
+    rows.push([
+      String(i + 1),
+      toSlashDate(e.date),
+      e.account,
+      e.subAccount,
+      settings.mfDepartment,
+      e.partner,
+      settings.taxNames.mf[e.taxCategory],
+      settings.mfInvoice,
+      e.amount,
+      e.description,
+      "",
+      "",
+    ]);
+  });
+  return toCsv(rows);
+}
+
+/* freee：振替伝票（他社会計ソフトのデータインポート）形式。
+   借方に経費の勘定科目、貸方に相手科目（初期値は現金）を置きます。 */
+function buildFreee(entries, settings) {
+  const rows = [[
+    "日付",
+    "借方勘定科目", "借方補助科目", "借方取引先", "借方税区分", "借方金額",
+    "貸方勘定科目", "貸方補助科目", "貸方取引先", "貸方税区分", "貸方金額",
+    "摘要",
+  ]];
+  entries.forEach(function (e) {
+    rows.push([
+      toSlashDate(e.date),
+      e.account, e.subAccount, e.partner, settings.taxNames.freee[e.taxCategory], e.amount,
+      settings.freeeCredit, "", e.partner, settings.freeeCreditTax, e.amount,
+      e.description,
+    ]);
+  });
+  return toCsv(rows);
+}
+
+function buildCsv(format, entries, settings) {
+  if (format === "mf") return buildMf(entries, settings);
+  if (format === "freee") return buildFreee(entries, settings);
+  return buildYayoi(entries, settings);
+}
+
+function hasSjis() {
+  return typeof window.Encoding !== "undefined" && typeof window.Encoding.convert === "function";
+}
+
+/* 作ったファイルを端末に渡します。送信ではなく、端末内での受け渡しです。 */
+function saveBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.rel = "noopener";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+}
+
+function saveCsv(text, filename, encoding) {
+  let blob;
+  if (encoding === "sjis") {
+    const unicode = window.Encoding.stringToCode(text);
+    const sjis = window.Encoding.convert(unicode, { to: "SJIS", from: "UNICODE" });
+    blob = new Blob([new Uint8Array(sjis)], { type: "text/csv" });
+  } else {
+    /* 表計算ソフトで開いたときに文字化けしないよう、先頭にBOMを付けます */
+    const bom = new Uint8Array([0xef, 0xbb, 0xbf]);
+    blob = new Blob([bom, new TextEncoder().encode(text)], { type: "text/csv" });
+  }
+  saveBlob(blob, filename);
+}
+
+/* ==================================================================
+   共通の部品
+================================================================== */
+function Field(props) {
+  return (
+    <div className="p-field">
+      <label className="p-field__label" htmlFor={props.id}>
+        {props.label}
+        {props.required ? <span className="p-field__req">必須</span> : null}
+      </label>
+      {props.children}
+      {props.note ? <p className="p-field__note">{props.note}</p> : null}
+    </div>
+  );
+}
+
+function Notice(props) {
+  return (
+    <div className={"p-notice" + (props.calm ? " p-notice--calm" : "")}>
+      <p className="p-notice__title">{props.title}</p>
+      {props.children}
+    </div>
+  );
+}
+
+/* 取込先の登録名と一致していないと失敗する、という注意。
+   関わる画面すべてに出します。 */
+function NameWarning() {
+  return (
+    <Notice title="勘定科目名は会計ソフト側の登録名と合わせてください">
+      <p className="p-notice__body">
+        勘定科目・補助科目・税区分は、取り込む会計ソフトに登録されている名称と
+        文字列が完全に一致していないと、インポートに失敗します。
+        全角と半角、空白の有無、「損害保険料」と「保険料」のような言い換えも別の名称として扱われます。
+        会計ソフト側の科目設定を開いて確認し、この画面の「設定」で同じ表記にそろえてください。
+      </p>
+    </Notice>
+  );
+}
+
+/* ==================================================================
+   撮影
+================================================================== */
+function ShootTab(props) {
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
+  const fileRef = useRef(null);
+  const [camOn, setCamOn] = useState(false);
+  const [camMsg, setCamMsg] = useState("");
+  const [reading, setReading] = useState(false);
+
+  const stop = useCallback(function () {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(function (t) { t.stop(); });
+      streamRef.current = null;
+    }
+    setCamOn(false);
+  }, []);
+
+  /* この画面から離れるときは必ずカメラを止めます */
+  useEffect(function () { return stop; }, [stop]);
+
+  useEffect(function () {
+    if (camOn && videoRef.current && streamRef.current) {
+      videoRef.current.srcObject = streamRef.current;
+      const p = videoRef.current.play();
+      if (p && p.catch) p.catch(function () {});
+    }
+  }, [camOn]);
+
+  async function start() {
+    setCamMsg("");
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setCamMsg("この端末では画面の中にカメラを出せません。下の「撮った写真から選ぶ」をお使いください。");
+      return;
+    }
+    try {
+      streamRef.current = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1920 } },
+        audio: false,
+      });
+      setCamOn(true);
+    } catch (e) {
+      streamRef.current = null;
+      setCamMsg("カメラを使う許可が得られませんでした。ブラウザの設定でカメラを許可するか、下の「撮った写真から選ぶ」をお使いください。");
+    }
+  }
+
+  function shoot() {
+    const v = videoRef.current;
+    if (!v || !v.videoWidth) return;
+    props.onAdd(drawToJpeg(v, v.videoWidth, v.videoHeight));
+  }
+
+  async function onFiles(e) {
+    const files = Array.prototype.slice.call(e.target.files || []);
+    e.target.value = "";
+    if (files.length === 0) return;
+    setReading(true);
+    let ng = 0;
+    for (let i = 0; i < files.length; i++) {
+      try {
+        props.onAdd(await fileToJpeg(files[i]));
+      } catch (err) {
+        ng += 1;
+      }
+    }
+    setReading(false);
+    if (ng > 0) props.notify("ng", ng + "件は画像として読み込めませんでした。");
+  }
+
+  return (
+    <div className="p-section">
+      <div className="p-heading"><h2 className="p-heading__text">一　撮影</h2></div>
+      <p className="p-lead">
+        レシートを平らに置いて、明るいところで撮ってください。
+        続けて何枚でも撮れます。撮った順にPDFのページになります。
+      </p>
+
+      <p className="p-count">
+        撮影済み <strong>{props.entries.length}</strong> 枚
+      </p>
+
+      {camOn ? (
+        <div>
+          <div className="p-cam">
+            <video ref={videoRef} className="p-cam__video" playsInline muted autoPlay></video>
+          </div>
+          <button type="button" className="p-btn p-btn--main" onClick={shoot}>この画面で撮る</button>
+          <button type="button" className="p-btn" onClick={stop}>カメラを閉じる</button>
+        </div>
+      ) : (
+        <button type="button" className="p-btn p-btn--main" onClick={start}>カメラを開く</button>
+      )}
+
+      {camMsg ? <p className="p-status p-status--ng">{camMsg}</p> : null}
+
+      <p className="p-note">
+        カメラが開かないときや、すでに撮ってある写真を使うときは、こちらから追加できます。
+      </p>
+      <button
+        type="button"
+        className="p-btn"
+        disabled={reading}
+        onClick={function () { if (fileRef.current) fileRef.current.click(); }}
+      >
+        {reading ? "読み込んでいます…" : "撮った写真から選ぶ（複数可）"}
+      </button>
+      <input
+        ref={fileRef}
+        className="p-hidden"
+        type="file"
+        accept="image/*"
+        multiple
+        onChange={onFiles}
+      />
+
+      {props.entries.length > 0 ? (
+        <button type="button" className="p-btn" onClick={function () { props.onGo("input"); }}>
+          入力に進む（{props.entries.length}枚）
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+/* ==================================================================
+   入力
+================================================================== */
+function EntryCard(props) {
+  const e = props.entry;
+  const missing = e.date === "" || e.amount === "";
+  const idBase = "f-" + e.id;
+
+  function set(key, value) {
+    props.onChange(e.id, key, value);
+  }
+
+  return (
+    <div className="p-card">
+      <div className="p-card__head">
+        <p className="p-card__no">
+          {props.index + 1}枚目
+          {missing ? <span className="p-card__flag">未入力あり</span> : null}
+        </p>
+        <button
+          type="button"
+          className="p-btn p-btn--small p-btn--danger"
+          onClick={function () { props.onRemove(e.id); }}
+        >
+          削除
+        </button>
+      </div>
+
+      <img className="p-thumb" src={e.image} alt={(props.index + 1) + "枚目の写真"} />
+
+      <Field id={idBase + "-date"} label="日付" required>
+        <input
+          id={idBase + "-date"}
+          className={"p-field__input" + (e.date === "" ? " p-field__input--wrong" : "")}
+          type="date"
+          value={e.date}
+          onChange={function (ev) { set("date", ev.target.value); }}
+        />
+      </Field>
+
+      <Field id={idBase + "-amount"} label="金額（円）" required>
+        <input
+          id={idBase + "-amount"}
+          className={"p-field__input" + (e.amount === "" ? " p-field__input--wrong" : "")}
+          type="text"
+          inputMode="numeric"
+          autoComplete="off"
+          placeholder="1320"
+          value={withComma(e.amount)}
+          onChange={function (ev) { set("amount", ev.target.value.replace(/[^0-9]/g, "")); }}
+        />
+      </Field>
+
+      <Field id={idBase + "-partner"} label="取引先">
+        <input
+          id={idBase + "-partner"}
+          className="p-field__input"
+          type="text"
+          autoComplete="off"
+          placeholder="○○商店"
+          value={e.partner}
+          onChange={function (ev) { set("partner", ev.target.value); }}
+        />
+      </Field>
+
+      <Field
+        id={idBase + "-account"}
+        label="勘定科目"
+        note="候補は「設定」で追加・変更できます。"
+      >
+        <select
+          id={idBase + "-account"}
+          className="p-field__select"
+          value={e.account}
+          onChange={function (ev) { set("account", ev.target.value); }}
+        >
+          <option value="">（未選択）</option>
+          {props.accounts.map(function (a) {
+            return <option key={a} value={a}>{a}</option>;
+          })}
+        </select>
+      </Field>
+
+      <Field id={idBase + "-sub"} label="補助科目">
+        <input
+          id={idBase + "-sub"}
+          className="p-field__input"
+          type="text"
+          autoComplete="off"
+          value={e.subAccount}
+          onChange={function (ev) { set("subAccount", ev.target.value); }}
+        />
+      </Field>
+
+      <Field id={idBase + "-tax"} label="税区分">
+        <select
+          id={idBase + "-tax"}
+          className="p-field__select"
+          value={e.taxCategory}
+          onChange={function (ev) { set("taxCategory", ev.target.value); }}
+        >
+          {TAX_KINDS.map(function (t) {
+            return <option key={t.id} value={t.id}>{t.label}</option>;
+          })}
+        </select>
+      </Field>
+
+      <Field id={idBase + "-desc"} label="摘要">
+        <input
+          id={idBase + "-desc"}
+          className="p-field__input"
+          type="text"
+          autoComplete="off"
+          placeholder="コピー用紙"
+          value={e.description}
+          onChange={function (ev) { set("description", ev.target.value); }}
+        />
+      </Field>
+    </div>
+  );
+}
+
+function InputTab(props) {
+  return (
+    <div className="p-section">
+      <div className="p-heading"><h2 className="p-heading__text">二　入力</h2></div>
+      <p className="p-lead">
+        1枚ずつ、日付・金額・取引先・勘定科目・税区分を手で入れてください。
+        日付は撮影した日を入れてあります。違う場合は書き換えてください。
+      </p>
+
+      <NameWarning />
+
+      {props.entries.length === 0 ? (
+        <p className="p-empty">まだ1枚も撮っていません。「撮影」から始めてください。</p>
+      ) : (
+        <div>
+          <p className="p-note">
+            {props.missing > 0
+              ? "日付または金額が未入力の写真が " + props.missing + " 枚あります。CSVの書き出しには両方が必要です。"
+              : "すべての写真に日付と金額が入りました。"}
+          </p>
+          {props.entries.map(function (e, i) {
+            return (
+              <EntryCard
+                key={e.id}
+                entry={e}
+                index={i}
+                accounts={props.settings.accounts}
+                onChange={props.onChange}
+                onRemove={props.onRemove}
+              />
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ==================================================================
+   書き出し
+================================================================== */
+function ExportTab(props) {
+  const n = props.entries.length;
+  const blocked = props.missing > 0;
+
+  return (
+    <div className="p-section">
+      <div className="p-heading"><h2 className="p-heading__text">三　書き出し</h2></div>
+      <p className="p-lead">
+        撮った{n}枚を1つのPDFにまとめ、会計ソフトに取り込むためのCSVを作ります。
+        どちらも端末の中で作られ、どこにも送信されません。
+      </p>
+
+      {n === 0 ? (
+        <p className="p-empty">まだ1枚も撮っていません。「撮影」から始めてください。</p>
+      ) : null}
+
+      <h3 className="p-subheading">PDFにまとめる</h3>
+      <Field
+        id="pdf-name"
+        label="ファイル名"
+        note="拡張子（.pdf）は自動で付きます。"
+      >
+        <input
+          id="pdf-name"
+          className="p-field__input"
+          type="text"
+          autoComplete="off"
+          value={props.pdfName}
+          onChange={function (ev) { props.setPdfName(ev.target.value); }}
+        />
+      </Field>
+      <button
+        type="button"
+        className="p-btn p-btn--main"
+        disabled={n === 0 || props.busy !== ""}
+        onClick={props.onPdf}
+      >
+        PDFを作る（{n}ページ）
+      </button>
+      <p className="p-note">
+        1ページに1枚ずつ、写真と入力した内容を並べます。
+        iPhoneでは作成したPDFがそのまま開くことがあります。その場合は共有ボタンから「ファイルに保存」を選んでください。
+      </p>
+
+      <h3 className="p-subheading">CSVを書き出す</h3>
+
+      <NameWarning />
+
+      <Field id="csv-format" label="会計ソフトの形式">
+        <select
+          id="csv-format"
+          className="p-field__select"
+          value={props.csvFormat}
+          onChange={function (ev) { props.setCsvFormat(ev.target.value); }}
+        >
+          {CSV_FORMATS.map(function (f) {
+            return <option key={f.id} value={f.id}>{f.label}</option>;
+          })}
+        </select>
+      </Field>
+
+      <p className="p-note">
+        {props.csvFormat === "yayoi"
+          ? "弥生のスマート取引取込で読み込む形式です。取引日付と出金額が必須です。この形式には勘定科目の列がないため、勘定科目・補助科目・税区分・摘要は備考にまとめて入れます。取込後、弥生の画面で勘定科目を確定してください。"
+          : null}
+        {props.csvFormat === "mf"
+          ? "マネーフォワードの仕訳帳の列（取引No・取引日・勘定科目・補助科目・部門・取引先・税区分・インボイス・金額(円)・摘要・タグ・メモ）で書き出します。部門とインボイスは「設定」で指定した値が全行に入ります。"
+          : null}
+        {props.csvFormat === "freee"
+          ? "freeeの「他社会計ソフトのデータインポート」で使う振替伝票の形式です。借方に経費の勘定科目、貸方に相手科目（初期値は現金）を置きます。相手科目は「設定」で変えられます。"
+          : null}
+      </p>
+
+      <Field
+        id="csv-enc"
+        label="文字コード"
+        note="取り込んだときに文字化けする場合は、もう一方を試してください。"
+      >
+        <select
+          id="csv-enc"
+          className="p-field__select"
+          value={props.csvEnc}
+          onChange={function (ev) { props.setCsvEnc(ev.target.value); }}
+        >
+          <option value="sjis">Shift_JIS</option>
+          <option value="utf8">UTF-8（BOM付き）</option>
+        </select>
+      </Field>
+
+      <Field id="csv-name" label="ファイル名" note="拡張子（.csv）は自動で付きます。">
+        <input
+          id="csv-name"
+          className="p-field__input"
+          type="text"
+          autoComplete="off"
+          value={props.csvName}
+          onChange={function (ev) { props.setCsvName(ev.target.value); }}
+        />
+      </Field>
+
+      {blocked ? (
+        <Notice title="日付と金額が入っていない写真があります">
+          <p className="p-notice__body">
+            {props.missing}枚が未入力です。「入力」で日付と金額を入れてから書き出してください。
+          </p>
+        </Notice>
+      ) : null}
+
+      <button
+        type="button"
+        className="p-btn p-btn--main"
+        disabled={n === 0 || blocked || props.busy !== ""}
+        onClick={props.onCsv}
+      >
+        CSVを書き出す（{n}行）
+      </button>
+
+      {props.busy ? <p className="p-status">{props.busy}</p> : null}
+      {props.message ? (
+        <p className={"p-status" + (props.message.kind === "ng" ? " p-status--ng" : "")}>
+          {props.message.text}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/* ==================================================================
+   設定
+================================================================== */
+function SettingsTab(props) {
+  const s = props.settings;
+
+  function setTax(format, kind, value) {
+    props.setSettings(function (prev) {
+      const next = Object.assign({}, prev);
+      next.taxNames = Object.assign({}, prev.taxNames);
+      next.taxNames[format] = Object.assign({}, prev.taxNames[format]);
+      next.taxNames[format][kind] = value;
+      return next;
+    });
+  }
+
+  function setAccount(i, value) {
+    props.setSettings(function (prev) {
+      const list = prev.accounts.slice();
+      list[i] = value;
+      return Object.assign({}, prev, { accounts: list });
+    });
+  }
+
+  function removeAccount(i) {
+    props.setSettings(function (prev) {
+      const list = prev.accounts.slice();
+      list.splice(i, 1);
+      return Object.assign({}, prev, { accounts: list });
+    });
+  }
+
+  function addAccount() {
+    props.setSettings(function (prev) {
+      return Object.assign({}, prev, { accounts: prev.accounts.concat([""]) });
+    });
+  }
+
+  function setPlain(key, value) {
+    props.setSettings(function (prev) {
+      const next = Object.assign({}, prev);
+      next[key] = value;
+      return next;
+    });
+  }
+
+  return (
+    <div className="p-section">
+      <div className="p-heading"><h2 className="p-heading__text">四　設定</h2></div>
+      <p className="p-lead">
+        会計ソフトに登録されている名称に合わせて書き換えてください。
+        ここで直した内容も、ページを閉じると初期値に戻ります。
+      </p>
+
+      <NameWarning />
+
+      <h3 className="p-subheading">勘定科目の候補</h3>
+      <p className="p-note">「入力」の勘定科目の選択肢になります。使わないものは削除して構いません。</p>
+      <ul className="p-rows">
+        {s.accounts.map(function (a, i) {
+          return (
+            <li key={i}>
+              <input
+                className="p-field__input"
+                type="text"
+                value={a}
+                aria-label={"勘定科目 " + (i + 1)}
+                onChange={function (ev) { setAccount(i, ev.target.value); }}
+              />
+              <button
+                type="button"
+                className="p-btn p-btn--small p-btn--danger"
+                onClick={function () { removeAccount(i); }}
+              >
+                削除
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+      <button type="button" className="p-btn" onClick={addAccount}>勘定科目を追加する</button>
+
+      <h3 className="p-subheading">税区分の名称</h3>
+      <p className="p-note">
+        会計ソフトごとに表記が違います。取込先の登録名に合わせてください。
+      </p>
+      {CSV_FORMATS.map(function (f) {
+        return (
+          <div key={f.id}>
+            <p className="p-field__label" style={{ marginTop: "var(--sp-3)" }}>{f.label}</p>
+            {TAX_KINDS.map(function (t) {
+              return (
+                <Field key={t.id} id={"tax-" + f.id + "-" + t.id} label={t.label}>
+                  <input
+                    id={"tax-" + f.id + "-" + t.id}
+                    className="p-field__input"
+                    type="text"
+                    value={s.taxNames[f.id][t.id]}
+                    onChange={function (ev) { setTax(f.id, t.id, ev.target.value); }}
+                  />
+                </Field>
+              );
+            })}
+          </div>
+        );
+      })}
+
+      <h3 className="p-subheading">マネーフォワード</h3>
+      <Field id="mf-dept" label="部門" note="空のままでも構いません。全行に同じ値が入ります。">
+        <input
+          id="mf-dept"
+          className="p-field__input"
+          type="text"
+          value={s.mfDepartment}
+          onChange={function (ev) { setPlain("mfDepartment", ev.target.value); }}
+        />
+      </Field>
+      <Field id="mf-inv" label="インボイス" note="空のままでも構いません。全行に同じ値が入ります。">
+        <input
+          id="mf-inv"
+          className="p-field__input"
+          type="text"
+          value={s.mfInvoice}
+          onChange={function (ev) { setPlain("mfInvoice", ev.target.value); }}
+        />
+      </Field>
+
+      <h3 className="p-subheading">freee</h3>
+      <Field id="freee-credit" label="相手科目（貸方）" note="現金で払ったなら「現金」、後払いなら「未払金」などにします。">
+        <input
+          id="freee-credit"
+          className="p-field__input"
+          type="text"
+          value={s.freeeCredit}
+          onChange={function (ev) { setPlain("freeeCredit", ev.target.value); }}
+        />
+      </Field>
+      <Field id="freee-credit-tax" label="相手科目の税区分">
+        <input
+          id="freee-credit-tax"
+          className="p-field__input"
+          type="text"
+          value={s.freeeCreditTax}
+          onChange={function (ev) { setPlain("freeeCreditTax", ev.target.value); }}
+        />
+      </Field>
+
+      <h3 className="p-subheading">初期値に戻す</h3>
+      <button
+        type="button"
+        className="p-btn p-btn--danger"
+        onClick={function () {
+          if (window.confirm("設定を初期値に戻します。よろしいですか。")) {
+            props.setSettings(makeDefaultSettings());
+          }
+        }}
+      >
+        設定を初期値に戻す
+      </button>
+
+      <div className="p-colophon">
+        <p>領収書まとめ（基礎機能版）</p>
+        <p>
+          撮影した画像と入力した内容は、この端末のブラウザの中だけで処理されます。
+          外部への送信、保存、記録は一切ありません。
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function makeDefaultSettings() {
+  return {
+    accounts: DEFAULT_ACCOUNTS.slice(),
+    taxNames: {
+      yayoi: Object.assign({}, DEFAULT_TAX_NAMES.yayoi),
+      mf: Object.assign({}, DEFAULT_TAX_NAMES.mf),
+      freee: Object.assign({}, DEFAULT_TAX_NAMES.freee),
+    },
+    freeeCredit: "現金",
+    freeeCreditTax: "対象外",
+    mfDepartment: "",
+    mfInvoice: "",
+  };
+}
+
+/* ==================================================================
+   全体
+================================================================== */
+const TABS = [
+  { id: "shoot", label: "撮影" },
+  { id: "input", label: "入力" },
+  { id: "export", label: "書き出し" },
+  { id: "settings", label: "設定" },
+];
+
+function App() {
+  const [tab, setTab] = useState("shoot");
+  const [entries, setEntries] = useState([]);
+  const [settings, setSettings] = useState(makeDefaultSettings);
+  const [pdfName, setPdfName] = useState("領収書_" + todayStamp());
+  const [csvName, setCsvName] = useState("仕訳_" + todayStamp());
+  const [csvFormat, setCsvFormat] = useState("yayoi");
+  const [csvEnc, setCsvEnc] = useState("sjis");
+  const [busy, setBusy] = useState("");
+  const [message, setMessage] = useState(null);
+
+  const missing = useMemo(function () {
+    return entries.filter(function (e) { return e.date === "" || e.amount === ""; }).length;
+  }, [entries]);
+
+  /* 閉じるとデータが消えるため、閉じる操作のときに確認を出します */
+  useEffect(function () {
+    if (entries.length === 0) return undefined;
+    function onBeforeUnload(ev) {
+      ev.preventDefault();
+      ev.returnValue = "";
+      return "";
+    }
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return function () { window.removeEventListener("beforeunload", onBeforeUnload); };
+  }, [entries.length]);
+
+  function notify(kind, text) {
+    setMessage({ kind: kind, text: text });
+  }
+
+  const addEntry = useCallback(function (image) {
+    setEntries(function (prev) { return prev.concat([createEntry(image)]); });
+  }, []);
+
+  const changeEntry = useCallback(function (id, key, value) {
+    setEntries(function (prev) {
+      return prev.map(function (e) {
+        if (e.id !== id) return e;
+        const next = Object.assign({}, e);
+        next[key] = value;
+        return next;
+      });
+    });
+  }, []);
+
+  const removeEntry = useCallback(function (id) {
+    if (!window.confirm("この写真と入力した内容を削除します。よろしいですか。")) return;
+    setEntries(function (prev) {
+      return prev.filter(function (e) { return e.id !== id; });
+    });
+  }, []);
+
+  async function onPdf() {
+    setMessage(null);
+    if (!window.jspdf || !window.jspdf.jsPDF) {
+      notify("ng", "PDFを作る部品が読み込めていません。一度、通信できる場所でこのページを開き直してください。");
+      return;
+    }
+    const name = safeName(pdfName, "領収書_" + todayStamp());
+    try {
+      const doc = new window.jspdf.jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
+      for (let i = 0; i < entries.length; i++) {
+        setBusy("PDFを作っています（" + (i + 1) + " / " + entries.length + "枚）");
+        const page = await composePage(entries[i], i + 1, entries.length, settings);
+        if (i > 0) doc.addPage();
+        doc.addImage(page, "JPEG", 0, 0, 210, 297);
+      }
+      setBusy("");
+      doc.save(name + ".pdf");
+      notify("ok", name + ".pdf を作りました。端末に保存されたか確認してください。");
+    } catch (e) {
+      setBusy("");
+      notify("ng", "PDFを作れませんでした。枚数が多い場合は、いくつかに分けてお試しください。");
+    }
+  }
+
+  function onCsv() {
+    setMessage(null);
+    if (csvEnc === "sjis" && !hasSjis()) {
+      notify("ng", "Shift_JISに変換する部品が読み込めていません。UTF-8を選ぶか、一度、通信できる場所でこのページを開き直してください。");
+      return;
+    }
+    const name = safeName(csvName, "仕訳_" + todayStamp());
+    try {
+      const text = buildCsv(csvFormat, entries, settings);
+      saveCsv(text, name + ".csv", csvEnc);
+      notify("ok", name + ".csv を書き出しました。会計ソフトの取込画面から読み込んでください。");
+    } catch (e) {
+      notify("ng", "CSVを書き出せませんでした。");
+    }
+  }
+
+  return (
+    <div>
+      <div className="p-topbar"></div>
+      <div className="p-sheet">
+        <header className="p-masthead">
+          <p className="p-masthead__kicker">レシート・領収書</p>
+          <h1 className="p-masthead__title">領収書まとめ</h1>
+        </header>
+
+        <Notice title="この画面でできること・お読みください" calm>
+          <ul className="p-notice__list">
+            <li>
+              撮影した画像と入力した内容は、<strong>どこにも送信されません。</strong>
+              すべてこの端末のブラウザの中だけで処理します。通信が切れていても使えます。
+            </li>
+            <li>
+              データは<strong>ページを開いている間だけ</strong>この端末のメモリに置かれます。
+              画面を閉じる・再読み込みすると消えます。<strong>PDFとCSVを保存してから閉じてください。</strong>
+            </li>
+            <li>
+              勘定科目・補助科目・税区分は、<strong>会計ソフト側に登録されている名称と完全に一致</strong>している必要があります。
+              一致していないとインポートに失敗します。
+            </li>
+          </ul>
+        </Notice>
+
+        {tab === "shoot" ? (
+          <ShootTab entries={entries} onAdd={addEntry} onGo={setTab} notify={notify} />
+        ) : null}
+
+        {tab === "input" ? (
+          <InputTab
+            entries={entries}
+            settings={settings}
+            missing={missing}
+            onChange={changeEntry}
+            onRemove={removeEntry}
+          />
+        ) : null}
+
+        {tab === "export" ? (
+          <ExportTab
+            entries={entries}
+            settings={settings}
+            missing={missing}
+            pdfName={pdfName}
+            setPdfName={setPdfName}
+            csvName={csvName}
+            setCsvName={setCsvName}
+            csvFormat={csvFormat}
+            setCsvFormat={setCsvFormat}
+            csvEnc={csvEnc}
+            setCsvEnc={setCsvEnc}
+            busy={busy}
+            message={message}
+            onPdf={onPdf}
+            onCsv={onCsv}
+          />
+        ) : null}
+
+        {tab === "settings" ? (
+          <SettingsTab settings={settings} setSettings={setSettings} />
+        ) : null}
+      </div>
+
+      <nav className="p-tabs" aria-label="画面の切り替え">
+        {TABS.map(function (t) {
+          return (
+            <button
+              key={t.id}
+              type="button"
+              className="p-tabs__btn"
+              aria-current={tab === t.id ? "true" : "false"}
+              onClick={function () { setTab(t.id); }}
+            >
+              {t.label}
+              {t.id === "input" && entries.length > 0 ? (
+                <span className="p-tabs__n">{entries.length}枚</span>
+              ) : null}
+            </button>
+          );
+        })}
+      </nav>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+<script>
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", function () {
+    navigator.serviceWorker.register("./sw.js").catch(function () {
+      /* 登録できなくても、通信できる状態であれば画面は使えます */
+    });
+  });
+}
+</script>
+</body>
+</html>

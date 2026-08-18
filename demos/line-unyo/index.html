@@ -1,0 +1,2639 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LINE公式アカウント 運用設計 デモ | 放置が起きない仕組みを画面で確かめる</title>
+<meta name="description" content="届いたメッセージを自動応答と有人対応に振り分け、一定時間を過ぎた未対応を検知して担当者に再通知するまでを、実際に操作しながら確認できるデモです。営業時間外の扱い、一斉配信とセグメント配信の比較、手作業との比較も画面上で試せます。掲載データはすべてデモ用の想定値です。">
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+/* ------------------------------------------------------------------
+   :root のトークンは索引ページ（リポジトリ直下の index.html）から
+   そのまま持ってきています。ここで新しい色や寸法は作っていません。
+------------------------------------------------------------------ */
+:root {
+  --c-base:         #ffffff;
+  --c-paper:        #f5f1e8;
+  --c-ink:          #1b1c1e;
+  --c-ink-2:        #4c4f54;
+  --c-ink-3:        #7d8087;
+  --c-rule:         #ddd7c8;
+  --c-rule-strong:  #b3ab98;
+  --c-accent:       #2d4257;
+  --c-accent-tint:  #eef1f3;
+  --c-caution:      #9c463b;
+  --c-caution-tint: #f3e9e6;
+  --font-mincho: "Hiragino Mincho ProN","Yu Mincho","YuMincho","MS PMincho","Noto Serif JP",serif;
+  --font-gothic: "Hiragino Kaku Gothic ProN","Hiragino Sans","Yu Gothic","YuGothic",Meiryo,"Noto Sans JP",sans-serif;
+  --fs-note:  13px;  --fs-body: 15px;  --fs-sub: 18px;  --fs-head: 24px;  --fs-title: 33px;
+  --lh-body: 1.9;  --lh-head: 1.45;  --ls-body: 0.04em;  --ls-head: 0.06em;
+  --sp-1: 4px;  --sp-2: 8px;  --sp-3: 16px;  --sp-4: 32px;  --sp-5: 64px;
+  --rule-1: 1px;  --rule-2: 2px;
+}
+
+html { -webkit-text-size-adjust: 100%; }
+
+/* Tailwind の preflight は実行時に head の末尾へ挿入されるため、
+   body と a はセレクタの詳細度を上げて上書きされないようにしています。 */
+html body {
+  margin: 0;
+  background: var(--c-base);
+  color: var(--c-ink);
+  font-family: var(--font-gothic);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  letter-spacing: var(--ls-body);
+  text-align: left;
+}
+
+*, *::before, *::after { border-radius: 0; box-shadow: none; }
+
+body a {
+  color: var(--c-accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+body a:hover { text-decoration-thickness: 2px; }
+
+:focus-visible { outline: var(--rule-2) solid var(--c-accent); outline-offset: 2px; }
+
+/* ------------------------------------------------------------------
+   版面
+------------------------------------------------------------------ */
+.p-topbar { border-top: 3px solid var(--c-accent); }
+
+.p-sheet {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 0 var(--sp-3);
+}
+
+.p-section { padding-top: var(--sp-5); }
+.p-section:last-of-type { padding-bottom: var(--sp-5); }
+
+/* ------------------------------------------------------------------
+   ヘッダー
+------------------------------------------------------------------ */
+.p-masthead { padding-top: var(--sp-4); padding-bottom: var(--sp-4); }
+
+.p-masthead__kicker {
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-head);
+  color: var(--c-ink-3);
+  margin: 0 0 var(--sp-2);
+}
+
+.p-masthead__title {
+  font-family: var(--font-mincho);
+  font-size: var(--fs-title);
+  line-height: var(--lh-head);
+  letter-spacing: var(--ls-head);
+  font-weight: 600;
+  color: var(--c-ink);
+  margin: 0;
+  padding-bottom: var(--sp-3);
+  border-bottom: var(--rule-2) solid var(--c-accent);
+}
+
+.p-masthead__lead {
+  margin: var(--sp-3) 0 0;
+  max-width: 42em;
+  color: var(--c-ink-2);
+}
+
+.p-masthead__meta {
+  margin: var(--sp-3) 0 0;
+  font-size: var(--fs-note);
+  color: var(--c-ink-3);
+}
+
+.p-masthead__meta a { margin-left: var(--sp-2); }
+
+/* ------------------------------------------------------------------
+   注記帯
+------------------------------------------------------------------ */
+.p-notice {
+  margin-top: var(--sp-4);
+  background: var(--c-caution-tint);
+  border-left: 3px solid var(--c-caution);
+  padding: var(--sp-3);
+}
+
+.p-notice__title {
+  margin: 0 0 var(--sp-1);
+  font-size: var(--fs-note);
+  font-weight: 700;
+  letter-spacing: var(--ls-head);
+  color: var(--c-caution);
+}
+
+.p-notice__body {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-note);
+  line-height: 1.8;
+  color: var(--c-ink-2);
+}
+
+.p-notice__body:last-child { margin-bottom: 0; }
+
+/* ------------------------------------------------------------------
+   節見出し
+------------------------------------------------------------------ */
+.p-heading {
+  margin: 0 0 var(--sp-3);
+  padding-bottom: var(--sp-2);
+  border-bottom: var(--rule-2) solid var(--c-rule-strong);
+}
+
+.p-heading__no {
+  display: block;
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-head);
+  color: var(--c-accent);
+  margin-bottom: var(--sp-1);
+}
+
+.p-heading__text {
+  font-family: var(--font-mincho);
+  font-size: var(--fs-head);
+  line-height: var(--lh-head);
+  letter-spacing: var(--ls-head);
+  font-weight: 600;
+  margin: 0;
+}
+
+.p-sub {
+  margin: var(--sp-4) 0 var(--sp-2);
+  padding-bottom: var(--sp-1);
+  border-bottom: var(--rule-1) solid var(--c-rule-strong);
+  font-size: var(--fs-note);
+  font-weight: 700;
+  letter-spacing: var(--ls-head);
+  color: var(--c-accent);
+}
+
+.p-lead {
+  margin: 0 0 var(--sp-3);
+  max-width: 44em;
+  color: var(--c-ink-2);
+}
+
+.p-note {
+  margin: var(--sp-2) 0 0;
+  font-size: var(--fs-note);
+  line-height: 1.8;
+  color: var(--c-ink-3);
+}
+
+.p-note--caution { color: var(--c-caution); }
+
+/* ------------------------------------------------------------------
+   いまの状態（全画面で共通に出す要約）
+------------------------------------------------------------------ */
+.p-scope {
+  border-left: 3px solid var(--c-accent);
+  background: var(--c-accent-tint);
+  padding: var(--sp-3);
+  margin-bottom: var(--sp-3);
+}
+
+.p-scope p { margin: 0; }
+.p-scope__sub { margin-top: var(--sp-1) !important; font-size: var(--fs-note); color: var(--c-ink-2); }
+.p-scope strong { font-weight: 700; color: var(--c-accent); }
+.p-scope strong.is-alert { color: var(--c-caution); }
+
+/* 時計の操作 */
+.p-clock {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-2);
+  padding: var(--sp-2) 0 var(--sp-3);
+  border-bottom: var(--rule-1) solid var(--c-rule);
+  margin-bottom: var(--sp-3);
+  font-size: var(--fs-note);
+  color: var(--c-ink-3);
+}
+
+.p-clock__label { flex: 0 0 auto; letter-spacing: var(--ls-head); color: var(--c-ink-2); }
+
+.p-clock__now {
+  flex: 0 0 auto;
+  font-size: var(--fs-sub);
+  font-weight: 700;
+  color: var(--c-accent);
+  font-feature-settings: "tnum" 1;
+}
+
+.p-clock__spacer { flex: 1 1 auto; }
+
+/* ------------------------------------------------------------------
+   画面の切り替え
+------------------------------------------------------------------ */
+.p-tabs {
+  display: flex;
+  overflow-x: auto;
+  border-top: var(--rule-1) solid var(--c-rule);
+  border-bottom: var(--rule-2) solid var(--c-rule-strong);
+}
+
+.p-tab {
+  flex: 0 0 auto;
+  font-family: var(--font-gothic);
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-body);
+  white-space: nowrap;
+  padding: var(--sp-2) var(--sp-3);
+  margin-bottom: -2px;
+  color: var(--c-ink-2);
+  background: transparent;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  cursor: pointer;
+}
+
+.p-tab:hover { background: var(--c-accent-tint); }
+
+.p-tab[aria-current="page"] {
+  color: var(--c-accent);
+  font-weight: 700;
+  border-bottom-color: var(--c-accent);
+}
+
+.p-tab__no { margin-right: var(--sp-1); color: var(--c-ink-3); }
+.p-tab[aria-current="page"] .p-tab__no { color: var(--c-accent); }
+
+/* ------------------------------------------------------------------
+   ボタン
+------------------------------------------------------------------ */
+.p-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.p-actions__spacer { flex: 1 1 auto; }
+
+.p-btn {
+  font-family: var(--font-gothic);
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-body);
+  color: var(--c-accent);
+  background: var(--c-accent-tint);
+  border: var(--rule-1) solid var(--c-rule-strong);
+  padding: var(--sp-1) var(--sp-2);
+  cursor: pointer;
+}
+
+.p-btn:hover { background: var(--c-base); }
+.p-btn:disabled { color: var(--c-ink-3); background: var(--c-base); border-color: var(--c-rule); cursor: not-allowed; }
+
+.p-btn--main {
+  font-size: var(--fs-body);
+  font-weight: 700;
+  background: var(--c-base);
+  border: var(--rule-2) solid var(--c-accent);
+  padding: var(--sp-2) var(--sp-3);
+}
+
+.p-btn--main:hover { background: var(--c-accent-tint); }
+
+.p-btn--quiet { color: var(--c-ink-2); background: var(--c-base); }
+
+.p-choice {
+  font-family: var(--font-gothic);
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-body);
+  color: var(--c-ink-2);
+  background: var(--c-base);
+  border: var(--rule-1) solid var(--c-rule-strong);
+  padding: var(--sp-1) var(--sp-2);
+  cursor: pointer;
+}
+
+.p-choice:hover { background: var(--c-accent-tint); }
+
+.p-choice[aria-pressed="true"] {
+  color: var(--c-accent);
+  font-weight: 700;
+  background: var(--c-accent-tint);
+  border-color: var(--c-accent);
+}
+
+.p-choice:disabled { color: var(--c-ink-3); border-color: var(--c-rule); cursor: not-allowed; background: var(--c-base); }
+.p-choice:disabled[aria-pressed="true"] { color: var(--c-caution); border-color: var(--c-caution); background: var(--c-caution-tint); font-weight: 700; }
+
+.p-choice__n { margin-left: var(--sp-1); font-feature-settings: "tnum" 1; }
+
+/* ------------------------------------------------------------------
+   集計タイル
+------------------------------------------------------------------ */
+.p-tiles {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-4);
+}
+
+.p-tiles--3 { grid-template-columns: repeat(3, 1fr); }
+.p-tiles--2 { grid-template-columns: repeat(2, 1fr); }
+
+.p-tile {
+  border-top: var(--rule-2) solid var(--c-accent);
+  border-bottom: var(--rule-1) solid var(--c-rule-strong);
+  padding: var(--sp-2) 0 var(--sp-3);
+  min-width: 0;
+}
+
+.p-tile--quiet { border-top-color: var(--c-rule-strong); }
+.p-tile--alert { border-top-color: var(--c-caution); }
+
+.p-tile__label {
+  margin: 0 0 var(--sp-1);
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-head);
+  color: var(--c-ink-2);
+}
+
+.p-tile__num {
+  margin: 0;
+  font-size: var(--fs-title);
+  line-height: 1.25;
+  font-weight: 700;
+  color: var(--c-accent);
+  font-feature-settings: "tnum" 1;
+}
+
+.p-tile--quiet .p-tile__num { color: var(--c-ink-2); }
+.p-tile--alert .p-tile__num { color: var(--c-caution); }
+
+.p-tile__unit { font-size: var(--fs-sub); font-weight: 500; margin-left: 2px; }
+
+.p-tile__sub {
+  margin: var(--sp-1) 0 0;
+  font-size: var(--fs-note);
+  line-height: 1.7;
+  color: var(--c-ink-3);
+}
+
+/* 積み上げの帯 */
+.p-bar {
+  display: flex;
+  height: 34px;
+  border: var(--rule-1) solid var(--c-rule-strong);
+}
+
+.p-bar__seg {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: var(--fs-note);
+  font-feature-settings: "tnum" 1;
+}
+
+.p-bar__seg--auto { background: var(--c-accent); color: var(--c-base); }
+.p-bar__seg--open { background: var(--c-paper); color: var(--c-ink); }
+.p-bar__seg--over { background: var(--c-caution); color: var(--c-base); }
+.p-bar__seg--done { background: var(--c-ink-3); color: var(--c-base); }
+
+/* 経過時間の目盛 */
+.p-gauge {
+  height: 10px;
+  border: var(--rule-1) solid var(--c-rule-strong);
+  background: var(--c-base);
+  margin-top: var(--sp-1);
+}
+
+.p-gauge__fill { height: 100%; background: var(--c-accent); }
+.p-gauge__fill.is-over { background: var(--c-caution); }
+
+/* ------------------------------------------------------------------
+   表
+------------------------------------------------------------------ */
+.p-scroll {
+  overflow-x: auto;
+  border-top: var(--rule-2) solid var(--c-rule-strong);
+  border-bottom: var(--rule-2) solid var(--c-rule-strong);
+}
+
+.p-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-note);
+  line-height: 1.75;
+}
+
+.p-table--wide { min-width: 720px; }
+.p-table--mid { min-width: 560px; }
+
+.p-table th, .p-table td {
+  padding: var(--sp-2);
+  border-bottom: var(--rule-1) solid var(--c-rule);
+  text-align: left;
+  vertical-align: top;
+}
+
+.p-table thead th {
+  background: var(--c-paper);
+  border-bottom: var(--rule-1) solid var(--c-rule-strong);
+  font-weight: 700;
+  color: var(--c-ink-2);
+  letter-spacing: var(--ls-head);
+  white-space: nowrap;
+}
+
+.p-table tbody tr:last-child td { border-bottom: 0; }
+
+.p-table .is-num { text-align: right; white-space: nowrap; font-feature-settings: "tnum" 1; }
+.p-table .is-name { font-weight: 700; color: var(--c-ink); }
+.p-table .is-plain { color: var(--c-ink-2); }
+.p-table .is-total { font-weight: 700; color: var(--c-accent); }
+.p-table .is-alert { font-weight: 700; color: var(--c-caution); }
+.p-table .is-nowrap { white-space: nowrap; }
+
+/* 札 */
+.p-mark {
+  display: inline-block;
+  white-space: nowrap;
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-head);
+  padding: 0 var(--sp-2);
+  border: var(--rule-1) solid var(--c-rule-strong);
+  background: var(--c-base);
+  color: var(--c-ink-2);
+}
+
+.p-mark--strong { background: var(--c-accent-tint); border-color: var(--c-accent); color: var(--c-accent); font-weight: 700; }
+.p-mark--watch { background: var(--c-paper); color: var(--c-ink); font-weight: 700; }
+.p-mark--alert { background: var(--c-caution-tint); border-color: var(--c-caution); color: var(--c-caution); font-weight: 700; }
+.p-mark--muted { border-color: var(--c-rule); color: var(--c-ink-3); }
+
+.p-empty {
+  padding: var(--sp-4) var(--sp-2);
+  border-top: var(--rule-2) solid var(--c-rule-strong);
+  border-bottom: var(--rule-2) solid var(--c-rule-strong);
+  color: var(--c-ink-2);
+}
+
+.p-empty p { margin: 0; }
+
+/* ------------------------------------------------------------------
+   受信トレイ
+------------------------------------------------------------------ */
+.p-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-2);
+  padding: var(--sp-3) 0;
+  border-top: var(--rule-2) solid var(--c-rule-strong);
+  border-bottom: var(--rule-1) solid var(--c-rule);
+  font-size: var(--fs-note);
+  color: var(--c-ink-3);
+}
+
+.p-filters__label { flex: 0 0 auto; width: 5em; letter-spacing: var(--ls-head); color: var(--c-ink-2); }
+
+.p-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: var(--rule-2) solid var(--c-rule-strong);
+  border-bottom: var(--rule-2) solid var(--c-rule-strong);
+}
+
+.p-item { border-bottom: var(--rule-1) solid var(--c-rule); }
+.p-item:last-child { border-bottom: 0; }
+
+.p-item__btn {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: var(--c-base);
+  border: 0;
+  border-left: 3px solid transparent;
+  padding: var(--sp-3) var(--sp-2);
+  cursor: pointer;
+  font-family: inherit;
+  color: inherit;
+}
+
+.p-item__btn:hover { background: var(--c-accent-tint); }
+.p-item__btn[aria-expanded="true"] { background: var(--c-accent-tint); }
+.p-item--over .p-item__btn { border-left-color: var(--c-caution); }
+
+.p-item__row { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-2); }
+
+.p-item__who { flex: 0 0 auto; font-size: var(--fs-note); color: var(--c-ink-3); }
+
+.p-item__text {
+  flex: 1 1 18em;
+  min-width: 0;
+  font-size: var(--fs-body);
+  font-weight: 700;
+  color: var(--c-ink);
+  line-height: var(--lh-head);
+}
+
+.p-item__time { flex: 0 0 auto; font-size: var(--fs-note); color: var(--c-ink-3); font-feature-settings: "tnum" 1; }
+
+.p-item__sub {
+  display: block;
+  margin: var(--sp-1) 0 0;
+  font-size: var(--fs-note);
+  line-height: 1.8;
+  color: var(--c-ink-2);
+}
+
+.p-item__why {
+  display: block;
+  margin: var(--sp-1) 0 0;
+  font-size: var(--fs-note);
+  line-height: 1.8;
+  color: var(--c-caution);
+}
+
+.p-panel {
+  background: var(--c-paper);
+  border-top: var(--rule-1) solid var(--c-rule);
+  padding: var(--sp-3) var(--sp-2);
+}
+
+.p-quote {
+  border-left: 3px solid var(--c-rule-strong);
+  background: var(--c-base);
+  padding: var(--sp-2) var(--sp-3);
+  margin: 0 0 var(--sp-3);
+}
+
+.p-quote__meta { margin: 0 0 var(--sp-1); font-size: var(--fs-note); color: var(--c-ink-3); }
+.p-quote__body { margin: 0; white-space: pre-wrap; line-height: 1.85; }
+
+.p-quote--reply { border-left-color: var(--c-accent); }
+
+.p-hint { margin: 0 0 var(--sp-3); font-size: var(--fs-note); line-height: 1.8; color: var(--c-ink-2); }
+
+.p-reason {
+  margin: 0 0 var(--sp-3);
+  border-left: 3px solid var(--c-caution);
+  background: var(--c-caution-tint);
+  padding: var(--sp-2) var(--sp-3);
+  font-size: var(--fs-note);
+  line-height: 1.8;
+  color: var(--c-ink-2);
+}
+
+.p-reason strong { font-weight: 700; color: var(--c-caution); }
+
+/* ------------------------------------------------------------------
+   振り分けルール
+------------------------------------------------------------------ */
+.p-rules { border-top: var(--rule-2) solid var(--c-rule-strong); border-bottom: var(--rule-2) solid var(--c-rule-strong); }
+
+.p-rule { padding: var(--sp-3) var(--sp-2); border-bottom: var(--rule-1) solid var(--c-rule); }
+.p-rule:last-child { border-bottom: 0; }
+
+.p-rule__row { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-2); }
+
+.p-rule__no { flex: 0 0 auto; font-family: var(--font-mincho); font-size: var(--fs-sub); color: var(--c-accent); }
+
+.p-rule__name {
+  flex: 1 1 14em;
+  min-width: 0;
+  font-size: var(--fs-body);
+  font-weight: 700;
+  color: var(--c-ink);
+  line-height: var(--lh-head);
+}
+
+.p-rule__hit { flex: 0 0 auto; font-size: var(--fs-note); color: var(--c-ink-3); font-feature-settings: "tnum" 1; }
+
+.p-rule__keys { margin: var(--sp-1) 0 0; font-size: var(--fs-note); color: var(--c-ink-3); line-height: 1.8; }
+.p-rule__desc { margin: var(--sp-1) 0 var(--sp-2); font-size: var(--fs-note); color: var(--c-ink-2); line-height: 1.8; }
+
+.p-rule__modes { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-top: var(--sp-2); }
+
+/* ------------------------------------------------------------------
+   入力
+------------------------------------------------------------------ */
+.p-fields { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--sp-3); margin-bottom: var(--sp-4); }
+.p-fields--2 { grid-template-columns: repeat(2, 1fr); }
+
+.p-field { min-width: 0; }
+
+.p-field__label {
+  display: block;
+  margin-bottom: var(--sp-1);
+  font-size: var(--fs-note);
+  font-weight: 700;
+  letter-spacing: var(--ls-head);
+  color: var(--c-ink-2);
+}
+
+.p-input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  font-family: var(--font-gothic);
+  font-size: var(--fs-body);
+  line-height: 1.7;
+  letter-spacing: var(--ls-body);
+  color: var(--c-ink);
+  background: var(--c-base);
+  border: var(--rule-1) solid var(--c-rule-strong);
+  padding: var(--sp-1) var(--sp-2);
+  font-feature-settings: "tnum" 1;
+}
+
+.p-input:focus { border-color: var(--c-accent); }
+.p-input:read-only { background: var(--c-paper); color: var(--c-ink-2); }
+
+.p-field__note { margin: var(--sp-1) 0 0; font-size: var(--fs-note); color: var(--c-ink-3); }
+
+/* ------------------------------------------------------------------
+   説明
+------------------------------------------------------------------ */
+.p-def { margin: 0 0 var(--sp-4); }
+
+.p-def__label {
+  margin: 0 0 var(--sp-1);
+  font-size: var(--fs-note);
+  font-weight: 700;
+  letter-spacing: var(--ls-head);
+  color: var(--c-accent);
+}
+
+.p-def__body { margin: 0; color: var(--c-ink); max-width: 44em; }
+
+.p-def__body code, .p-code {
+  font-family: "SFMono-Regular", Consolas, "Courier New", monospace;
+  font-size: var(--fs-note);
+  background: var(--c-paper);
+  padding: 0 var(--sp-1);
+}
+
+.p-colophon {
+  margin-top: var(--sp-4);
+  padding-top: var(--sp-3);
+  border-top: var(--rule-2) solid var(--c-rule-strong);
+  font-size: var(--fs-note);
+  color: var(--c-ink-3);
+}
+
+.p-colophon p { margin: 0 0 var(--sp-1); }
+.p-colophon p:last-child { margin-bottom: 0; }
+
+/* ------------------------------------------------------------------
+   スマートフォン
+------------------------------------------------------------------ */
+@media (max-width: 900px) {
+  .p-tiles { grid-template-columns: 1fr 1fr; }
+  .p-fields { grid-template-columns: 1fr 1fr; }
+}
+
+@media (max-width: 640px) {
+  :root {
+    --fs-title: 26px;
+    --fs-head: 20px;
+    --fs-sub: 17px;
+    --sp-5: 48px;
+  }
+
+  .p-sheet { padding: 0 var(--sp-2); }
+  .p-tiles, .p-tiles--3, .p-tiles--2 { grid-template-columns: 1fr; }
+  .p-fields, .p-fields--2 { grid-template-columns: 1fr; }
+  .p-tile__num { font-size: 28px; }
+  .p-filters__label { width: 100%; }
+  .p-clock__label { width: 100%; }
+}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>Babel.registerPreset("react-classic", { presets: [[Babel.availablePresets["react"], { runtime: "classic" }]] });</script>
+<script type="text/babel" data-presets="react-classic">
+const { useState, useMemo } = React;
+
+/* ==================================================================
+   設定。業種ごとに差し替えるのは、ここから下の設定ブロックだけです。
+   画面のコード本体には、店舗名も文面も時間も書いていません。
+   実案件では JSON / DB に外出しし、管理画面から編集できるようにします。
+================================================================== */
+
+/* ------------------------------------------------------------------
+   店舗の基本情報
+------------------------------------------------------------------ */
+const SHOP = {
+  name: "桜台ヘアサロン",
+  accountName: "桜台ヘアサロン 公式アカウント",
+  staff: "担当者（佐藤）",
+  manager: "店長（田中）",
+};
+
+/* ------------------------------------------------------------------
+   営業時間。日曜が定休（0=日曜）。
+   未返信時間は、この営業時間の中だけで数えます。
+   夜中の12時間を「放置8時間」と数えないためです。
+------------------------------------------------------------------ */
+const BUSINESS_HOURS = {
+  label: "平日・土曜 10:00〜19:00／日曜定休",
+  openHour: 10, openMin: 0,
+  closeHour: 19, closeMin: 0,
+  closedWeekdays: [0],
+  autoReply:
+    "ご連絡ありがとうございます。\nただいま営業時間外のため、自動でご案内をお送りしています。\n\n営業時間：平日・土曜 10:00〜19:00（日曜定休）\n次の営業日の開店後に、担当者から順にご返信いたします。\n\nお急ぎのご用件は、開店後にお電話でも承ります。",
+};
+
+/* ------------------------------------------------------------------
+   未返信の検知。すべて「営業時間で数えた分」です。
+   firstReply … 初回返信の目標時間
+   reNotify   … 目標を過ぎたあと、何分ごとに担当者へ再通知するか
+   maxRenotify… 再通知の上限回数（無限に鳴らし続けないため）
+   escalate   … これを過ぎたら店長へ引き上げる
+------------------------------------------------------------------ */
+const SLA_PRESETS = {
+  firstReply: [30, 60, 120],
+  reNotify: [30, 60, 120],
+  escalate: [120, 180, 360],
+};
+
+const SLA_DEFAULT = {
+  firstReply: 60,
+  reNotify: 60,
+  maxRenotify: 3,
+  escalate: 180,
+};
+
+/* ------------------------------------------------------------------
+   振り分けルール。上から順に判定し、最初に当たったルールを使います。
+   mode は3つです。
+     auto  … 自動応答で完結させる（人の手は動かない）
+     ack   … 受付の自動返信だけ送り、対応は人に残す（未返信の検知の対象）
+     human … 自動返信なし。人が最初に読む
+   locked: true のルールは、自動応答に回せないよう固定しています。
+------------------------------------------------------------------ */
+const ROUTING_RULES = [
+  {
+    id: "complaint",
+    label: "苦情・不満の申し出",
+    keywords: ["返信が来ない", "連絡が来ない", "何日も", "放置", "ひどい", "最悪", "二度と", "苦情", "不快", "納得", "責任", "返金", "謝", "説明がなかった", "痛かった", "思っていたのと違", "がっかり", "残念"],
+    mode: "human",
+    locked: true,
+    desc: "自動応答に回してはいけない種類です。定型文が返ると「読まれていない」と受け取られ、苦情が一段重くなります。最初に人が読みます。",
+    reply: null,
+    ackReply: null,
+  },
+  {
+    id: "reserve-change",
+    label: "予約の変更・キャンセル",
+    keywords: ["変更", "キャンセル", "取り消", "ずらし", "延期", "遅れそう", "別の日"],
+    mode: "ack",
+    desc: "台帳を書き換える必要があるため、確定の連絡は人が行います。受付だけ自動で返し、待たせている状態を作りません。",
+    reply: "ご予約の変更・キャンセルは、予約ページのマイページから前日18時まで承っております。\n\n当日の変更のみ、お手数ですがお電話でお願いいたします。",
+    ackReply: "ご連絡ありがとうございます。変更のご希望を承りました。\n担当者が予約台帳を確認のうえ、営業時間内に折り返しご返信いたします。",
+  },
+  {
+    id: "reserve-new",
+    label: "予約の依頼",
+    keywords: ["予約", "空いて", "空き", "取れ", "お願いしたい", "来店したい"],
+    mode: "ack",
+    desc: "空き状況の確認が要るため、受付だけ自動で返します。予約ページに誘導する設定（自動応答）に切り替えることもできます。",
+    reply: "ご予約は予約ページから24時間お受けしています。\n\n担当者の指名、当日のご予約は、お手数ですがお電話でお願いいたします。",
+    ackReply: "ご予約の希望をありがとうございます。\n空き状況を確認のうえ、担当者から改めてご連絡いたします。",
+  },
+  {
+    id: "hours",
+    label: "営業時間・定休日の質問",
+    keywords: ["営業時間", "何時まで", "何時から", "開いて", "定休", "お休み", "祝日", "お盆", "年末年始"],
+    mode: "auto",
+    desc: "答えが一つに決まる質問です。人が読む必要がありません。",
+    reply: "当店の営業時間は次のとおりです。\n\n・平日 10:00〜19:00\n・土曜 10:00〜19:00\n・日曜 定休\n\n最終受付は閉店の1時間前です。祝日・お盆期間は通常どおり営業しております。",
+    ackReply: "ご連絡ありがとうございます。営業時間についてのお問い合わせを承りました。\n担当者から改めてご返信いたします。",
+  },
+  {
+    id: "parking",
+    label: "駐車場・行き方の質問",
+    keywords: ["駐車", "車で", "停め", "パーキング", "駐輪", "自転車"],
+    mode: "auto",
+    desc: "答えが一つに決まる質問です。地図の画像を添えると、さらに問い返しが減ります。",
+    reply: "お車でお越しの場合は、店舗裏手の提携駐車場（3台）をご利用ください。\n満車の場合は隣のコインパーキングをご利用いただき、1時間分まで当店で負担いたします。\n\n駐輪場は店舗横にございます。",
+    ackReply: "ご連絡ありがとうございます。駐車場についてのお問い合わせを承りました。\n担当者から改めてご返信いたします。",
+  },
+  {
+    id: "price",
+    label: "料金・メニューの質問",
+    keywords: ["料金", "値段", "いくら", "価格", "メニュー", "カット代", "学割", "クーポン"],
+    mode: "auto",
+    desc: "答えが一つに決まる質問です。料金改定のときは、この文面だけを直します。",
+    reply: "主なメニューと料金です。\n\n・カット 4,400円\n・カラー 7,700円〜\n・カット＋カラー 11,000円\n・学生割引 10%引き（学生証をご提示ください）\n\n髪の長さによる追加料金はいただいておりません。",
+    ackReply: "ご連絡ありがとうございます。料金についてのお問い合わせを承りました。\n担当者から改めてご返信いたします。",
+  },
+  {
+    id: "fallback",
+    label: "上のどれにも当てはまらないもの",
+    keywords: [],
+    mode: "ack",
+    desc: "受け皿です。ここに落ちた件数が多いときは、上のルールが足りていない合図になります。",
+    reply: null,
+    ackReply: "ご連絡ありがとうございます。\n内容を確認のうえ、担当者からご返信いたします。",
+  },
+];
+
+const MODES = {
+  auto:  { label: "自動応答で完結", short: "自動", tone: "strong" },
+  ack:   { label: "受付だけ自動返信", short: "受付返信", tone: "watch" },
+  human: { label: "人が対応", short: "人", tone: "muted" },
+};
+
+/* ------------------------------------------------------------------
+   受信トレイの分類。臙脂を使うのは overdue（要対応）だけです。
+------------------------------------------------------------------ */
+const STATUSES = {
+  open:    { label: "未対応",    tone: "watch",  hint: "人が返信する必要があります。まだ目標時間内です。" },
+  auto:    { label: "自動応答済", tone: "strong", hint: "自動応答で完結しました。人の手は動いていません。" },
+  overdue: { label: "要対応",    tone: "alert",  hint: "初回返信の目標時間を過ぎています。担当者へ再通知が発生しています。" },
+  done:    { label: "対応済み",  tone: "muted",  hint: "人が返信し、閉じました。再通知は止まっています。" },
+};
+
+const STATUS_ORDER = ["overdue", "open", "auto", "done"];
+
+/* ------------------------------------------------------------------
+   デモの現在時刻。2026年8月17日（月）11:30 から始めます。
+   画面上のボタンで、ここから時間を進められます。
+------------------------------------------------------------------ */
+const BASE_NOW = "2026-08-17 11:30";
+
+/* ------------------------------------------------------------------
+   受信メッセージ 30件。すべて架空です。
+   handled: true は、すでに人が対応を終えているものです。
+------------------------------------------------------------------ */
+const MESSAGES = [
+  { id: "l01", at: "2026-08-14 18:40", from: "みなみ", text: "明日15時の予約ですが、17時に変更できませんか。" },
+  { id: "l02", at: "2026-08-14 20:15", from: "K.T", text: "本日お願いしたカラーですが、思っていたのと違う色になっていて納得できません。" },
+  { id: "l03", at: "2026-08-15 11:05", from: "ゆき", text: "先週伺った際の対応について、正直がっかりしました。ご説明をいただきたいです。" },
+  { id: "l04", at: "2026-08-15 13:20", from: "はるか", text: "来週の水曜、午前中で予約は空いていますか。" },
+  { id: "l05", at: "2026-08-15 19:40", from: "のぶ", text: "いまからでも明日の予約は取れますか。" },
+  { id: "l06", at: "2026-08-16 09:30", from: "まき", text: "本日は何時から営業していますか。" },
+  { id: "l07", at: "2026-08-16 12:10", from: "たけ", text: "駐車場はありますか。" },
+  { id: "l08", at: "2026-08-16 15:45", from: "さゆり", text: "明日の夕方に予約をお願いしたいのですが空いていますか。" },
+  { id: "l09", at: "2026-08-16 18:00", from: "R", text: "カットとカラーの料金を教えてください。" },
+  { id: "l10", at: "2026-08-16 21:30", from: "みなみ", text: "金曜に予約の変更をお願いしましたが、何日も返信が来ないままです。どうなっていますか。" },
+  { id: "l11", at: "2026-08-17 08:50", from: "あおい", text: "本日14時の予約を16時に変更したいです。" },
+  { id: "l12", at: "2026-08-17 09:05", from: "しんご", text: "今日は何時まで営業していますか。" },
+  { id: "l13", at: "2026-08-17 10:02", from: "ゆうこ", text: "車で行きます。近くに駐車場はありますか。" },
+  { id: "l14", at: "2026-08-17 10:10", from: "なつ", text: "カラーの値段はいくらですか。" },
+  { id: "l15", at: "2026-08-17 10:15", from: "こう", text: "今週の土曜、11時ごろは空いていますか。" },
+  { id: "l16", at: "2026-08-17 10:20", from: "みほ", text: "祝日は営業していますか。定休日も教えてください。" },
+  { id: "l17", at: "2026-08-17 10:25", from: "だい", text: "明日の予約を明後日に変更できますか。" },
+  { id: "l18", at: "2026-08-17 10:30", from: "さき", text: "前回と担当の方が変わっていて、事前に説明がなかったのが残念でした。" },
+  { id: "l19", at: "2026-08-17 10:35", from: "ren", text: "学割はありますか。学生証は必要ですか。" },
+  { id: "l20", at: "2026-08-17 10:40", from: "かおり", text: "提携している駐車場はどこにありますか。" },
+  { id: "l21", at: "2026-08-17 10:45", from: "ひろ", text: "本日の予約をキャンセルしたいです。" },
+  { id: "l22", at: "2026-08-17 10:50", from: "まゆ", text: "昨日、店内に傘を忘れてしまいました。届いていませんか。", handled: true, handledBy: "担当者（佐藤）" },
+  { id: "l23", at: "2026-08-17 10:55", from: "T.N", text: "求人を見ました。アシスタントの募集はまだしていますか。" },
+  { id: "l24", at: "2026-08-17 11:00", from: "あき", text: "山田さんを指名して予約したいのですが、来週は出勤されますか。" },
+  { id: "l25", at: "2026-08-17 11:05", from: "のりこ", text: "お盆の期間は営業時間が変わりますか。" },
+  { id: "l26", at: "2026-08-17 11:10", from: "yui", text: "メニューの一覧はどこで見られますか。" },
+  { id: "l27", at: "2026-08-17 11:15", from: "えみ", text: "頭皮が弱いのですが、使用している薬剤を教えてもらえますか。" },
+  { id: "l28", at: "2026-08-17 11:20", from: "しおり", text: "自転車で行きます。駐輪場はありますか。" },
+  { id: "l29", at: "2026-08-17 11:25", from: "こうた", text: "本日18時の予約、10分ほど遅れそうです。" },
+  { id: "l30", at: "2026-08-17 11:28", from: "（企業）", text: "広告掲載のご案内でご連絡しました。ご担当者様はいらっしゃいますか。", handled: true, handledBy: "担当者（佐藤）", closedNote: "営業の連絡のため、返信せずに閉じました。" },
+];
+
+/* ------------------------------------------------------------------
+   配信。ブロック率・反応率はすべてデモ用の想定値です。
+   blockPerSend … 1回の配信で、受け取った人のうちブロックする割合
+------------------------------------------------------------------ */
+const BROADCAST = {
+  friends: 1200,
+  perMonth: 4,
+  months: 6,
+  planFreeMessages: 5000,
+  patterns: [
+    {
+      id: "all",
+      label: "一斉配信",
+      desc: "友だち全員に同じ内容を送ります。関係のない人にも届くため、通数が増え、ブロックの主因になります。",
+      blockPerSend: 0.009,
+      readRate: 0.41,
+      visitRate: 0.018,
+    },
+    {
+      id: "segment",
+      label: "セグメント配信",
+      desc: "条件に当てはまる人にだけ送ります。通数が減り、内容が自分ごとになるためブロックが起きにくくなります。",
+      blockPerSend: 0.002,
+      readRate: 0.63,
+      visitRate: 0.052,
+    },
+  ],
+  segments: [
+    { id: "recent", label: "直近90日に来店した人", ratio: 0.42, on: true },
+    { id: "lapsed", label: "来店から120日以上あいている人", ratio: 0.23, on: true },
+    { id: "reserved", label: "翌日に予約が入っている人", ratio: 0.06, on: false },
+  ],
+};
+
+/* ------------------------------------------------------------------
+   手作業との比較。checkMinutes は、自動応答で片づいた分について
+   「あとから内容を目で見る」手間として計上する分数です。
+------------------------------------------------------------------ */
+const COMPARE = {
+  monthlyMessages: 640,
+  minutesPerMessage: 6,
+  checkMinutes: 0.5,
+};
+
+/* ==================================================================
+   ここから下は画面のコードです。業種による差し替えは不要です。
+================================================================== */
+
+const WD = ["日", "月", "火", "水", "木", "金", "土"];
+
+function parseAt(s) {
+  const [d, t] = s.split(" ");
+  const [y, mo, da] = d.split("-").map(Number);
+  const [h, mi] = t.split(":").map(Number);
+  return new Date(y, mo - 1, da, h, mi, 0, 0);
+}
+
+const fmtDateTime = (d) =>
+  `${d.getMonth() + 1}/${d.getDate()}(${WD[d.getDay()]}) ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+
+const fmtTime = (d) =>
+  `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+
+function fmtMinutes(m) {
+  const v = Math.max(0, Math.round(m));
+  if (v < 60) return `${v}分`;
+  const h = Math.floor(v / 60);
+  const r = v % 60;
+  return r === 0 ? `${h}時間` : `${h}時間${r}分`;
+}
+
+function fmtHours(m) {
+  return (m / 60).toFixed(1);
+}
+
+const atTime = (d, h, mi) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), h, mi, 0, 0);
+const nextDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1, 0, 0, 0, 0);
+const isClosedDay = (d, h) => h.closedWeekdays.indexOf(d.getDay()) >= 0;
+
+function inBusinessHours(d, h) {
+  if (isClosedDay(d, h)) return false;
+  return d >= atTime(d, h.openHour, h.openMin) && d < atTime(d, h.closeHour, h.closeMin);
+}
+
+/* 営業時間だけを数えた、2点間の経過分数 */
+function businessMinutesBetween(from, to, h) {
+  if (to <= from) return 0;
+  let total = 0;
+  let cur = new Date(from.getFullYear(), from.getMonth(), from.getDate(), 0, 0, 0, 0);
+  for (let guard = 0; guard < 400 && cur <= to; guard += 1) {
+    if (!isClosedDay(cur, h)) {
+      const open = atTime(cur, h.openHour, h.openMin).getTime();
+      const close = atTime(cur, h.closeHour, h.closeMin).getTime();
+      const s = Math.max(from.getTime(), open);
+      const e = Math.min(to.getTime(), close);
+      if (e > s) total += (e - s) / 60000;
+    }
+    cur = nextDay(cur);
+  }
+  return Math.round(total);
+}
+
+/* 営業時間だけを数えて、指定の分数だけ先に進めた時刻 */
+function addBusinessMinutes(from, minutes, h) {
+  let remaining = minutes;
+  let cur = new Date(from.getTime());
+  for (let guard = 0; guard < 400; guard += 1) {
+    if (isClosedDay(cur, h)) { cur = nextDay(cur); continue; }
+    const open = atTime(cur, h.openHour, h.openMin);
+    const close = atTime(cur, h.closeHour, h.closeMin);
+    if (cur < open) cur = new Date(open.getTime());
+    if (cur >= close) { cur = nextDay(cur); continue; }
+    const avail = (close.getTime() - cur.getTime()) / 60000;
+    if (avail >= remaining) return new Date(cur.getTime() + remaining * 60000);
+    remaining -= avail;
+    cur = nextDay(cur);
+  }
+  return cur;
+}
+
+/* 指定時刻より後の、次の開店時刻 */
+function nextOpenAfter(d, h) {
+  let cur = new Date(d.getTime());
+  for (let guard = 0; guard < 30; guard += 1) {
+    if (!isClosedDay(cur, h)) {
+      const open = atTime(cur, h.openHour, h.openMin);
+      if (open > d) return open;
+    }
+    cur = nextDay(cur);
+  }
+  return d;
+}
+
+/* 未返信の計測を始める時刻。営業時間外に届いた分は、次の開店時刻から数えます */
+function slaStartOf(d, h) {
+  if (inBusinessHours(d, h)) return d;
+  return nextOpenAfter(d, h);
+}
+
+function matchRule(text) {
+  for (let i = 0; i < ROUTING_RULES.length; i += 1) {
+    const r = ROUTING_RULES[i];
+    if (r.keywords.length === 0) return { rule: r, hit: null };
+    for (let k = 0; k < r.keywords.length; k += 1) {
+      if (text.indexOf(r.keywords[k]) >= 0) return { rule: r, hit: r.keywords[k] };
+    }
+  }
+  const last = ROUTING_RULES[ROUTING_RULES.length - 1];
+  return { rule: last, hit: null };
+}
+
+/* 受信メッセージ1件を、いまの設定で分類します */
+function classify(msg, modes, sla, now, hours, handled, autoReplyOutside) {
+  const received = parseAt(msg.at);
+  const outside = !inBusinessHours(received, hours);
+  const slaStart = slaStartOf(received, hours);
+  const found = matchRule(msg.text);
+  const rule = found.rule;
+  const mode = modes[rule.id];
+  const isHandled = !!handled[msg.id];
+
+  const elapsed = businessMinutesBetween(slaStart, now, hours);
+  const realElapsed = Math.max(0, Math.round((now.getTime() - received.getTime()) / 60000));
+
+  let status;
+  if (mode === "auto") status = "auto";
+  else if (isHandled) status = "done";
+  else status = elapsed >= sla.firstReply ? "overdue" : "open";
+
+  const due = addBusinessMinutes(slaStart, sla.firstReply, hours);
+
+  const replies = [];
+  if (outside && autoReplyOutside) {
+    replies.push({ at: received, kind: "営業時間外の自動返信", text: hours.autoReply });
+  }
+  if (mode === "auto" && rule.reply) {
+    replies.push({ at: received, kind: `自動応答（ルール：${rule.label}）`, text: rule.reply });
+  }
+  if (mode === "ack" && rule.ackReply) {
+    replies.push({ at: received, kind: `受付の自動返信（ルール：${rule.label}）`, text: rule.ackReply });
+  }
+
+  return {
+    msg, rule, hit: found.hit, mode, status, received, outside, slaStart,
+    elapsed, realElapsed, due, replies,
+    handledBy: isHandled ? (msg.handledBy || SHOP.staff) : null,
+    closedNote: isHandled ? msg.closedNote || null : null,
+    queued: outside && now < slaStart,
+  };
+}
+
+/* 未返信から生まれる通知。対応済み・自動応答済には発生しません */
+function buildNotifications(items, sla, now, hours) {
+  const events = [];
+  items.forEach((it) => {
+    if (it.status === "auto" || it.status === "done") return;
+    for (let i = 0; i <= sla.maxRenotify; i += 1) {
+      const at = addBusinessMinutes(it.slaStart, sla.firstReply + sla.reNotify * i, hours);
+      events.push({
+        key: `${it.msg.id}-n${i}`,
+        at,
+        to: SHOP.staff,
+        kind: i === 0 ? "目標時間を超過" : `再通知 ${i}回目`,
+        level: "warn",
+        item: it,
+      });
+    }
+    events.push({
+      key: `${it.msg.id}-esc`,
+      at: addBusinessMinutes(it.slaStart, sla.escalate, hours),
+      to: SHOP.manager,
+      kind: "店長へ引き上げ",
+      level: "alert",
+      item: it,
+    });
+  });
+  return events;
+}
+
+const markClass = (tone) => (tone ? `p-mark p-mark--${tone}` : "p-mark");
+const pct = (n) => `${(n * 100).toFixed(1)}%`;
+const pctShort = (n) => `${Math.round(n * 100)}%`;
+
+/* ==================================================================
+   画面
+================================================================== */
+
+function App() {
+  const [view, setView] = useState("inbox");
+  const [modes, setModes] = useState(() => {
+    const m = {};
+    ROUTING_RULES.forEach((r) => { m[r.id] = r.mode; });
+    return m;
+  });
+  const [handled, setHandled] = useState(() => {
+    const h = {};
+    MESSAGES.forEach((x) => { if (x.handled) h[x.id] = true; });
+    return h;
+  });
+  const [sla, setSla] = useState(SLA_DEFAULT);
+  const [offsetMin, setOffsetMin] = useState(0);
+  const [autoReplyOutside, setAutoReplyOutside] = useState(true);
+
+  const base = useMemo(() => parseAt(BASE_NOW), []);
+  const now = useMemo(() => new Date(base.getTime() + offsetMin * 60000), [base, offsetMin]);
+
+  const items = useMemo(
+    () => MESSAGES.map((m) => classify(m, modes, sla, now, BUSINESS_HOURS, handled, autoReplyOutside)),
+    [modes, sla, now, handled, autoReplyOutside]
+  );
+
+  const counts = useMemo(() => {
+    const c = { all: items.length, open: 0, auto: 0, overdue: 0, done: 0 };
+    items.forEach((it) => { c[it.status] += 1; });
+    return c;
+  }, [items]);
+
+  const notifications = useMemo(
+    () => buildNotifications(items, sla, now, BUSINESS_HOURS),
+    [items, sla, now]
+  );
+
+  const fired = useMemo(
+    () => notifications.filter((e) => e.at <= now).sort((a, b) => b.at - a.at),
+    [notifications, now]
+  );
+
+  const upcoming = useMemo(
+    () => notifications.filter((e) => e.at > now).sort((a, b) => a.at - b.at),
+    [notifications, now]
+  );
+
+  const resolve = (id) => setHandled((p) => Object.assign({}, p, { [id]: true }));
+  const reopen = (id) => setHandled((p) => {
+    const n = Object.assign({}, p);
+    delete n[id];
+    return n;
+  });
+
+  const resetAll = () => {
+    const m = {};
+    ROUTING_RULES.forEach((r) => { m[r.id] = r.mode; });
+    setModes(m);
+    const h = {};
+    MESSAGES.forEach((x) => { if (x.handled) h[x.id] = true; });
+    setHandled(h);
+    setSla(SLA_DEFAULT);
+    setOffsetMin(0);
+    setAutoReplyOutside(true);
+  };
+
+  const shared = {
+    items, counts, notifications, fired, upcoming, now, sla, setSla, modes, setModes,
+    resolve, reopen, autoReplyOutside, setAutoReplyOutside, offsetMin, setOffsetMin,
+  };
+
+  const TABS = [
+    { id: "inbox",  no: "一", label: "受信トレイ" },
+    { id: "rules",  no: "二", label: "振り分けルール" },
+    { id: "sla",    no: "三", label: "未返信の検知" },
+    { id: "hours",  no: "四", label: "営業時間外の扱い" },
+    { id: "send",   no: "五", label: "配信" },
+    { id: "compare",no: "六", label: "手作業との比較" },
+  ];
+
+  return (
+    <React.Fragment>
+      <div className="p-topbar" />
+
+      <div className="p-sheet">
+        {/* ---------------- ヘッダー ---------------- */}
+        <header className="p-masthead">
+          <p className="p-masthead__kicker">中小企業向け　業務改善・自動化サンプル　LINE公式アカウントの運用</p>
+          <h1 className="p-masthead__title">LINE公式アカウント 運用設計 デモ</h1>
+          <p className="p-masthead__lead">
+            アカウントを作っただけで放置されてしまうのは、届いたメッセージを
+            <strong>誰が・いつまでに・どう返すか</strong>が決まっていないからです。
+            この画面では、届いたメッセージを自動応答と人の対応に振り分け、
+            一定時間を過ぎた未対応を検知して担当者に再通知するまでを、実際に操作しながら確認できます。
+          </p>
+          <p className="p-masthead__meta">
+            画面：受信トレイ／振り分けルール／未返信の検知／営業時間外の扱い／配信／手作業との比較
+            {"　"}想定：{SHOP.name}（架空の店舗）　{BUSINESS_HOURS.label}
+            <a href="../../index.html">業務の悩み 索引へ戻る</a>
+          </p>
+
+          <div className="p-notice">
+            <p className="p-notice__title">このデモの前提</p>
+            <p className="p-notice__body">
+              表示している受信メッセージ・お客さまの名前・件数・削減時間・ブロック率は、
+              すべて動作確認のために用意した<strong>デモ用の架空のデータおよび想定値</strong>です。
+              実在する店舗・人物・実績とは関係ありません。
+            </p>
+            <p className="p-notice__body">
+              この画面は<strong>LINEのAPIには接続していません</strong>。
+              メッセージの送受信は行っておらず、ブラウザの中だけで動いています。
+              入力・操作の内容はどこにも保存・送信されません
+              （localStorage・Cookie・外部通信のいずれも使っていません）。ページを開き直すと最初の状態に戻ります。
+            </p>
+            <p className="p-notice__body">
+              実際の導入では、LINE公式アカウントの Messaging API を使って受信・返信・配信を行います。
+              配信できるメッセージの通数には料金プランごとに上限があり、上限を超えた分は追加費用が発生します。
+              最新の通数と料金は、提供元の公式情報でご確認ください。
+            </p>
+          </div>
+        </header>
+
+        {/* ---------------- いまの状態 ---------------- */}
+        <div className="p-scope">
+          <p>
+            受信 <strong>{counts.all}件</strong>のうち、
+            自動応答で完結したのが <strong>{counts.auto}件</strong>、
+            人が返信するものが <strong>{counts.open + counts.overdue}件</strong>。
+            そのうち目標時間を過ぎているのが
+            <strong className="is-alert"> {counts.overdue}件</strong>です。
+          </p>
+          <p className="p-scope__sub">
+            この数字は、下の「振り分けルール」の設定と、現在時刻によってその場で変わります。
+            未返信時間は営業時間の中だけで数えています（閉店中の時間は放置に数えません）。
+          </p>
+        </div>
+
+        {/* ---------------- 時計 ---------------- */}
+        <div className="p-clock">
+          <span className="p-clock__label">デモの現在時刻</span>
+          <span className="p-clock__now">{fmtDateTime(now)}</span>
+          <span>{inBusinessHours(now, BUSINESS_HOURS) ? "営業時間内" : "営業時間外"}</span>
+          <span className="p-clock__spacer" />
+          <button type="button" className="p-btn" onClick={() => setOffsetMin(offsetMin + 30)}>30分進める</button>
+          <button type="button" className="p-btn" onClick={() => setOffsetMin(offsetMin + 60)}>1時間進める</button>
+          <button type="button" className="p-btn" onClick={() => setOffsetMin(offsetMin + 180)}>3時間進める</button>
+          <button
+            type="button"
+            className="p-btn"
+            onClick={() => setOffsetMin(offsetMin + Math.round((nextOpenAfter(now, BUSINESS_HOURS).getTime() - now.getTime()) / 60000))}
+          >
+            翌営業日の開店へ
+          </button>
+          <button type="button" className="p-btn p-btn--quiet" onClick={resetAll}>最初の状態に戻す</button>
+        </div>
+
+        {/* ---------------- 画面の切り替え ---------------- */}
+        <nav className="p-tabs" aria-label="画面の切り替え">
+          {TABS.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              className="p-tab"
+              aria-current={view === t.id ? "page" : undefined}
+              onClick={() => setView(t.id)}
+            >
+              <span className="p-tab__no">{t.no}</span>
+              {t.label}
+            </button>
+          ))}
+        </nav>
+
+        {/* ---------------- 本体 ---------------- */}
+        {view === "inbox" ? <InboxView {...shared} /> : null}
+        {view === "rules" ? <RulesView {...shared} /> : null}
+        {view === "sla" ? <SlaView {...shared} /> : null}
+        {view === "hours" ? <AfterHoursView {...shared} /> : null}
+        {view === "send" ? <BroadcastView /> : null}
+        {view === "compare" ? <CompareView counts={counts} /> : null}
+
+        {/* ---------------- 実装と運用について ---------------- */}
+        <section className="p-section">
+          <div className="p-heading">
+            <span className="p-heading__no">実装と運用について</span>
+            <h2 className="p-heading__text">放置が起きないのは、人が真面目だからではありません</h2>
+          </div>
+
+          <div className="p-def">
+            <p className="p-def__label">返信されない件には、共通の特徴があります</p>
+            <p className="p-def__body">
+              返ってこないのは、答えにくい件です。予約が取れない、値引きを求められた、苦情が来た。
+              人は答えにくい件を後回しにします。放置は担当者の性格の問題ではなく、
+              <strong>後回しにしたことを誰も検知していない</strong>という設計の問題です。
+              期限を決め、超えたら勝手に鳴るようにすれば、後回しは続きません。
+            </p>
+          </div>
+
+          <div className="p-def">
+            <p className="p-def__label">自動応答を増やしても、放置はなくなりません</p>
+            <p className="p-def__body">
+              自動応答で片づくのは、答えが一つに決まる質問だけです。
+              苦情・予約の変更・例外の相談は必ず人に残ります。
+              残った分を放置しない仕組み（未返信の検知と再通知）がないまま自動応答だけを入れると、
+              <strong>返信が早い件と、いつまでも返らない件の差が広がります</strong>。
+              このデモで中心に置いているのは、自動応答ではなく検知のほうです。
+            </p>
+          </div>
+
+          <div className="p-def">
+            <p className="p-def__label">未返信時間は、営業時間で数えます</p>
+            <p className="p-def__body">
+              夜22時に届いたメッセージを、翌朝10時の時点で「12時間放置」と数えると、
+              毎朝すべてが超過になり、通知そのものが無視されるようになります。
+              このデモでは閉店中の時間を数えず、<strong>次の開店時刻から計測を始めています</strong>。
+              営業時間外に届いた分には、その場で自動返信を返して待たせている状態を作りません。
+            </p>
+          </div>
+
+          <div className="p-def">
+            <p className="p-def__label">苦情は自動応答に回せません</p>
+            <p className="p-def__body">
+              苦情に定型文が返ると、「読まれていない」と受け取られ、問題が一段重くなります。
+              振り分けルールの「苦情・不満の申し出」は、自動応答に切り替えられないよう固定しています。
+              運用の設計とは、何を自動にするかより先に、<strong>何を自動にしないかを決めること</strong>です。
+            </p>
+          </div>
+
+          <div className="p-def">
+            <p className="p-def__label">実装時の構成</p>
+            <p className="p-def__body">
+              実装では LINE公式アカウントの Messaging API を使い、Webhookで受信、返信・配信もサーバー側で行います。
+              受信内容は自社のデータベースに保存し、この画面と同じ受信トレイを作ります。
+              未返信の検知は定期実行（cronなど）で判定し、再通知はメール・チャットツール・スマートフォンの通知に流します。
+              APIのアクセストークンはブラウザに出しません。
+            </p>
+          </div>
+
+          <div className="p-def">
+            <p className="p-def__label">設定の置き場所</p>
+            <p className="p-def__body">
+              振り分けルール・営業時間・未返信の目標時間・配信の想定値は、ファイル冒頭の設定オブジェクト
+              （<code>ROUTING_RULES</code> / <code>BUSINESS_HOURS</code> / <code>SLA_DEFAULT</code> /
+              {" "}<code>BROADCAST</code> / <code>MESSAGES</code>）にまとめています。
+              業種を変える場合も、書き換えるのはこの部分だけです。
+              飲食店なら「席の予約・アレルギーの確認」、整骨院なら「症状の相談・保険の適用」というように、
+              ルールの名前と語句、自動応答の文面を差し替えれば同じ画面がそのまま動きます。
+            </p>
+          </div>
+
+          <div className="p-colophon">
+            <p>掲載しているデータは、すべてデモ用の架空のものです。実在する店舗・人物・実績とは関係ありません。LINEのAPIには接続していません。</p>
+            <p>React ＋ Tailwind CSS の1ファイル構成（CDN読み込み・ビルド不要）。意匠は索引ページと共通です。</p>
+            <p>
+              ほかのサンプルは
+              <a href="../../index.html">業務の悩み 索引</a>
+              から見られます。
+            </p>
+          </div>
+        </section>
+      </div>
+    </React.Fragment>
+  );
+}
+
+/* ==================================================================
+   【一】受信トレイ
+================================================================== */
+
+function InboxView(props) {
+  const { items, counts, now, sla, resolve, reopen } = props;
+  const [filter, setFilter] = useState("all");
+  const [openId, setOpenId] = useState(null);
+
+  const rows = items
+    .filter((it) => filter === "all" || it.status === filter)
+    .slice()
+    .sort((a, b) => {
+      const rank = { overdue: 0, open: 1, auto: 2, done: 3 };
+      if (rank[a.status] !== rank[b.status]) return rank[a.status] - rank[b.status];
+      return a.received - b.received;
+    });
+
+  const totalHuman = counts.open + counts.overdue;
+
+  return (
+    <section className="p-section">
+      <div className="p-heading">
+        <span className="p-heading__no">一</span>
+        <h2 className="p-heading__text">受信トレイ</h2>
+      </div>
+
+      <p className="p-lead">
+        LINEに届いたメッセージを、<strong>未対応・自動応答済・要対応</strong>の3つに分けて並べています。
+        分類は人が付けているのではなく、次の画面の振り分けルールと、初回返信の目標時間から自動で決まります。
+        行を開くと、届いた本文・当たったルール・送られた自動返信・未返信の経過時間が確認できます。
+      </p>
+
+      <div className="p-tiles">
+        <div className="p-tile p-tile--alert">
+          <p className="p-tile__label">要対応（目標時間を超過）</p>
+          <p className="p-tile__num">{counts.overdue}<span className="p-tile__unit">件</span></p>
+          <p className="p-tile__sub">担当者への再通知が発生しています</p>
+        </div>
+        <div className="p-tile">
+          <p className="p-tile__label">未対応（目標時間内）</p>
+          <p className="p-tile__num">{counts.open}<span className="p-tile__unit">件</span></p>
+          <p className="p-tile__sub">人が返信する必要があります</p>
+        </div>
+        <div className="p-tile">
+          <p className="p-tile__label">自動応答済</p>
+          <p className="p-tile__num">{counts.auto}<span className="p-tile__unit">件</span></p>
+          <p className="p-tile__sub">{pctShort(counts.auto / counts.all)}／人の手は動いていません</p>
+        </div>
+        <div className="p-tile p-tile--quiet">
+          <p className="p-tile__label">対応済み</p>
+          <p className="p-tile__num">{counts.done}<span className="p-tile__unit">件</span></p>
+          <p className="p-tile__sub">人が返信して閉じたもの</p>
+        </div>
+      </div>
+
+      <div className="p-bar">
+        <div className="p-bar__seg p-bar__seg--auto" style={{ width: pct(counts.auto / counts.all) }}>
+          自動応答済 {counts.auto}
+        </div>
+        <div className="p-bar__seg p-bar__seg--open" style={{ width: pct(counts.open / counts.all) }}>
+          未対応 {counts.open}
+        </div>
+        <div className="p-bar__seg p-bar__seg--over" style={{ width: pct(counts.overdue / counts.all) }}>
+          要対応 {counts.overdue}
+        </div>
+        <div className="p-bar__seg p-bar__seg--done" style={{ width: pct(counts.done / counts.all) }}>
+          済 {counts.done}
+        </div>
+      </div>
+
+      <p className="p-note">
+        帯は左から、自動応答済・未対応・要対応・対応済み（済）の順です。
+        人が返信する必要があるのは {totalHuman}件（全体の {pctShort(totalHuman / counts.all)}）です。
+        自動応答をどれだけ増やしても、この分は必ず残ります。残った分を放置しない仕組みが「三　未返信の検知」です。
+      </p>
+
+      <div className="p-filters" style={{ marginTop: "var(--sp-4)" }}>
+        <span className="p-filters__label">分類</span>
+        <button type="button" className="p-choice" aria-pressed={filter === "all"} onClick={() => setFilter("all")}>
+          すべて<span className="p-choice__n">{counts.all}</span>
+        </button>
+        {STATUS_ORDER.map((k) => (
+          <button
+            key={k}
+            type="button"
+            className="p-choice"
+            aria-pressed={filter === k}
+            onClick={() => setFilter(k)}
+          >
+            {STATUSES[k].label}<span className="p-choice__n">{counts[k]}</span>
+          </button>
+        ))}
+      </div>
+
+      {rows.length === 0 ? (
+        <div className="p-empty" style={{ marginTop: "var(--sp-3)" }}>
+          <p>この分類に当てはまるメッセージはありません。</p>
+        </div>
+      ) : (
+        <ul className="p-list" style={{ marginTop: "var(--sp-3)" }}>
+          {rows.map((it) => (
+            <InboxRow
+              key={it.msg.id}
+              it={it}
+              sla={sla}
+              now={now}
+              open={openId === it.msg.id}
+              onToggle={() => setOpenId(openId === it.msg.id ? null : it.msg.id)}
+              onResolve={() => resolve(it.msg.id)}
+              onReopen={() => reopen(it.msg.id)}
+            />
+          ))}
+        </ul>
+      )}
+
+      <p className="p-note">
+        並び順は、要対応・未対応・自動応答済・対応済みの順です。
+        同じ分類の中では、古いものを上にしています。放置されているものほど上に来ます。
+      </p>
+    </section>
+  );
+}
+
+function InboxRow(props) {
+  const { it, sla, now, open, onToggle, onResolve, onReopen } = props;
+  const st = STATUSES[it.status];
+  const over = it.status === "overdue";
+  const ratio = Math.min(1, it.elapsed / sla.firstReply);
+
+  return (
+    <li className={`p-item${over ? " p-item--over" : ""}`}>
+      <button type="button" className="p-item__btn" aria-expanded={open} onClick={onToggle}>
+        <span className="p-item__row">
+          <span className="p-item__who">{it.msg.from}</span>
+          <span className="p-item__text">{it.msg.text}</span>
+          <span className={markClass(st.tone)}>{st.label}</span>
+          <span className="p-item__time">{fmtDateTime(it.received)}</span>
+        </span>
+        <span className="p-item__sub">
+          当たったルール：{it.rule.label}
+          {it.hit ? `（一致した語：${it.hit}）` : "（当たる語がなく、受け皿に落ちています）"}
+          {"　"}扱い：{MODES[it.mode].label}
+          {it.outside ? "　営業時間外に受信" : ""}
+        </span>
+        {over ? (
+          <span className="p-item__why">
+            未返信 {fmtMinutes(it.elapsed)}（営業時間で計測）。目標 {fmtMinutes(sla.firstReply)} を
+            {fmtMinutes(it.elapsed - sla.firstReply)} 超過しています。
+          </span>
+        ) : null}
+      </button>
+
+      {open ? (
+        <div className="p-panel">
+          <div className="p-quote">
+            <p className="p-quote__meta">
+              {it.msg.from}／{fmtDateTime(it.received)}
+              {it.outside ? "／営業時間外の受信" : ""}
+            </p>
+            <p className="p-quote__body">{it.msg.text}</p>
+          </div>
+
+          <p className="p-hint">{st.hint}</p>
+
+          {it.replies.length > 0 ? (
+            it.replies.map((r, i) => (
+              <div className="p-quote p-quote--reply" key={i}>
+                <p className="p-quote__meta">{r.kind}／{fmtDateTime(r.at)}に自動送信</p>
+                <p className="p-quote__body">{r.text}</p>
+              </div>
+            ))
+          ) : (
+            <p className="p-hint">
+              このメッセージには自動返信を送っていません。
+              {it.rule.locked ? "苦情の申し出は、定型文が返ると問題が重くなるため、自動応答の対象から外しています。" : ""}
+            </p>
+          )}
+
+          {it.rule.locked ? (
+            <p className="p-reason">
+              <strong>自動応答に回していない理由：</strong>{it.rule.desc}
+            </p>
+          ) : null}
+
+          {it.status === "open" || it.status === "overdue" ? (
+            <React.Fragment>
+              <p className="p-sub">未返信の状況</p>
+              <div className="p-scroll">
+                <table className="p-table p-table--mid">
+                  <tbody>
+                    <tr>
+                      <td className="is-name">計測の開始</td>
+                      <td>{fmtDateTime(it.slaStart)}{it.outside ? "（営業時間外に届いたため、開店時刻から計測）" : "（受信と同時に計測）"}</td>
+                    </tr>
+                    <tr>
+                      <td className="is-name">初回返信の期限</td>
+                      <td>{fmtDateTime(it.due)}（目標 {fmtMinutes(sla.firstReply)}）</td>
+                    </tr>
+                    <tr>
+                      <td className="is-name">経過（営業時間）</td>
+                      <td className={over ? "is-alert" : ""}>{fmtMinutes(it.elapsed)}</td>
+                    </tr>
+                    <tr>
+                      <td className="is-name">経過（実時間）</td>
+                      <td className="is-plain">{fmtMinutes(it.realElapsed)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div className="p-gauge">
+                <div className={`p-gauge__fill${over ? " is-over" : ""}`} style={{ width: pct(ratio) }} />
+              </div>
+              <div className="p-actions" style={{ marginTop: "var(--sp-3)" }}>
+                <button type="button" className="p-btn p-btn--main" onClick={onResolve}>
+                  返信して対応済みにする
+                </button>
+              </div>
+              <p className="p-note">
+                対応済みにすると、この件への再通知は止まります。止めるための操作が要る、というのがこの仕組みの要点です。
+              </p>
+            </React.Fragment>
+          ) : null}
+
+          {it.status === "done" ? (
+            <React.Fragment>
+              <p className="p-hint">
+                対応者：{it.handledBy}
+                {it.closedNote ? `／${it.closedNote}` : ""}
+              </p>
+              <div className="p-actions">
+                <button type="button" className="p-btn" onClick={onReopen}>未対応に戻す</button>
+              </div>
+            </React.Fragment>
+          ) : null}
+
+          {it.status === "auto" ? (
+            <p className="p-note">
+              自動応答で完結したため、担当者の一覧には出てきません。未返信の検知の対象にもなりません。
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+    </li>
+  );
+}
+
+/* ==================================================================
+   【二】振り分けルール
+================================================================== */
+
+function RulesView(props) {
+  const { items, counts, modes, setModes } = props;
+
+  const perRule = useMemo(() => {
+    const m = {};
+    ROUTING_RULES.forEach((r) => { m[r.id] = { all: 0, auto: 0, open: 0, overdue: 0, done: 0 }; });
+    items.forEach((it) => {
+      m[it.rule.id].all += 1;
+      m[it.rule.id][it.status] += 1;
+    });
+    return m;
+  }, [items]);
+
+  const setMode = (id, mode) => setModes(Object.assign({}, modes, { [id]: mode }));
+
+  return (
+    <section className="p-section">
+      <div className="p-heading">
+        <span className="p-heading__no">二</span>
+        <h2 className="p-heading__text">振り分けルール</h2>
+      </div>
+
+      <p className="p-lead">
+        どんな内容を自動応答に回し、どんな内容を人に残すかを、この画面で決めます。
+        扱いを切り替えると、<strong>上の要約と受信トレイの分類がその場で変わります</strong>。
+        ルールは上から順に判定し、最初に当たったものを使います。順番が意味を持つのは、
+        「予約の変更をお願いしたのに返信が来ない」のような、複数のルールに当てはまる文があるためです。
+        文面を用意していない扱いは選べません（受け皿のルールを自動応答にできないのは、
+        何が来るか分からないものに定型文は書けないためです）。
+      </p>
+
+      <div className="p-tiles p-tiles--3">
+        <div className="p-tile">
+          <p className="p-tile__label">いまの設定での自動応答率</p>
+          <p className="p-tile__num">{pctShort(counts.auto / counts.all)}</p>
+          <p className="p-tile__sub">受信{counts.all}件のうち{counts.auto}件</p>
+        </div>
+        <div className="p-tile p-tile--quiet">
+          <p className="p-tile__label">人に残る件数</p>
+          <p className="p-tile__num">{counts.open + counts.overdue}<span className="p-tile__unit">件</span></p>
+          <p className="p-tile__sub">受付の自動返信を送った分も含みます</p>
+        </div>
+        <div className="p-tile p-tile--alert">
+          <p className="p-tile__label">うち目標時間を超過</p>
+          <p className="p-tile__num">{counts.overdue}<span className="p-tile__unit">件</span></p>
+          <p className="p-tile__sub">自動応答を増やしても、ここは消えません</p>
+        </div>
+      </div>
+
+      <div className="p-rules">
+        {ROUTING_RULES.map((r, i) => {
+          const c = perRule[r.id];
+          const mode = modes[r.id];
+          return (
+            <div className="p-rule" key={r.id}>
+              <div className="p-rule__row">
+                <span className="p-rule__no">{i + 1}</span>
+                <span className="p-rule__name">{r.label}</span>
+                <span className="p-rule__hit">
+                  該当 {c.all}件
+                  {c.overdue > 0 ? `／うち要対応 ${c.overdue}件` : ""}
+                </span>
+              </div>
+
+              <p className="p-rule__keys">
+                判定に使う語：{r.keywords.length > 0 ? r.keywords.join("・") : "（設定なし。上のどれにも当たらなかったものが、ここに落ちます）"}
+              </p>
+              <p className="p-rule__desc">{r.desc}</p>
+
+              <div className="p-rule__modes">
+                {["auto", "ack", "human"].map((k) => {
+                  const disabled = r.locked || (k === "auto" && !r.reply) || (k === "ack" && !r.ackReply);
+                  return (
+                    <button
+                      key={k}
+                      type="button"
+                      className="p-choice"
+                      aria-pressed={mode === k}
+                      disabled={disabled}
+                      onClick={() => setMode(r.id, k)}
+                    >
+                      {MODES[k].label}
+                    </button>
+                  );
+                })}
+                {r.locked ? (
+                  <span className="p-mark p-mark--alert">この分類は人に固定</span>
+                ) : null}
+              </div>
+
+              {r.locked ? (
+                <p className="p-note p-note--caution">
+                  苦情に定型文を返すと、問題が一段重くなります。自動応答には切り替えられません。
+                </p>
+              ) : (
+                <p className="p-note">
+                  いまの扱い：{MODES[mode].label}　→　この{c.all}件は
+                  {c.auto > 0 ? ` 自動応答済 ${c.auto}件` : ""}
+                  {c.open > 0 ? ` 未対応 ${c.open}件` : ""}
+                  {c.overdue > 0 ? ` 要対応 ${c.overdue}件` : ""}
+                  {c.done > 0 ? ` 対応済み ${c.done}件` : ""}
+                  {" "}に分類されています。
+                </p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <p className="p-sub">いま届いている30件が、どのルールでどう分類されているか</p>
+
+      <div className="p-scroll">
+        <table className="p-table p-table--wide">
+          <thead>
+            <tr>
+              <th>受信</th>
+              <th>本文</th>
+              <th>当たったルール</th>
+              <th>一致した語</th>
+              <th>扱い</th>
+              <th>分類</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((it) => (
+              <tr key={it.msg.id}>
+                <td className="is-nowrap is-plain">{fmtDateTime(it.received)}</td>
+                <td>{it.msg.text}</td>
+                <td className="is-nowrap">{it.rule.label}</td>
+                <td className="is-nowrap is-plain">{it.hit || "—"}</td>
+                <td className="is-nowrap is-plain">{MODES[it.mode].short}</td>
+                <td className="is-nowrap">
+                  <span className={markClass(STATUSES[it.status].tone)}>{STATUSES[it.status].label}</span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <p className="p-note">
+        判定は語句の一致で行っています。実装では、この一覧に「一致した語」を必ず残します。
+        なぜその扱いになったのか説明できない状態を作らないためです。
+        受け皿に落ちた件が増えてきたら、そこがルールを足すべき場所です。
+      </p>
+    </section>
+  );
+}
+
+/* ==================================================================
+   【三】未返信の検知　—　この画面が中心です
+================================================================== */
+
+function SlaView(props) {
+  const { items, now, sla, setSla, fired, upcoming, resolve, offsetMin, setOffsetMin } = props;
+
+  const overdue = items
+    .filter((it) => it.status === "overdue")
+    .sort((a, b) => b.elapsed - a.elapsed);
+
+  const open = items.filter((it) => it.status === "open");
+
+  const worst = overdue.length > 0 ? overdue[0] : null;
+  const escalated = fired.filter((e) => e.level === "alert");
+  const shownFired = fired.slice(0, 14);
+
+  const setSlaKey = (k, v) => setSla(Object.assign({}, sla, { [k]: v }));
+
+  return (
+    <section className="p-section">
+      <div className="p-heading">
+        <span className="p-heading__no">三</span>
+        <h2 className="p-heading__text">未返信の検知</h2>
+      </div>
+
+      <p className="p-lead">
+        放置は、担当者が忘れたときに起きるのではありません。
+        <strong>忘れたことを誰も知らないときに起きます</strong>。
+        ここでは、初回返信の目標時間を過ぎた未対応を検知し、担当者へ再通知を出します。
+        それでも動かない場合は店長へ引き上げます。上の時計を進めると、通知が実際に発生します。
+      </p>
+
+      <div className="p-tiles">
+        <div className="p-tile p-tile--alert">
+          <p className="p-tile__label">目標時間を超過</p>
+          <p className="p-tile__num">{overdue.length}<span className="p-tile__unit">件</span></p>
+          <p className="p-tile__sub">目標 {fmtMinutes(sla.firstReply)}（営業時間で計測）</p>
+        </div>
+        <div className="p-tile p-tile--alert">
+          <p className="p-tile__label">最も長い未返信</p>
+          <p className="p-tile__num">
+            {worst ? fmtHours(worst.elapsed) : "0.0"}<span className="p-tile__unit">営業時間</span>
+          </p>
+          <p className="p-tile__sub">{worst ? `${worst.msg.from}／${fmtDateTime(worst.received)}受信` : "超過している件はありません"}</p>
+        </div>
+        <div className="p-tile">
+          <p className="p-tile__label">発生した通知</p>
+          <p className="p-tile__num">{fired.length}<span className="p-tile__unit">件</span></p>
+          <p className="p-tile__sub">担当者への再通知と、店長への引き上げの合計</p>
+        </div>
+        <div className="p-tile p-tile--quiet">
+          <p className="p-tile__label">店長へ引き上げ</p>
+          <p className="p-tile__num">{escalated.length}<span className="p-tile__unit">件</span></p>
+          <p className="p-tile__sub">{fmtMinutes(sla.escalate)}を超えた分</p>
+        </div>
+      </div>
+
+      <p className="p-sub">検知の設定</p>
+
+      <div className="p-filters">
+        <span className="p-filters__label">初回返信</span>
+        {SLA_PRESETS.firstReply.map((v) => (
+          <button key={v} type="button" className="p-choice" aria-pressed={sla.firstReply === v} onClick={() => setSlaKey("firstReply", v)}>
+            {fmtMinutes(v)}以内
+          </button>
+        ))}
+      </div>
+
+      <div className="p-filters">
+        <span className="p-filters__label">再通知</span>
+        {SLA_PRESETS.reNotify.map((v) => (
+          <button key={v} type="button" className="p-choice" aria-pressed={sla.reNotify === v} onClick={() => setSlaKey("reNotify", v)}>
+            {fmtMinutes(v)}ごと
+          </button>
+        ))}
+        <span className="p-actions__spacer" />
+        <span>上限 {sla.maxRenotify}回まで</span>
+      </div>
+
+      <div className="p-filters">
+        <span className="p-filters__label">店長へ</span>
+        {SLA_PRESETS.escalate.map((v) => (
+          <button key={v} type="button" className="p-choice" aria-pressed={sla.escalate === v} onClick={() => setSlaKey("escalate", v)}>
+            {fmtMinutes(v)}超で引き上げ
+          </button>
+        ))}
+      </div>
+
+      <p className="p-note">
+        いずれも営業時間で数えます。閉店中の時間は経過に含めません。
+        毎朝すべてが超過になる設定にすると、通知そのものが無視されるようになるためです。
+      </p>
+
+      <p className="p-sub">超過している未対応（古い順）</p>
+
+      {overdue.length === 0 ? (
+        <div className="p-empty">
+          <p>目標時間を超過している未対応はありません。時計を進めると発生します。</p>
+        </div>
+      ) : (
+        <div className="p-scroll">
+          <table className="p-table p-table--wide">
+            <thead>
+              <tr>
+                <th>受信</th>
+                <th>本文</th>
+                <th className="is-num">経過（営業時間）</th>
+                <th className="is-num">超過</th>
+                <th className="is-num">通知</th>
+                <th>引き上げまで</th>
+                <th>状態</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {overdue.map((it) => {
+                const n = fired.filter((e) => e.item.msg.id === it.msg.id);
+                const esc = n.filter((e) => e.level === "alert").length > 0;
+                return (
+                  <tr key={it.msg.id}>
+                    <td className="is-nowrap is-plain">{fmtDateTime(it.received)}</td>
+                    <td>{it.msg.from}／{it.msg.text}</td>
+                    <td className="is-num is-alert">{fmtMinutes(it.elapsed)}</td>
+                    <td className="is-num is-alert">＋{fmtMinutes(it.elapsed - sla.firstReply)}</td>
+                    <td className="is-num">{n.length}回</td>
+                    <td>
+                      {esc ? "引き上げ済み" : `あと${fmtMinutes(sla.escalate - it.elapsed)}`}
+                      <div className="p-gauge">
+                        <div className="p-gauge__fill is-over" style={{ width: pct(Math.min(1, it.elapsed / sla.escalate)) }} />
+                      </div>
+                    </td>
+                    <td className="is-nowrap">
+                      {esc ? <span className="p-mark p-mark--alert">店長へ引き上げ済み</span> : <span className="p-mark p-mark--watch">担当者へ再通知中</span>}
+                    </td>
+                    <td className="is-nowrap">
+                      <button type="button" className="p-btn" onClick={() => resolve(it.msg.id)}>対応済みにする</button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <p className="p-note">
+        「引き上げまで」の目盛は、店長へ引き上げる水準（{fmtMinutes(sla.escalate)}）に対して、
+        いまどこまで来ているかを示しています。目盛が端まで届いた件は、担当者の手を離れます。
+      </p>
+
+      <p className="p-note">
+        「対応済みにする」を押すと、その件の通知は止まります。
+        止めるには人が動くしかない、という形にしているのが要点です。
+        通知を消すだけの操作は用意していません。
+      </p>
+
+      <p className="p-sub">まだ超過していない未対応</p>
+
+      {open.length === 0 ? (
+        <div className="p-empty">
+          <p>目標時間内の未対応はありません。</p>
+        </div>
+      ) : (
+        <div className="p-scroll">
+          <table className="p-table p-table--mid">
+            <thead>
+              <tr>
+                <th>受信</th>
+                <th>本文</th>
+                <th className="is-num">経過</th>
+                <th className="is-num">期限まで</th>
+                <th>期限</th>
+              </tr>
+            </thead>
+            <tbody>
+              {open.map((it) => (
+                <tr key={it.msg.id}>
+                  <td className="is-nowrap is-plain">{fmtDateTime(it.received)}</td>
+                  <td>{it.msg.from}／{it.msg.text}</td>
+                  <td className="is-num">{fmtMinutes(it.elapsed)}</td>
+                  <td className="is-num is-total">あと{fmtMinutes(sla.firstReply - it.elapsed)}</td>
+                  <td className="is-nowrap is-plain">{fmtDateTime(it.due)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <p className="p-sub">発生した通知（新しい順）</p>
+
+      {fired.length === 0 ? (
+        <div className="p-empty">
+          <p>まだ通知は発生していません。上の時計を進めてください。</p>
+        </div>
+      ) : (
+        <div className="p-scroll">
+          <table className="p-table p-table--wide">
+            <thead>
+              <tr>
+                <th>発生時刻</th>
+                <th>宛先</th>
+                <th>内容</th>
+                <th>対象のメッセージ</th>
+              </tr>
+            </thead>
+            <tbody>
+              {shownFired.map((e) => (
+                <tr key={e.key}>
+                  <td className="is-nowrap is-plain">{fmtDateTime(e.at)}</td>
+                  <td className="is-nowrap">{e.to}</td>
+                  <td className={e.level === "alert" ? "is-alert is-nowrap" : "is-nowrap"}>{e.kind}</td>
+                  <td>{e.item.msg.from}／{e.item.msg.text}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {fired.length > shownFired.length ? (
+        <p className="p-note">新しい{shownFired.length}件を表示しています（ほか{fired.length - shownFired.length}件）。</p>
+      ) : null}
+
+      <p className="p-sub">次に発生する通知</p>
+
+      {upcoming.length === 0 ? (
+        <div className="p-empty">
+          <p>予定されている通知はありません。</p>
+        </div>
+      ) : (
+        <div className="p-scroll">
+          <table className="p-table p-table--mid">
+            <thead>
+              <tr>
+                <th>発生予定</th>
+                <th>宛先</th>
+                <th>内容</th>
+                <th>対象のメッセージ</th>
+              </tr>
+            </thead>
+            <tbody>
+              {upcoming.slice(0, 6).map((e) => (
+                <tr key={e.key}>
+                  <td className="is-nowrap is-plain">{fmtDateTime(e.at)}</td>
+                  <td className="is-nowrap">{e.to}</td>
+                  <td className="is-nowrap is-plain">{e.kind}</td>
+                  <td>{e.item.msg.from}／{e.item.msg.text}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <div className="p-actions" style={{ marginTop: "var(--sp-3)" }}>
+        <button type="button" className="p-btn p-btn--main" onClick={() => setOffsetMin(offsetMin + 60)}>
+          1時間進めて、通知が出るところを見る
+        </button>
+        <button type="button" className="p-btn" onClick={() => setOffsetMin(0)}>時計を戻す</button>
+      </div>
+
+      <p className="p-note">
+        通知の回数には上限（{sla.maxRenotify}回）を設けています。鳴り続ける通知は、やがて見られなくなるためです。
+        上限に達した件は、店長へ引き上げて担当者を変えるのが実際の運用です。
+      </p>
+    </section>
+  );
+}
+
+/* ==================================================================
+   【四】営業時間外の扱い
+================================================================== */
+
+function AfterHoursView(props) {
+  const { items, now, sla, autoReplyOutside, setAutoReplyOutside } = props;
+
+  const outside = items.filter((it) => it.outside).sort((a, b) => a.received - b.received);
+
+  /* 自動応答で完結する分は、時間外でもその場で回答が返るため、持ち越しには数えません */
+  const carried = outside.filter((it) => it.mode !== "auto");
+
+  /* 自動返信がない場合、お客さまが最初に反応を受け取るのは人の返信（＝期限）です */
+  const waitWithout = carried.length === 0 ? 0 : Math.round(
+    carried.reduce((sum, it) => sum + (it.due.getTime() - it.received.getTime()) / 60000, 0) / carried.length
+  );
+
+  return (
+    <section className="p-section">
+      <div className="p-heading">
+        <span className="p-heading__no">四</span>
+        <h2 className="p-heading__text">営業時間外の扱い</h2>
+      </div>
+
+      <p className="p-lead">
+        LINEは営業時間を気にせず届きます。夜間・定休日に届いた分をどう扱うかを決めておかないと、
+        翌朝には未読が積み上がり、古い順から埋もれます。
+        ここでは、<strong>その場で自動返信を返し、翌営業日の対応キューに入れる</strong>までを示します。
+        未返信の計測は、開店時刻から始まります。
+      </p>
+
+      <div className="p-tiles p-tiles--3">
+        <div className="p-tile">
+          <p className="p-tile__label">営業時間の設定</p>
+          <p className="p-tile__num" style={{ fontSize: "var(--fs-sub)", lineHeight: "1.6" }}>{BUSINESS_HOURS.label}</p>
+          <p className="p-tile__sub">この時間の外に届いた分が対象です</p>
+        </div>
+        <div className="p-tile">
+          <p className="p-tile__label">時間外に届いた件数</p>
+          <p className="p-tile__num">{outside.length}<span className="p-tile__unit">件</span></p>
+          <p className="p-tile__sub">受信{items.length}件のうち{pctShort(outside.length / items.length)}</p>
+        </div>
+        <div className="p-tile p-tile--quiet">
+          <p className="p-tile__label">翌営業日に持ち越した件数</p>
+          <p className="p-tile__num">{carried.length}<span className="p-tile__unit">件</span></p>
+          <p className="p-tile__sub">人の判断が要るため、開店時刻から計測を始めます</p>
+        </div>
+      </div>
+
+      <div className="p-filters">
+        <span className="p-filters__label">自動返信</span>
+        <button type="button" className="p-choice" aria-pressed={autoReplyOutside} onClick={() => setAutoReplyOutside(true)}>
+          時間外の自動返信を行う
+        </button>
+        <button type="button" className="p-choice" aria-pressed={!autoReplyOutside} onClick={() => setAutoReplyOutside(false)}>
+          行わない
+        </button>
+      </div>
+
+      <div className="p-scroll" style={{ marginTop: "var(--sp-3)" }}>
+        <table className="p-table p-table--mid">
+          <thead>
+            <tr>
+              <th>設定</th>
+              <th className="is-num">お客さまが最初に反応を受け取るまで</th>
+              <th>お客さまから見た状態</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td className="is-name">自動返信を行う</td>
+              <td className="is-num is-total">即時（0分）</td>
+              <td className="is-plain">受け付けられたことと、いつ返信が来るかが分かります</td>
+            </tr>
+            <tr>
+              <td className="is-name">行わない</td>
+              <td className="is-num is-alert">平均 {fmtMinutes(waitWithout)}</td>
+              <td className="is-plain">届いたかどうかも分からないまま、翌営業日まで待つことになります</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p className="p-note">
+        「行わない」の時間は、いま時間外に届いていて<strong>人の判断が要る{carried.length}件</strong>について、
+        受信から初回返信の期限までの実時間を平均した想定値です。
+        答えが一つに決まる質問は、時間外でもその場で回答が返るため除いています。
+        自動返信は返信そのものではありませんが、待たせている状態を作らないという一点で効きます。
+      </p>
+
+      <p className="p-sub">時間外に届いた分の送られる文面</p>
+
+      <div className="p-quote p-quote--reply">
+        <p className="p-quote__meta">{autoReplyOutside ? "営業時間外の自動返信（受信と同時に送信）" : "いまは自動返信を行わない設定です"}</p>
+        <p className="p-quote__body">{autoReplyOutside ? BUSINESS_HOURS.autoReply : "（送信されません）"}</p>
+      </div>
+
+      <p className="p-note">
+        営業時間・文面ともに設定オブジェクトの <code className="p-code">BUSINESS_HOURS</code> に置いています。
+        定休日を増やす、最終受付を早める、といった変更はここだけで済みます。
+      </p>
+
+      <p className="p-sub">時間外に届いた分の、翌営業日への入り方</p>
+
+      {outside.length === 0 ? (
+        <div className="p-empty">
+          <p>営業時間外に届いたメッセージはありません。</p>
+        </div>
+      ) : (
+        <div className="p-scroll">
+          <table className="p-table p-table--wide">
+            <thead>
+              <tr>
+                <th>受信</th>
+                <th>本文</th>
+                <th>自動返信</th>
+                <th>対応キューに入る時刻</th>
+                <th>初回返信の期限</th>
+                <th>いまの分類</th>
+              </tr>
+            </thead>
+            <tbody>
+              {outside.map((it) => (
+                <tr key={it.msg.id}>
+                  <td className="is-nowrap is-plain">{fmtDateTime(it.received)}</td>
+                  <td>{it.msg.from}／{it.msg.text}</td>
+                  <td className="is-nowrap is-plain">
+                    {autoReplyOutside ? `${fmtTime(it.received)} 送信済み` : "なし"}
+                    {it.mode === "auto" ? "／ルールの回答も同時に送信" : ""}
+                  </td>
+                  <td className="is-nowrap">{it.mode === "auto" ? "—（自動応答で完結）" : fmtDateTime(it.slaStart)}</td>
+                  <td className="is-nowrap is-plain">{it.mode === "auto" ? "—" : fmtDateTime(it.due)}</td>
+                  <td className="is-nowrap">
+                    <span className={markClass(STATUSES[it.status].tone)}>{STATUSES[it.status].label}</span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <p className="p-note">
+        答えが一つに決まる質問（営業時間・駐車場・料金）は、時間外でもその場で回答が返ります。
+        人の判断が要るものだけが、翌営業日の開店時刻に対応キューへ入り、そこから未返信の計測が始まります。
+        時計を「翌営業日の開店へ」進めると、キューに入るところが確認できます。
+      </p>
+    </section>
+  );
+}
+
+/* ==================================================================
+   【五】配信
+================================================================== */
+
+function BroadcastView() {
+  const [friends, setFriends] = useState(BROADCAST.friends);
+  const [perMonth, setPerMonth] = useState(BROADCAST.perMonth);
+  const [segOn, setSegOn] = useState(() => {
+    const s = {};
+    BROADCAST.segments.forEach((x) => { s[x.id] = x.on; });
+    return s;
+  });
+
+  const segRatio = Math.min(
+    1,
+    BROADCAST.segments.reduce((sum, s) => sum + (segOn[s.id] ? s.ratio : 0), 0)
+  );
+
+  const calc = (p) => {
+    const targets = p.id === "all" ? friends : Math.round(friends * segRatio);
+    const perMonthMessages = targets * perMonth;
+    const blocksPerMonth = targets * p.blockPerSend * perMonth;
+    const blocksTotal = blocksPerMonth * BROADCAST.months;
+    const friendsAfter = Math.max(0, Math.round(friends - blocksTotal));
+    const reads = Math.round(targets * p.readRate);
+    const visits = Math.round(targets * p.visitRate * perMonth);
+    return {
+      targets,
+      perMonthMessages,
+      blocksPerMonth: Math.round(blocksPerMonth),
+      friendsAfter,
+      reads,
+      visits,
+      overPlan: perMonthMessages - BROADCAST.planFreeMessages,
+    };
+  };
+
+  const all = calc(BROADCAST.patterns[0]);
+  const seg = calc(BROADCAST.patterns[1]);
+  const diffFriends = seg.friendsAfter - all.friendsAfter;
+
+  return (
+    <section className="p-section">
+      <div className="p-heading">
+        <span className="p-heading__no">五</span>
+        <h2 className="p-heading__text">配信</h2>
+      </div>
+
+      <p className="p-lead">
+        配信は、送れば送るほど効くものではありません。
+        関係のない案内が続くとブロックされ、<strong>次に本当に伝えたいことが届かなくなります</strong>。
+        ここでは、友だち全員に同じ内容を送る一斉配信と、条件で絞るセグメント配信を並べて比較します。
+        表示している比率はすべて想定値です。
+      </p>
+
+      <div className="p-fields">
+        <div className="p-field">
+          <label className="p-field__label" htmlFor="bc-friends">友だちの数（人）</label>
+          <input
+            id="bc-friends"
+            className="p-input"
+            type="number"
+            min="0"
+            step="100"
+            value={friends}
+            onChange={(e) => setFriends(Math.max(0, Number(e.target.value) || 0))}
+          />
+          <p className="p-field__note">アカウントを友だち追加している人数</p>
+        </div>
+        <div className="p-field">
+          <label className="p-field__label" htmlFor="bc-per">月の配信回数（回）</label>
+          <input
+            id="bc-per"
+            className="p-input"
+            type="number"
+            min="0"
+            max="30"
+            step="1"
+            value={perMonth}
+            onChange={(e) => setPerMonth(Math.max(0, Math.min(30, Number(e.target.value) || 0)))}
+          />
+          <p className="p-field__note">同じ回数で、送る相手だけを変えて比較します</p>
+        </div>
+        <div className="p-field">
+          <span className="p-field__label">セグメント配信で送る相手</span>
+          <div className="p-actions">
+            {BROADCAST.segments.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                className="p-choice"
+                aria-pressed={!!segOn[s.id]}
+                onClick={() => setSegOn(Object.assign({}, segOn, { [s.id]: !segOn[s.id] }))}
+              >
+                {s.label}<span className="p-choice__n">{pctShort(s.ratio)}</span>
+              </button>
+            ))}
+          </div>
+          <p className="p-field__note">
+            選んだ条件に当てはまるのは、友だちのうち {pctShort(segRatio)}（{Math.round(friends * segRatio).toLocaleString()}人）です。
+          </p>
+        </div>
+      </div>
+
+      <div className="p-scroll">
+        <table className="p-table p-table--wide">
+          <thead>
+            <tr>
+              <th>比較する項目</th>
+              <th className="is-num">一斉配信</th>
+              <th className="is-num">セグメント配信</th>
+              <th>差がつく理由</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td className="is-name">1回あたりの送信対象</td>
+              <td className="is-num">{all.targets.toLocaleString()}人</td>
+              <td className="is-num is-total">{seg.targets.toLocaleString()}人</td>
+              <td className="is-plain">セグメント配信は、条件に当てはまる人にだけ送ります</td>
+            </tr>
+            <tr>
+              <td className="is-name">月の送信通数</td>
+              <td className="is-num">{all.perMonthMessages.toLocaleString()}通</td>
+              <td className="is-num is-total">{seg.perMonthMessages.toLocaleString()}通</td>
+              <td className="is-plain">料金プランの通数上限に直接効きます</td>
+            </tr>
+            <tr>
+              <td className="is-name">1回の配信あたりの想定ブロック率</td>
+              <td className="is-num is-alert">{pct(BROADCAST.patterns[0].blockPerSend)}</td>
+              <td className="is-num is-alert">{pct(BROADCAST.patterns[1].blockPerSend)}</td>
+              <td className="is-plain">自分に関係のない案内が続くとブロックされます（想定値）</td>
+            </tr>
+            <tr>
+              <td className="is-name">月のブロック数（想定）</td>
+              <td className="is-num is-alert">{all.blocksPerMonth.toLocaleString()}人</td>
+              <td className="is-num is-alert">{seg.blocksPerMonth.toLocaleString()}人</td>
+              <td className="is-plain">送信対象 × ブロック率 × 配信回数</td>
+            </tr>
+            <tr>
+              <td className="is-name">{BROADCAST.months}か月後の友だち数（想定）</td>
+              <td className="is-num is-alert">{all.friendsAfter.toLocaleString()}人</td>
+              <td className="is-num is-alert">{seg.friendsAfter.toLocaleString()}人</td>
+              <td className="is-plain">現在の{friends.toLocaleString()}人から、ブロック分を単純に引いた値です</td>
+            </tr>
+            <tr>
+              <td className="is-name">読まれる人数（想定・1回あたり）</td>
+              <td className="is-num">{all.reads.toLocaleString()}人</td>
+              <td className="is-num is-total">{seg.reads.toLocaleString()}人</td>
+              <td className="is-plain">送る人数は少なくても、内容が自分ごとになるぶん開かれます</td>
+            </tr>
+            <tr>
+              <td className="is-name">来店につながる人数（想定・月）</td>
+              <td className="is-num">{all.visits.toLocaleString()}人</td>
+              <td className="is-num is-total">{seg.visits.toLocaleString()}人</td>
+              <td className="is-plain">送信数が少なくても、結果が上回ることがあります</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p className="p-note">
+        いまの設定では、1回に送る相手は {all.targets.toLocaleString()}人 → {seg.targets.toLocaleString()}人、
+        読まれる人数は {all.reads.toLocaleString()}人 → {seg.reads.toLocaleString()}人 になります。
+        配信は、送った数ではなく読まれた数で見るものです。
+      </p>
+
+      <p className="p-note p-note--caution">
+        表中のブロック率・開封率・来店率は、すべてデモ用の想定値です。実測値ではありません。
+        実際の数字は、業種・配信内容・友だちの集め方によって大きく変わります。
+        {all.friendsAfter === 0 || seg.friendsAfter === 0
+          ? "　いまの配信回数では、ブロックの累計が友だちの数を上回るため0人と表示しています。単純な引き算で計算しているためで、実際には残り方が緩やかになります。"
+          : ""}
+      </p>
+
+      <p className="p-sub">{BROADCAST.months}か月後に残る友だちの数（想定）</p>
+
+      {[["一斉配信", all], ["セグメント配信", seg]].map((row, i) => {
+        const lost = Math.max(0, friends - row[1].friendsAfter);
+        const lostRatio = lost / Math.max(1, friends);
+        return (
+          <div className="p-bar" style={i === 0 ? null : { marginTop: "var(--sp-2)" }} key={row[0]}>
+            <div className="p-bar__seg p-bar__seg--auto" style={{ width: pct(1 - lostRatio) }}>
+              {row[0]} {row[1].friendsAfter.toLocaleString()}人
+            </div>
+            <div className="p-bar__seg p-bar__seg--over" style={{ width: pct(lostRatio) }}>
+              {lostRatio >= 0.12 ? `${lost.toLocaleString()}人が離脱` : ""}
+            </div>
+          </div>
+        );
+      })}
+
+      <p className="p-note">
+        同じ配信回数でも、{BROADCAST.months}か月後に残る友だちの数は
+        <strong> {diffFriends.toLocaleString()}人</strong>の差になります（いずれも想定値）。
+        友だちを集めるための費用を考えると、この差がそのまま運用の巧拙になります。
+      </p>
+
+      <p className="p-sub">送信通数と料金プラン</p>
+
+      <div className="p-scroll">
+        <table className="p-table p-table--mid">
+          <thead>
+            <tr>
+              <th>配信の方法</th>
+              <th className="is-num">月の送信通数</th>
+              <th className="is-num">想定プランの上限（{BROADCAST.planFreeMessages.toLocaleString()}通）との差</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td className="is-name">一斉配信</td>
+              <td className="is-num">{all.perMonthMessages.toLocaleString()}通</td>
+              <td className={all.overPlan > 0 ? "is-num is-alert" : "is-num is-total"}>
+                {all.overPlan > 0 ? `${all.overPlan.toLocaleString()}通の超過` : `${Math.abs(all.overPlan).toLocaleString()}通の余裕`}
+              </td>
+            </tr>
+            <tr>
+              <td className="is-name">セグメント配信</td>
+              <td className="is-num">{seg.perMonthMessages.toLocaleString()}通</td>
+              <td className={seg.overPlan > 0 ? "is-num is-alert" : "is-num is-total"}>
+                {seg.overPlan > 0 ? `${seg.overPlan.toLocaleString()}通の超過` : `${Math.abs(seg.overPlan).toLocaleString()}通の余裕`}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p className="p-note p-note--caution">
+        上限{BROADCAST.planFreeMessages.toLocaleString()}通は、このデモの計算に用いた想定値です。
+        実際の無料メッセージ通数と追加料金は料金プランごとに異なり、改定されることもあります。
+        導入前に、提供元の公式情報で最新の条件をご確認ください。
+      </p>
+    </section>
+  );
+}
+
+/* ==================================================================
+   【六】手作業との比較
+================================================================== */
+
+function CompareView({ counts }) {
+  const [monthly, setMonthly] = useState(COMPARE.monthlyMessages);
+  const [minutes, setMinutes] = useState(COMPARE.minutesPerMessage);
+
+  const autoRate = counts.auto / counts.all;
+  const overdueRate = counts.overdue / counts.all;
+
+  const beforeMin = monthly * minutes;
+  const autoCount = Math.round(monthly * autoRate);
+  const humanCount = monthly - autoCount;
+  const afterMin = humanCount * minutes + autoCount * COMPARE.checkMinutes;
+  const savedMin = Math.max(0, beforeMin - afterMin);
+  const savedRate = beforeMin > 0 ? savedMin / beforeMin : 0;
+  const overdueCount = Math.round(monthly * overdueRate);
+
+  return (
+    <section className="p-section">
+      <div className="p-heading">
+        <span className="p-heading__no">六</span>
+        <h2 className="p-heading__text">手作業との比較</h2>
+      </div>
+
+      <p className="p-lead">
+        月にどれだけメッセージが届き、1件あたり何分かけているかを入れると、削減される時間が出ます。
+        自動応答で片づく割合は、いま設定している振り分けルールの結果
+        （受信{counts.all}件のうち{counts.auto}件＝{pctShort(autoRate)}）をそのまま使っています。
+        ルールを変えれば、この数字も変わります。
+      </p>
+
+      <div className="p-fields p-fields--2">
+        <div className="p-field">
+          <label className="p-field__label" htmlFor="cmp-monthly">月間の受信件数（件）</label>
+          <input
+            id="cmp-monthly"
+            className="p-input"
+            type="number"
+            min="0"
+            step="10"
+            value={monthly}
+            onChange={(e) => setMonthly(Math.max(0, Number(e.target.value) || 0))}
+          />
+          <p className="p-field__note">LINEに届くメッセージの数。電話・メールは含みません</p>
+        </div>
+        <div className="p-field">
+          <label className="p-field__label" htmlFor="cmp-min">1件の対応にかかる分数（分）</label>
+          <input
+            id="cmp-min"
+            className="p-input"
+            type="number"
+            min="0"
+            step="1"
+            value={minutes}
+            onChange={(e) => setMinutes(Math.max(0, Number(e.target.value) || 0))}
+          />
+          <p className="p-field__note">読む・調べる・文面を書く・送るまでの合計</p>
+        </div>
+      </div>
+
+      <div className="p-tiles">
+        <div className="p-tile p-tile--quiet">
+          <p className="p-tile__label">いま（すべて人が対応）</p>
+          <p className="p-tile__num">{fmtHours(beforeMin)}<span className="p-tile__unit">時間／月</span></p>
+          <p className="p-tile__sub">{monthly.toLocaleString()}件 × {minutes}分</p>
+        </div>
+        <div className="p-tile">
+          <p className="p-tile__label">運用を設計した後</p>
+          <p className="p-tile__num">{fmtHours(afterMin)}<span className="p-tile__unit">時間／月</span></p>
+          <p className="p-tile__sub">人が対応 {humanCount.toLocaleString()}件＋自動分の確認 {autoCount.toLocaleString()}件</p>
+        </div>
+        <div className="p-tile p-tile--alert">
+          <p className="p-tile__label">削減時間（想定値）</p>
+          <p className="p-tile__num">{fmtHours(savedMin)}<span className="p-tile__unit">時間／月</span></p>
+          <p className="p-tile__sub">削減率 {pctShort(savedRate)}／年間 {fmtHours(savedMin * 12)}時間</p>
+        </div>
+        <div className="p-tile p-tile--alert">
+          <p className="p-tile__label">放置されていた件数（想定値）</p>
+          <p className="p-tile__num">{overdueCount.toLocaleString()}<span className="p-tile__unit">件／月</span></p>
+          <p className="p-tile__sub">いまの超過率 {pctShort(overdueRate)} を月間件数に当てた値</p>
+        </div>
+      </div>
+
+      <div className="p-scroll">
+        <table className="p-table p-table--wide">
+          <thead>
+            <tr>
+              <th>内訳</th>
+              <th className="is-num">件数</th>
+              <th className="is-num">1件あたり</th>
+              <th className="is-num">月の合計</th>
+              <th>説明</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td className="is-name">いま：すべて人が対応</td>
+              <td className="is-num">{monthly.toLocaleString()}件</td>
+              <td className="is-num">{minutes}分</td>
+              <td className="is-num is-total">{fmtHours(beforeMin)}時間</td>
+              <td className="is-plain">定型の質問も、苦情も、同じように人が読んで書いています</td>
+            </tr>
+            <tr>
+              <td className="is-name">後：自動応答で完結</td>
+              <td className="is-num">{autoCount.toLocaleString()}件</td>
+              <td className="is-num">{COMPARE.checkMinutes}分</td>
+              <td className="is-num">{fmtHours(autoCount * COMPARE.checkMinutes)}時間</td>
+              <td className="is-plain">返信は自動。あとから内容を目で見る分だけ計上しています</td>
+            </tr>
+            <tr>
+              <td className="is-name">後：人が対応</td>
+              <td className="is-num">{humanCount.toLocaleString()}件</td>
+              <td className="is-num">{minutes}分</td>
+              <td className="is-num">{fmtHours(humanCount * minutes)}時間</td>
+              <td className="is-plain">苦情・予約の変更・例外の相談。ここは短縮していません</td>
+            </tr>
+            <tr>
+              <td className="is-name">差</td>
+              <td className="is-num is-plain">—</td>
+              <td className="is-num is-plain">—</td>
+              <td className="is-num is-alert">{fmtHours(savedMin)}時間</td>
+              <td className="is-plain">削減率 {pctShort(savedRate)}（想定値）</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p className="p-note">
+        人が対応する分の時間は短縮していません。文面を機械が書いても、判断は人が行うためです。
+        削減時間を大きく見せないよう、自動応答で片づいた分にも1件{COMPARE.checkMinutes}分の確認時間を計上しています。
+      </p>
+
+      <p className="p-sub">時間には換算していない効果</p>
+
+      <div className="p-scroll">
+        <table className="p-table p-table--mid">
+          <thead>
+            <tr>
+              <th>変わること</th>
+              <th>いま</th>
+              <th>運用を設計した後</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td className="is-name">返信されないまま終わる件</td>
+              <td className="is-alert">月 {overdueCount.toLocaleString()}件（想定値）が目標時間を超過</td>
+              <td className="is-plain">超過すると担当者に再通知。さらに超えると店長へ引き上げ</td>
+            </tr>
+            <tr>
+              <td className="is-name">営業時間外に届いた分</td>
+              <td className="is-alert">翌営業日まで、届いたかどうかも分からない</td>
+              <td className="is-plain">その場で受付の自動返信。翌営業日の対応キューに入る</td>
+            </tr>
+            <tr>
+              <td className="is-name">担当者が不在のとき</td>
+              <td className="is-alert">気づかれないまま日をまたぐ</td>
+              <td className="is-plain">未返信の一覧に残り続け、時間で自動的に表面化する</td>
+            </tr>
+            <tr>
+              <td className="is-name">苦情の1件目</td>
+              <td className="is-alert">他の連絡に埋もれる</td>
+              <td className="is-plain">自動応答の対象から外し、必ず人が最初に読む</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p className="p-note p-note--caution">
+        この画面の件数・分数・削減時間は、入力値にもとづく計算結果であり、すべて想定値です。
+        実在する店舗の実績ではありません。
+      </p>
+    </section>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>

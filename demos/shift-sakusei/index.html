@@ -1,0 +1,1847 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>シフト作成の自動化 デモ | 制約を設定して自動生成し、満たせなかった条件を明示する</title>
+<meta name="description" content="必要人数・有資格者・連勤上限・連休の保証といった制約を画面上で設定し、2週間分のシフトを自動生成するデモです。満たせなかった制約を一件ずつ明示し、手直しした結果はその場で再判定します。掲載データはすべてデモ用の想定値です。">
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+/* ------------------------------------------------------------------
+   :root のトークンは索引ページ（リポジトリ直下の index.html）から
+   そのまま持ってきています。ここで新しい色や寸法は作っていません。
+------------------------------------------------------------------ */
+:root {
+  --c-base:         #ffffff;
+  --c-paper:        #f5f1e8;
+  --c-ink:          #1b1c1e;
+  --c-ink-2:        #4c4f54;
+  --c-ink-3:        #7d8087;
+  --c-rule:         #ddd7c8;
+  --c-rule-strong:  #b3ab98;
+  --c-accent:       #2d4257;
+  --c-accent-tint:  #eef1f3;
+  --c-caution:      #9c463b;
+  --c-caution-tint: #f3e9e6;
+  --font-mincho: "Hiragino Mincho ProN","Yu Mincho","YuMincho","MS PMincho","Noto Serif JP",serif;
+  --font-gothic: "Hiragino Kaku Gothic ProN","Hiragino Sans","Yu Gothic","YuGothic",Meiryo,"Noto Sans JP",sans-serif;
+  --fs-note:  13px;  --fs-body: 15px;  --fs-sub: 18px;  --fs-head: 24px;  --fs-title: 33px;
+  --lh-body: 1.9;  --lh-head: 1.45;  --ls-body: 0.04em;  --ls-head: 0.06em;
+  --sp-1: 4px;  --sp-2: 8px;  --sp-3: 16px;  --sp-4: 32px;  --sp-5: 64px;
+  --rule-1: 1px;  --rule-2: 2px;
+}
+
+html { -webkit-text-size-adjust: 100%; }
+
+/* Tailwind の preflight は実行時に head の末尾へ挿入されるため、
+   body と a はセレクタの詳細度を上げて上書きされないようにしています。 */
+html body {
+  margin: 0;
+  background: var(--c-base);
+  color: var(--c-ink);
+  font-family: var(--font-gothic);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  letter-spacing: var(--ls-body);
+  text-align: left;
+}
+
+*, *::before, *::after { border-radius: 0; box-shadow: none; }
+
+body a {
+  color: var(--c-accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+body a:hover { text-decoration-thickness: 2px; }
+
+:focus-visible { outline: var(--rule-2) solid var(--c-accent); outline-offset: 2px; }
+
+/* ------------------------------------------------------------------
+   版面
+------------------------------------------------------------------ */
+.p-topbar { border-top: 3px solid var(--c-accent); }
+
+.p-sheet {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 0 var(--sp-3);
+}
+
+.p-section { padding-top: var(--sp-5); }
+.p-section:last-of-type { padding-bottom: var(--sp-5); }
+
+/* ------------------------------------------------------------------
+   ヘッダー
+------------------------------------------------------------------ */
+.p-masthead { padding-top: var(--sp-4); padding-bottom: var(--sp-4); }
+
+.p-masthead__kicker {
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-head);
+  color: var(--c-ink-3);
+  margin: 0 0 var(--sp-2);
+}
+
+.p-masthead__title {
+  font-family: var(--font-mincho);
+  font-size: var(--fs-title);
+  line-height: var(--lh-head);
+  letter-spacing: var(--ls-head);
+  font-weight: 600;
+  color: var(--c-ink);
+  margin: 0;
+  padding-bottom: var(--sp-3);
+  border-bottom: var(--rule-2) solid var(--c-accent);
+}
+
+.p-masthead__lead {
+  margin: var(--sp-3) 0 0;
+  max-width: 42em;
+  color: var(--c-ink-2);
+}
+
+.p-masthead__meta {
+  margin: var(--sp-3) 0 0;
+  font-size: var(--fs-note);
+  color: var(--c-ink-3);
+}
+
+.p-masthead__meta a { margin-left: var(--sp-2); }
+
+/* ------------------------------------------------------------------
+   注記帯
+------------------------------------------------------------------ */
+.p-notice {
+  margin-top: var(--sp-4);
+  background: var(--c-caution-tint);
+  border-left: 3px solid var(--c-caution);
+  padding: var(--sp-3);
+}
+
+.p-notice__title {
+  margin: 0 0 var(--sp-1);
+  font-size: var(--fs-note);
+  font-weight: 700;
+  letter-spacing: var(--ls-head);
+  color: var(--c-caution);
+}
+
+.p-notice__body {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-note);
+  line-height: 1.8;
+  color: var(--c-ink-2);
+}
+
+.p-notice__body:last-child { margin-bottom: 0; }
+
+/* ------------------------------------------------------------------
+   節見出し
+------------------------------------------------------------------ */
+.p-heading {
+  margin: 0 0 var(--sp-3);
+  padding-bottom: var(--sp-2);
+  border-bottom: var(--rule-2) solid var(--c-rule-strong);
+}
+
+.p-heading__no {
+  display: block;
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-head);
+  color: var(--c-accent);
+  margin-bottom: var(--sp-1);
+}
+
+.p-heading__text {
+  font-family: var(--font-mincho);
+  font-size: var(--fs-head);
+  line-height: var(--lh-head);
+  letter-spacing: var(--ls-head);
+  font-weight: 600;
+  margin: 0;
+}
+
+.p-lead {
+  margin: 0 0 var(--sp-3);
+  max-width: 44em;
+  color: var(--c-ink-2);
+}
+
+.p-note {
+  margin: var(--sp-2) 0 0;
+  font-size: var(--fs-note);
+  line-height: 1.8;
+  color: var(--c-ink-3);
+}
+
+.p-note--alert { color: var(--c-caution); }
+
+/* ------------------------------------------------------------------
+   要約の囲み
+------------------------------------------------------------------ */
+.p-scope {
+  border-left: 3px solid var(--c-accent);
+  background: var(--c-accent-tint);
+  padding: var(--sp-3);
+  margin-bottom: var(--sp-3);
+}
+
+.p-scope p { margin: 0; }
+.p-scope__sub { margin-top: var(--sp-1) !important; font-size: var(--fs-note); color: var(--c-ink-2); }
+.p-scope strong { font-weight: 700; color: var(--c-accent); }
+
+.p-scope--alert { border-left-color: var(--c-caution); background: var(--c-caution-tint); }
+.p-scope--alert strong { color: var(--c-caution); }
+
+/* ------------------------------------------------------------------
+   ボタン
+------------------------------------------------------------------ */
+.p-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
+}
+
+.p-actions__spacer { flex: 1 1 auto; }
+
+.p-btn {
+  font-family: var(--font-gothic);
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-body);
+  color: var(--c-accent);
+  background: var(--c-accent-tint);
+  border: var(--rule-1) solid var(--c-rule-strong);
+  padding: var(--sp-1) var(--sp-2);
+  cursor: pointer;
+}
+
+.p-btn:hover { background: var(--c-base); }
+.p-btn:disabled { color: var(--c-ink-3); background: var(--c-base); border-color: var(--c-rule); cursor: not-allowed; }
+
+.p-btn--main {
+  font-size: var(--fs-body);
+  font-weight: 700;
+  background: var(--c-base);
+  border: var(--rule-2) solid var(--c-accent);
+  padding: var(--sp-2) var(--sp-3);
+}
+
+.p-btn--main:hover { background: var(--c-accent-tint); }
+.p-btn--quiet { color: var(--c-ink-2); background: var(--c-base); }
+
+/* ------------------------------------------------------------------
+   制約の設定（増減の操作）
+------------------------------------------------------------------ */
+.p-step {
+  display: inline-flex;
+  align-items: stretch;
+  border: var(--rule-1) solid var(--c-rule-strong);
+  background: var(--c-base);
+}
+
+.p-step__btn {
+  font-family: var(--font-gothic);
+  font-size: var(--fs-body);
+  line-height: 1;
+  width: 2em;
+  color: var(--c-accent);
+  background: var(--c-accent-tint);
+  border: 0;
+  cursor: pointer;
+}
+
+.p-step__btn:hover { background: var(--c-base); }
+.p-step__btn:disabled { color: var(--c-ink-3); background: var(--c-base); cursor: not-allowed; }
+
+.p-step__val {
+  min-width: 2.4em;
+  padding: var(--sp-1) 0;
+  text-align: center;
+  font-size: var(--fs-body);
+  font-weight: 700;
+  color: var(--c-ink);
+  font-feature-settings: "tnum" 1;
+  border-left: var(--rule-1) solid var(--c-rule);
+  border-right: var(--rule-1) solid var(--c-rule);
+}
+
+.p-step__val--zero { color: var(--c-ink-3); font-weight: 400; }
+
+.p-field {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-2);
+  border-bottom: var(--rule-1) solid var(--c-rule);
+}
+
+.p-field:last-child { border-bottom: 0; }
+.p-field__label { flex: 1 1 16em; min-width: 0; }
+.p-field__name { display: block; font-weight: 700; color: var(--c-ink); }
+.p-field__desc { display: block; font-size: var(--fs-note); line-height: 1.7; color: var(--c-ink-3); }
+.p-field__unit { font-size: var(--fs-note); color: var(--c-ink-2); }
+
+.p-fieldset {
+  border-top: var(--rule-2) solid var(--c-rule-strong);
+  border-bottom: var(--rule-2) solid var(--c-rule-strong);
+}
+
+.p-input {
+  font-family: var(--font-gothic);
+  font-size: var(--fs-body);
+  color: var(--c-ink);
+  background: var(--c-base);
+  border: var(--rule-1) solid var(--c-rule-strong);
+  padding: var(--sp-1) var(--sp-2);
+  width: 6em;
+  text-align: right;
+  font-feature-settings: "tnum" 1;
+}
+
+.p-input:focus { border-color: var(--c-accent); }
+
+/* ------------------------------------------------------------------
+   数値の札
+------------------------------------------------------------------ */
+.p-tiles {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-3);
+}
+
+.p-tiles--3 { grid-template-columns: repeat(3, 1fr); }
+
+.p-tile {
+  border-top: var(--rule-2) solid var(--c-accent);
+  border-bottom: var(--rule-1) solid var(--c-rule-strong);
+  padding: var(--sp-2) 0 var(--sp-3);
+  min-width: 0;
+}
+
+.p-tile--alert { border-top-color: var(--c-caution); }
+.p-tile--quiet { border-top-color: var(--c-rule-strong); }
+
+.p-tile__label {
+  margin: 0 0 var(--sp-1);
+  font-size: var(--fs-note);
+  letter-spacing: var(--ls-head);
+  color: var(--c-ink-2);
+}
+
+.p-tile__num {
+  margin: 0;
+  font-size: var(--fs-title);
+  line-height: 1.25;
+  font-weight: 700;
+  color: var(--c-accent);
+  font-feature-settings: "tnum" 1;
+}
+
+.p-tile--alert .p-tile__num { color: var(--c-caution); }
+.p-tile--quiet .p-tile__num { color: var(--c-ink-2); }
+.p-tile__unit { font-size: var(--fs-sub); font-weight: 500; margin-left: 2px; }
+
+.p-tile__sub {
+  margin: var(--sp-1) 0 0;
+  font-size: var(--fs-note);
+  line-height: 1.7;
+  color: var(--c-ink-3);
+}
+
+/* ------------------------------------------------------------------
+   表
+------------------------------------------------------------------ */
+.p-scroll {
+  overflow-x: auto;
+  border-top: var(--rule-2) solid var(--c-rule-strong);
+  border-bottom: var(--rule-2) solid var(--c-rule-strong);
+}
+
+.p-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-note);
+  line-height: 1.75;
+}
+
+.p-table th, .p-table td {
+  padding: var(--sp-2);
+  border-bottom: var(--rule-1) solid var(--c-rule);
+  text-align: left;
+  vertical-align: top;
+}
+
+.p-table thead th {
+  background: var(--c-paper);
+  border-bottom: var(--rule-1) solid var(--c-rule-strong);
+  font-weight: 700;
+  color: var(--c-ink-2);
+  letter-spacing: var(--ls-head);
+  white-space: nowrap;
+}
+
+.p-table tbody tr:last-child td { border-bottom: 0; }
+.p-table .is-num { text-align: right; white-space: nowrap; font-feature-settings: "tnum" 1; }
+.p-table .is-plain { color: var(--c-ink-2); }
+.p-table .is-alert { color: var(--c-caution); font-weight: 700; }
+
+/* 勤務表・希望表（横スクロール＋左端固定） */
+.p-grid { min-width: 1060px; border-collapse: collapse; width: 100%; font-size: var(--fs-note); }
+
+.p-grid th, .p-grid td {
+  border-bottom: var(--rule-1) solid var(--c-rule);
+  border-right: var(--rule-1) solid var(--c-rule);
+  padding: var(--sp-1) var(--sp-2);
+  text-align: center;
+  vertical-align: middle;
+  line-height: 1.6;
+}
+
+/* 日付の列は幅をそろえ、ますの中で改行させません */
+.p-grid thead th:not(.is-fix) { width: 4.6em; }
+.p-grid td { white-space: nowrap; }
+
+.p-grid thead th {
+  background: var(--c-paper);
+  border-bottom: var(--rule-1) solid var(--c-rule-strong);
+  font-weight: 700;
+  color: var(--c-ink-2);
+  white-space: nowrap;
+}
+
+.p-grid thead th.is-holiday { color: var(--c-ink); }
+.p-grid thead th small { display: block; font-size: 11px; font-weight: 400; color: var(--c-ink-3); }
+.p-grid thead th.is-short small { color: var(--c-caution); font-weight: 700; }
+
+/* 左端の固定列 */
+.p-grid .is-fix {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  width: 13em;
+  min-width: 13em;
+  text-align: left;
+  background: var(--c-base);
+  border-right: var(--rule-2) solid var(--c-rule-strong);
+}
+
+.p-grid thead .is-fix { z-index: 3; background: var(--c-paper); }
+.p-grid tbody tr.is-sum .is-fix { background: var(--c-paper); }
+
+.p-grid__name { display: block; font-weight: 700; color: var(--c-ink); }
+.p-grid__sub { display: block; font-size: 11px; line-height: 1.6; color: var(--c-ink-3); }
+.p-grid__sub--alert { color: var(--c-caution); font-weight: 700; }
+
+.p-grid td.is-holiday { background: var(--c-paper); }
+.p-grid tbody tr.is-sum td { background: var(--c-paper); font-feature-settings: "tnum" 1; }
+.p-grid tbody tr.is-sum td.is-short { background: var(--c-caution-tint); color: var(--c-caution); font-weight: 700; }
+.p-grid__q { display: block; font-size: 11px; color: var(--c-caution); font-weight: 700; }
+
+/* 勤務のます */
+.p-cell {
+  display: block;
+  width: 100%;
+  font-family: var(--font-gothic);
+  font-size: var(--fs-note);
+  line-height: 1.6;
+  color: var(--c-ink-3);
+  background: transparent;
+  border: 0;
+  padding: var(--sp-1) 0;
+  cursor: pointer;
+}
+
+.p-cell:hover { background: var(--c-accent-tint); }
+.p-cell--on { color: var(--c-accent); font-weight: 700; background: var(--c-accent-tint); }
+.p-cell--ng { color: var(--c-ink-3); background: var(--c-paper); cursor: not-allowed; }
+.p-cell--ng:hover { background: var(--c-paper); }
+.p-cell--want { color: var(--c-caution); font-weight: 700; }
+.p-cell[aria-pressed="true"] { outline: var(--rule-2) solid var(--c-accent); outline-offset: -2px; }
+
+/* 希望表のしるし */
+.p-sign { display: block; padding: var(--sp-1) 0; color: var(--c-ink-3); }
+.p-sign--want { color: var(--c-accent); font-weight: 700; }
+.p-sign--ng { color: var(--c-caution); font-weight: 700; background: var(--c-caution-tint); }
+
+/* ------------------------------------------------------------------
+   札
+------------------------------------------------------------------ */
+.p-mark {
+  display: inline-block;
+  white-space: nowrap;
+  font-size: 11px;
+  letter-spacing: var(--ls-head);
+  padding: 0 var(--sp-1);
+  border: var(--rule-1) solid var(--c-rule-strong);
+  background: var(--c-base);
+  color: var(--c-ink-2);
+}
+
+.p-mark--strong { background: var(--c-accent-tint); border-color: var(--c-accent); color: var(--c-accent); font-weight: 700; }
+.p-mark--alert { background: var(--c-caution-tint); border-color: var(--c-caution); color: var(--c-caution); font-weight: 700; }
+
+/* ------------------------------------------------------------------
+   満たせなかった制約
+------------------------------------------------------------------ */
+.p-flags { border-top: var(--rule-2) solid var(--c-rule-strong); }
+
+.p-flag {
+  border-bottom: var(--rule-1) solid var(--c-rule);
+  border-left: 3px solid var(--c-caution);
+  background: var(--c-caution-tint);
+  padding: var(--sp-3);
+  margin-bottom: var(--sp-2);
+}
+
+.p-flag--ok { border-left-color: var(--c-accent); background: var(--c-accent-tint); }
+.p-flag:last-child { margin-bottom: 0; }
+
+.p-flag__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-2);
+  margin: 0 0 var(--sp-1);
+}
+
+.p-flag__title { font-weight: 700; color: var(--c-caution); letter-spacing: var(--ls-head); }
+.p-flag--ok .p-flag__title { color: var(--c-accent); }
+
+.p-flag__count {
+  font-size: var(--fs-sub);
+  font-weight: 700;
+  color: var(--c-caution);
+  font-feature-settings: "tnum" 1;
+}
+
+.p-flag--ok .p-flag__count { color: var(--c-accent); }
+
+.p-flag__list { margin: 0; padding: 0; list-style: none; font-size: var(--fs-note); line-height: 1.9; color: var(--c-ink); }
+.p-flag__list li { border-top: var(--rule-1) solid var(--c-rule); padding-top: var(--sp-1); margin-top: var(--sp-1); }
+.p-flag__list li:first-child { border-top: 0; padding-top: 0; margin-top: 0; }
+.p-flag__where { font-weight: 700; margin-right: var(--sp-2); }
+.p-flag__why { margin: var(--sp-1) 0 0; font-size: var(--fs-note); line-height: 1.8; color: var(--c-ink-2); }
+
+/* ------------------------------------------------------------------
+   手直しの操作盤
+------------------------------------------------------------------ */
+.p-editor {
+  margin-top: var(--sp-3);
+  border-top: var(--rule-2) solid var(--c-accent);
+  border-bottom: var(--rule-1) solid var(--c-rule-strong);
+  padding: var(--sp-3) 0;
+}
+
+.p-editor--idle { border-top-color: var(--c-rule-strong); }
+.p-editor__title { margin: 0 0 var(--sp-1); font-size: var(--fs-note); font-weight: 700; letter-spacing: var(--ls-head); color: var(--c-accent); }
+.p-editor--idle .p-editor__title { color: var(--c-ink-2); }
+.p-editor__who { margin: 0 0 var(--sp-2); font-family: var(--font-mincho); font-size: var(--fs-sub); font-weight: 600; }
+.p-editor__row { display: flex; flex-wrap: wrap; gap: var(--sp-2); align-items: center; }
+.p-editor__note { margin: var(--sp-2) 0 0; font-size: var(--fs-note); line-height: 1.8; color: var(--c-ink-2); }
+.p-editor__note--alert { color: var(--c-caution); }
+
+.p-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  margin: var(--sp-2) 0 var(--sp-3);
+  font-size: var(--fs-note);
+  color: var(--c-ink-3);
+}
+
+/* ------------------------------------------------------------------
+   用語と設定の説明
+------------------------------------------------------------------ */
+.p-def { margin: 0 0 var(--sp-4); }
+
+.p-def__label {
+  margin: 0 0 var(--sp-1);
+  font-size: var(--fs-note);
+  font-weight: 700;
+  letter-spacing: var(--ls-head);
+  color: var(--c-accent);
+}
+
+.p-def__body { margin: 0; color: var(--c-ink); max-width: 44em; }
+
+.p-def__body code {
+  font-family: "SFMono-Regular", Consolas, "Courier New", monospace;
+  font-size: var(--fs-note);
+  background: var(--c-paper);
+  padding: 0 var(--sp-1);
+}
+
+.p-steps { margin: 0 0 var(--sp-4); padding: 0; list-style: none; border-top: var(--rule-1) solid var(--c-rule); }
+
+.p-steps li {
+  display: flex;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-2);
+  border-bottom: var(--rule-1) solid var(--c-rule);
+}
+
+.p-steps__no { flex: 0 0 auto; width: 2.2em; font-family: var(--font-mincho); font-size: var(--fs-sub); color: var(--c-accent); }
+.p-steps__body { flex: 1 1 auto; }
+.p-steps__body p { margin: 0; }
+.p-steps__note { margin-top: var(--sp-1) !important; font-size: var(--fs-note); color: var(--c-ink-2); }
+
+.p-colophon {
+  margin-top: var(--sp-4);
+  padding-top: var(--sp-3);
+  border-top: var(--rule-2) solid var(--c-rule-strong);
+  font-size: var(--fs-note);
+  color: var(--c-ink-3);
+}
+
+.p-colophon p { margin: 0 0 var(--sp-1); }
+.p-colophon p:last-child { margin-bottom: 0; }
+
+/* ------------------------------------------------------------------
+   スマートフォン
+------------------------------------------------------------------ */
+@media (max-width: 900px) {
+  .p-tiles { grid-template-columns: 1fr 1fr; }
+  .p-tiles--3 { grid-template-columns: 1fr 1fr; }
+}
+
+@media (max-width: 640px) {
+  :root {
+    --fs-title: 26px;
+    --fs-head: 20px;
+    --fs-sub: 17px;
+    --sp-5: 48px;
+  }
+
+  .p-sheet { padding: 0 var(--sp-2); }
+  .p-tiles, .p-tiles--3 { grid-template-columns: 1fr; }
+  .p-tile__num { font-size: 28px; }
+  .p-field__label { flex: 1 1 100%; }
+  .p-grid .is-fix { width: 9em; min-width: 9em; }
+  .p-grid thead th:not(.is-fix) { width: 4em; }
+  .p-grid { min-width: 900px; }
+}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>Babel.registerPreset("react-classic", { presets: [[Babel.availablePresets["react"], { runtime: "classic" }]] });</script>
+<script type="text/babel" data-presets="react-classic">
+const { useState, useMemo } = React;
+
+/* ==================================================================
+   設定。業種を変えるときに書き換えるのはこのブロックだけです。
+
+   ここは薬粧店（登録販売者が必要な小売）を例にしています。
+   ・介護事業所であれば SLOTS を「早番／日勤／遅番」、QUAL を「介護福祉士」
+   ・飲食店であれば SLOTS を「仕込み／ランチ／ディナー」、QUAL を「食品衛生責任者」
+   ・警備であれば SLOTS を「日勤／夜勤」、QUAL を「警備員指導教育責任者」
+   に差し替えれば、画面のつくりはそのまま使えます。
+   実案件では、この設定を JSON / DB に外出しし、管理画面から編集できるようにします。
+================================================================== */
+
+/* 事業所の情報 */
+const ORG = {
+  kicker: "中小企業向け　業務改善・自動化サンプル　シフト作成",
+  title: "シフト作成の自動化 デモ",
+  place: "薬粧店（1店舗）",
+  periodLabel: "2週間（8月31日 月曜 〜 9月13日 日曜）",
+};
+
+/* 資格の呼び名。「全時帯に最低1名」といった条件を課す対象です */
+const QUAL = { label: "登録販売者", mark: "登録販売者" };
+
+/* 時帯の定義と、必要人数の初期値。
+   need は平日、needHoliday は土日。needQualified は有資格者の必須人数です。 */
+const SLOTS = [
+  { id: "asa",  label: "朝番", short: "朝", time: "9:00〜14:00",  need: 2, needHoliday: 3, needQualified: 1 },
+  { id: "hiru", label: "昼番", short: "昼", time: "13:00〜18:00", need: 2, needHoliday: 3, needQualified: 1 },
+  { id: "yoru", label: "夕番", short: "夕", time: "17:00〜22:00", need: 2, needHoliday: 2, needQualified: 1 },
+];
+
+/* 働き方の規則の初期値 */
+const RULES = {
+  maxRun: 5,   // 連勤の上限（日）
+  restRun: 2,  // 期間中に最低1回は保証する連休の日数
+};
+
+/* 日付。曜日は固定で持ちます（実案件では期間から自動生成します） */
+const DAYS = [
+  { d: "8月31日", s: "8/31", w: "月" }, { d: "9月1日",  s: "9/1",  w: "火" },
+  { d: "9月2日",  s: "9/2",  w: "水" }, { d: "9月3日",  s: "9/3",  w: "木" },
+  { d: "9月4日",  s: "9/4",  w: "金" }, { d: "9月5日",  s: "9/5",  w: "土" },
+  { d: "9月6日",  s: "9/6",  w: "日" }, { d: "9月7日",  s: "9/7",  w: "月" },
+  { d: "9月8日",  s: "9/8",  w: "火" }, { d: "9月9日",  s: "9/9",  w: "水" },
+  { d: "9月10日", s: "9/10", w: "木" }, { d: "9月11日", s: "9/11", w: "金" },
+  { d: "9月12日", s: "9/12", w: "土" }, { d: "9月13日", s: "9/13", w: "日" },
+].map((x, i) => Object.assign({}, x, { i: i, holiday: x.w === "土" || x.w === "日" }));
+
+/* スタッフ12名。すべて架空の人物です。
+   q       … 有資格者かどうか
+   cap     … 1週間に入れる回数の上限（雇用契約側の条件）
+   ngSlot  … 常時入れない時帯
+   student … 学生。平日の昼間（朝番・昼番）に入れません
+   ng      … 出勤不可として申告された日（DAYS の番号）
+   want    … 出勤希望として申告された日（DAYS の番号） */
+const STAFF = [
+  { id: "tamura",    name: "田村 里香", kind: "正社員", role: "店長",  q: true,  cap: 5, ngSlot: [],       student: false, ng: [6, 9],        want: [] },
+  { id: "sato",      name: "佐藤 直人", kind: "正社員", role: "副店長", q: true,  cap: 6, ngSlot: [],       student: false, ng: [13],          want: [] },
+  { id: "kobayashi", name: "小林 明美", kind: "パート", role: "",      q: true,  cap: 3, ngSlot: ["yoru"], student: false, ng: [2, 9, 10],    want: [] },
+  { id: "yamaguchi", name: "山口 慎一", kind: "正社員", role: "",      q: false, cap: 5, ngSlot: [],       student: false, ng: [5, 9],        want: [] },
+  { id: "okada",     name: "岡田 由紀", kind: "正社員", role: "",      q: false, cap: 5, ngSlot: [],       student: false, ng: [1, 8, 9],     want: [12] },
+  { id: "nakamura",  name: "中村 恵子", kind: "パート", role: "",      q: false, cap: 4, ngSlot: ["yoru"], student: false, ng: [3, 9, 12],    want: [0, 1, 2, 4] },
+  { id: "miura",     name: "三浦 和子", kind: "パート", role: "",      q: false, cap: 3, ngSlot: ["yoru"], student: false, ng: [0, 7, 9, 12], want: [1, 4, 8, 11] },
+  { id: "ito",       name: "伊藤 誠",   kind: "パート", role: "",      q: false, cap: 4, ngSlot: ["asa"],  student: false, ng: [5],           want: [11, 12] },
+  { id: "azuma",     name: "東 陽介",   kind: "学生",   role: "",      q: false, cap: 3, ngSlot: [],       student: true,  ng: [4, 9],        want: [5, 6, 12] },
+  { id: "morishita", name: "森下 千夏", kind: "学生",   role: "",      q: false, cap: 3, ngSlot: [],       student: true,  ng: [9, 11, 12],   want: [5, 6, 13] },
+  { id: "uehara",    name: "上原 健太", kind: "学生",   role: "",      q: false, cap: 2, ngSlot: [],       student: true,  ng: [2, 3],        want: [5, 12, 13] },
+  { id: "kawashima", name: "川島 美咲", kind: "学生",   role: "",      q: false, cap: 3, ngSlot: [],       student: true,  ng: [6, 13],       want: [4, 5, 11, 12] },
+];
+
+/* 出勤不可の理由。画面の注記に使う説明文です */
+const NG_REASON = {
+  9: "全店合同の研修日として申告が重なった日です",
+};
+
+/* 手作業との比較で使う初期値と、自動化後にかかる時間の見積り式 */
+const COMPARE = {
+  staffCount: 12,        // 見積りに使うスタッフ人数
+  minutesPerRound: 240,  // 手で1回組むのにかかる時間（分）
+  roundsPerMonth: 3,     // 月に組み直す回数（初回＋変更対応）
+  checkBase: 15,         // 自動化後：生成結果を通しで見る時間（分）
+  checkPerStaff: 1,      // 自動化後：1人あたりの確認（分）
+  checkPerIssue: 3,      // 自動化後：満たせなかった制約1件あたりの手直し（分）
+};
+
+/* ==================================================================
+   ここから下は、業種が変わっても書き換えの必要がない部分です。
+================================================================== */
+
+const SLOT_BY_ID = {};
+SLOTS.forEach((s) => { SLOT_BY_ID[s.id] = s; });
+
+const weekOf = (i) => Math.floor(i / 7);
+const needOf = (slot, day) => (day.holiday ? slot.needHoliday : slot.need);
+
+/* その人がその日その時帯に入れるか（申告と契約条件だけで決まる、動かせない条件） */
+function canWork(st, day, slot) {
+  if (st.ng.indexOf(day.i) >= 0) return false;
+  if (st.ngSlot.indexOf(slot.id) >= 0) return false;
+  if (st.student && !day.holiday && slot.id !== "yoru") return false;
+  return true;
+}
+
+/* その日に1コマでも入れるか */
+function canWorkDay(st, day, slots) {
+  return slots.some((sl) => canWork(st, day, sl));
+}
+
+/* ------------------------------------------------------------------
+   自動生成。
+   埋める順番は「その日いちばん埋めにくい時帯」から。
+   点数付けで、出勤希望・契約回数の消化・週内の配分・連勤の状態を見ます。
+   出勤不可・1日1コマ・週の上限は破りません。連勤上限は、人数が足りなく
+   なるときに限って超えることがあり、超えた分は下の一覧に出します。
+------------------------------------------------------------------ */
+function generate(slots, rules) {
+  const plan = {};
+  const weekCount = {};
+  const total = {};
+  STAFF.forEach((s) => {
+    plan[s.id] = new Array(DAYS.length).fill(null);
+    weekCount[s.id] = [0, 0];
+    total[s.id] = 0;
+  });
+
+  const runBefore = (st, di) => {
+    let n = 0;
+    for (let k = di - 1; k >= 0; k--) {
+      if (plan[st.id][k]) n++; else break;
+    }
+    return n;
+  };
+
+  DAYS.forEach((day) => {
+    const w = weekOf(day.i);
+    const restDays = 7 - (day.i % 7); // その週の残り日数（当日を含む）
+
+    // 候補の少ない時帯から埋めます
+    const order = slots.slice().sort((a, b) => {
+      const room = (sl) =>
+        STAFF.filter((st) => canWork(st, day, sl) && weekCount[st.id][w] < st.cap).length - needOf(sl, day);
+      return room(a) - room(b);
+    });
+
+    order.forEach((slot) => {
+      const need = needOf(slot, day);
+      const picked = [];
+
+      const take = (qualifiedOnly) => {
+        const cands = STAFF.filter((st) => {
+          if (plan[st.id][day.i]) return false;              // 1日1コマ
+          if (picked.indexOf(st.id) >= 0) return false;
+          if (weekCount[st.id][w] >= st.cap) return false;    // 週の上限
+          if (!canWork(st, day, slot)) return false;          // 出勤不可・時帯不可
+          if (qualifiedOnly && !st.q) return false;
+          return true;
+        });
+        if (!cands.length) return false;
+
+        let best = null;
+        let bestScore = -1e9;
+        cands.forEach((st, idx) => {
+          let sc = 0;
+          if (st.want.indexOf(day.i) >= 0) sc += 55;                 // 出勤希望
+          sc += (st.cap * 2 - total[st.id]) * 7;                     // 契約回数の消化が遅い人を優先
+          const pace = (st.cap - weekCount[st.id][w]) / restDays;    // 週内でならす
+          if (pace < 1) sc -= (1 - pace) * 45;
+          const run = runBefore(st, day.i);
+          if (run + 1 > rules.maxRun) sc -= 120;                     // 連勤上限を超える
+          else if (run + 1 === rules.maxRun) sc -= 20;
+          if (!qualifiedOnly && st.q) sc -= 70;                      // 有資格者は資格枠に残す
+          sc -= idx * 0.01;                                          // 同点は名簿順
+          if (sc > bestScore) { bestScore = sc; best = st; }
+        });
+
+        plan[best.id][day.i] = slot.id;
+        picked.push(best.id);
+        weekCount[best.id][w]++;
+        total[best.id]++;
+        return true;
+      };
+
+      let qn = 0;
+      while (qn < slot.needQualified && picked.length < need) { if (!take(true)) break; qn++; }
+      while (picked.length < need) { if (!take(false)) break; }
+    });
+  });
+
+  return plan;
+}
+
+/* ------------------------------------------------------------------
+   判定。生成結果でも手直し後でも、同じ関数で見ます。
+------------------------------------------------------------------ */
+function evaluate(plan, slots, rules) {
+  const shortages = [];
+  const qshortages = [];
+  const runs = [];
+  const rests = [];
+  const wants = [];
+  const caps = [];
+  const byCell = {};
+  const byStaff = {};
+
+  DAYS.forEach((day) => {
+    byCell[day.i] = {};
+    slots.forEach((slot) => {
+      const on = STAFF.filter((s) => plan[s.id][day.i] === slot.id);
+      const need = needOf(slot, day);
+      const q = on.filter((s) => s.q).length;
+      byCell[day.i][slot.id] = { have: on.length, need: need, q: q, needQ: slot.needQualified };
+      if (on.length < need) shortages.push({ day: day, slot: slot, have: on.length, need: need });
+      if (q < slot.needQualified) qshortages.push({ day: day, slot: slot, have: q, need: slot.needQualified });
+    });
+  });
+
+  STAFF.forEach((st) => {
+    let run = 0, maxRun = 0, runEnd = -1;
+    let rest = 0, maxRest = 0;
+    let count = 0;
+    DAYS.forEach((d) => {
+      if (plan[st.id][d.i]) {
+        run++; rest = 0; count++;
+        if (run > maxRun) { maxRun = run; runEnd = d.i; }
+      } else {
+        rest++; run = 0;
+        if (rest > maxRest) maxRest = rest;
+      }
+    });
+    const over = maxRun > rules.maxRun;
+    const noRest = maxRest < rules.restRun;
+    if (over) runs.push({ staff: st, len: maxRun, from: DAYS[runEnd - maxRun + 1], to: DAYS[runEnd] });
+    if (noRest) rests.push({ staff: st, maxRest: maxRest });
+
+    const unmet = st.want.filter((di) => !plan[st.id][di]);
+    unmet.forEach((di) => wants.push({ staff: st, day: DAYS[di] }));
+
+    let overCap = false;
+    [0, 1].forEach((w) => {
+      const n = DAYS.filter((d) => weekOf(d.i) === w && plan[st.id][d.i]).length;
+      if (n > st.cap) { overCap = true; caps.push({ staff: st, week: w + 1, count: n, cap: st.cap }); }
+    });
+
+    byStaff[st.id] = { run: over, maxRun: maxRun, rest: noRest, cap: overCap, count: count, unmet: unmet.length };
+  });
+
+  const filled = STAFF.reduce((a, s) => a + DAYS.filter((d) => plan[s.id][d.i]).length, 0);
+  let needTotal = 0;
+  DAYS.forEach((d) => slots.forEach((s) => { needTotal += needOf(s, d); }));
+
+  return {
+    shortages: shortages, qshortages: qshortages, runs: runs, rests: rests,
+    wants: wants, caps: caps, byCell: byCell, byStaff: byStaff,
+    filled: filled, needTotal: needTotal,
+    count: shortages.length + qshortages.length + runs.length + rests.length + wants.length + caps.length,
+  };
+}
+
+/* ------------------------------------------------------------------
+   組み方では動かせない不足の量。
+   必要なコマ数と、申告と契約から出る配置の上限を比べます。
+------------------------------------------------------------------ */
+function structural(slots) {
+  const capacityOf = (list) => {
+    let sum = 0;
+    list.forEach((st) => {
+      [0, 1].forEach((w) => {
+        const avail = DAYS.filter((d) => weekOf(d.i) === w && canWorkDay(st, d, slots)).length;
+        sum += Math.min(st.cap, avail);
+      });
+    });
+    return sum;
+  };
+  let needQ = 0, needAll = 0;
+  DAYS.forEach((d) => slots.forEach((s) => { needQ += s.needQualified; needAll += needOf(s, d); }));
+  const qStaff = STAFF.filter((s) => s.q);
+  return {
+    needQ: needQ, supplyQ: capacityOf(qStaff), qCount: qStaff.length,
+    needAll: needAll, supplyAll: capacityOf(STAFF),
+  };
+}
+
+const fmtHour = (min) => (Math.round((min / 60) * 10) / 10).toLocaleString("ja-JP");
+const joinDays = (list, f) => list.map(f).join("／");
+
+/* ==================================================================
+   画面
+================================================================== */
+function App() {
+  const [slots, setSlots] = useState(() => SLOTS.map((s) => Object.assign({}, s)));
+  const [rules, setRules] = useState(() => Object.assign({}, RULES));
+  const [applied, setApplied] = useState(() => ({ slots: SLOTS.map((s) => Object.assign({}, s)), rules: Object.assign({}, RULES) }));
+  const [plan, setPlan] = useState(() => generate(SLOTS, RULES));
+  const [touched, setTouched] = useState(false);
+  const [sel, setSel] = useState(null);
+  const [cmp, setCmp] = useState({
+    staffCount: COMPARE.staffCount,
+    minutesPerRound: COMPARE.minutesPerRound,
+    roundsPerMonth: COMPARE.roundsPerMonth,
+  });
+
+  const dirty = JSON.stringify({ slots: slots, rules: rules }) !== JSON.stringify(applied);
+  const ev = useMemo(() => evaluate(plan, applied.slots, applied.rules), [plan, applied]);
+  const st = useMemo(() => structural(applied.slots), [applied]);
+
+  const regenerate = () => {
+    setApplied({ slots: slots.map((s) => Object.assign({}, s)), rules: Object.assign({}, rules) });
+    setPlan(generate(slots, rules));
+    setTouched(false);
+    setSel(null);
+  };
+
+  const resetSettings = () => {
+    const s0 = SLOTS.map((s) => Object.assign({}, s));
+    const r0 = Object.assign({}, RULES);
+    setSlots(s0); setRules(r0);
+    setApplied({ slots: s0.map((s) => Object.assign({}, s)), rules: Object.assign({}, r0) });
+    setPlan(generate(s0, r0));
+    setTouched(false);
+    setSel(null);
+  };
+
+  const setSlotVal = (id, key, v) => {
+    setSlots((prev) => prev.map((s) => (s.id === id ? Object.assign({}, s, { [key]: v }) : s)));
+  };
+
+  const assign = (staffId, dayIdx, slotId) => {
+    setPlan((prev) => {
+      const next = {};
+      Object.keys(prev).forEach((k) => { next[k] = prev[k].slice(); });
+      next[staffId][dayIdx] = slotId;
+      return next;
+    });
+    setTouched(true);
+  };
+
+  /* 手作業との比較 */
+  const manualMin = cmp.minutesPerRound * cmp.roundsPerMonth;
+  const autoPerRound = COMPARE.checkBase + COMPARE.checkPerStaff * cmp.staffCount + COMPARE.checkPerIssue * ev.count;
+  const autoMin = autoPerRound * cmp.roundsPerMonth;
+  const savedMin = Math.max(0, manualMin - autoMin);
+
+  /* 希望と不可がいちばん多い日 */
+  const ngTop = DAYS.map((d) => ({ d: d, n: STAFF.filter((s) => s.ng.indexOf(d.i) >= 0).length })).sort((a, b) => b.n - a.n)[0];
+  const wantTop = DAYS.map((d) => ({ d: d, n: STAFF.filter((s) => s.want.indexOf(d.i) >= 0).length })).sort((a, b) => b.n - a.n)[0];
+  const wantTotal = STAFF.reduce((a, s) => a + s.want.length, 0);
+
+  return (
+    <React.Fragment>
+      <div className="p-topbar" />
+
+      <div className="p-sheet">
+        {/* ================= ヘッダー ================= */}
+        <header className="p-masthead">
+          <p className="p-masthead__kicker">{ORG.kicker}</p>
+          <h1 className="p-masthead__title">{ORG.title}</h1>
+          <p className="p-masthead__lead">
+            必要人数・有資格者・連勤の上限・連休の保証といった条件を画面上で設定し、
+            スタッフ{STAFF.length}名・{ORG.periodLabel.replace(/（.*/, "")}分のシフトを自動で組みます。
+            この画面の中心は、組み上がった表そのものではなく、
+            <strong>満たせなかった条件を一件ずつ出すところ</strong>です。
+            全部を機械に任せる話ではありません。人が見るべき場所を絞るための道具です。
+          </p>
+          <p className="p-masthead__meta">
+            対象：{ORG.place}
+            {"　"}期間：{ORG.periodLabel}
+            {"　"}時帯：{slots.map((s) => s.label).join("／")}
+            <a href="../../index.html">業務の悩み 索引へ戻る</a>
+          </p>
+
+          <div className="p-notice">
+            <p className="p-notice__title">この画面の数値とデータについて</p>
+            <p className="p-notice__body">
+              スタッフの氏名・勤務条件・出勤希望・削減時間は、すべて動作確認のために用意したデモ用の架空のデータです。
+              実在する企業・人物・実績とは関係ありません。
+            </p>
+            <p className="p-notice__body">
+              このデモは、必要人数・有資格者・連勤・連休だけを条件にしています。
+              実際の運用では、労働基準法上の休憩の付与、連続勤務や法定休日の扱い、
+              時間外労働の上限などを満たす必要があります。設定値は自社の就業規則と実態に合わせて調整してください。
+            </p>
+            <p className="p-notice__body">
+              画面上の操作内容はブラウザの中だけに保持され、どこにも保存・送信されません
+              （localStorage・Cookie・外部通信のいずれも使っていません）。ページを開き直すと最初の状態に戻ります。
+            </p>
+          </div>
+        </header>
+
+        {/* ================= 1 制約の設定 ================= */}
+        <section className="p-section">
+          <div className="p-heading">
+            <span className="p-heading__no">一</span>
+            <h2 className="p-heading__text">制約の設定</h2>
+          </div>
+          <p className="p-lead">
+            いま頭の中で解いている条件を、数字にして置いておく場所です。
+            ここを変えて［この条件で自動生成する］を押すと、シフトの中身も、満たせなかった条件の一覧も変わります。
+          </p>
+
+          <div className="p-fieldset">
+            {slots.map((s) => (
+              <div className="p-field" key={s.id}>
+                <span className="p-field__label">
+                  <span className="p-field__name">{s.label}　<span className="p-field__unit">{s.time}</span></span>
+                  <span className="p-field__desc">
+                    平日・土日それぞれの必要人数と、そのうち{QUAL.label}が何名要るかを決めます。
+                  </span>
+                </span>
+                <Stepper label={s.label + "の平日の必要人数"} caption="平日" value={s.need} min={0} max={6} onChange={(v) => setSlotVal(s.id, "need", v)} />
+                <Stepper label={s.label + "の土日の必要人数"} caption="土日" value={s.needHoliday} min={0} max={6} onChange={(v) => setSlotVal(s.id, "needHoliday", v)} />
+                <Stepper label={s.label + "の" + QUAL.label + "の必要人数"} caption={QUAL.label} value={s.needQualified} min={0} max={3} onChange={(v) => setSlotVal(s.id, "needQualified", v)} />
+              </div>
+            ))}
+
+            <div className="p-field">
+              <span className="p-field__label">
+                <span className="p-field__name">連勤の上限</span>
+                <span className="p-field__desc">続けて出勤してよい日数の上限です。超えた人は下の一覧に出ます。</span>
+              </span>
+              <Stepper label="連勤の上限" caption="日まで" after value={rules.maxRun} min={2} max={10} onChange={(v) => setRules(Object.assign({}, rules, { maxRun: v }))} />
+            </div>
+
+            <div className="p-field">
+              <span className="p-field__label">
+                <span className="p-field__name">連休の保証</span>
+                <span className="p-field__desc">期間中に最低1回は確保したい、続けて休める日数です。</span>
+              </span>
+              <Stepper label="連休の保証" caption="日連続" after value={rules.restRun} min={1} max={4} onChange={(v) => setRules(Object.assign({}, rules, { restRun: v }))} />
+            </div>
+          </div>
+
+          <div className="p-actions">
+            <button type="button" className="p-btn p-btn--main" onClick={regenerate}>この条件で自動生成する</button>
+            <button type="button" className="p-btn p-btn--quiet" onClick={resetSettings}>設定を初期値に戻す</button>
+          </div>
+
+          {dirty ? (
+            <p className="p-note p-note--alert">
+              設定を変えました。［この条件で自動生成する］を押すと、下のシフト表と判定に反映されます。
+              押すまでは、前の条件の結果を表示しています。
+            </p>
+          ) : (
+            <p className="p-note">
+              いまのシフト表は、この設定で生成したものです。
+              例えば「昼番の{QUAL.label}」を0にして生成し直すと、満たせない条件が大きく減ります。
+            </p>
+          )}
+        </section>
+
+        {/* ================= 2 希望の取り込み ================= */}
+        <section className="p-section">
+          <div className="p-heading">
+            <span className="p-heading__no">二</span>
+            <h2 className="p-heading__text">希望の取り込み</h2>
+          </div>
+          <p className="p-lead">
+            スタッフから集めた出勤希望と出勤不可を、一覧にしたものです。
+            紙やチャットで集めた内容がここに入ります。ここまでは人の作業、ここから先が機械の作業です。
+          </p>
+
+          <div className="p-legend">
+            <span>希望＝出勤したい日</span>
+            <span>不可＝出勤できない日</span>
+            <span>空欄＝どちらでもない</span>
+            <span>{QUAL.label}は氏名の下に表示しています</span>
+          </div>
+
+          <div className="p-scroll">
+            <table className="p-grid">
+              <caption className="sr-only" style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0 0 0 0)" }}>
+                スタッフごとの出勤希望と出勤不可の一覧
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col" className="is-fix">スタッフ（{STAFF.length}名）</th>
+                  {DAYS.map((d) => (
+                    <th scope="col" key={d.i} className={d.holiday ? "is-holiday" : ""}>
+                      {d.s}<small>{d.w}</small>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {STAFF.map((s) => (
+                  <tr key={s.id}>
+                    <th scope="row" className="is-fix">
+                      <span className="p-grid__name">{s.name}</span>
+                      <span className="p-grid__sub">
+                        {s.kind}{s.role ? "・" + s.role : ""}／週{s.cap}回まで
+                        {s.q ? "／" + QUAL.label : ""}
+                      </span>
+                      <span className="p-grid__sub">
+                        {s.student ? "平日の昼間は不可" : ""}
+                        {s.student && s.ngSlot.length ? "／" : ""}
+                        {s.ngSlot.map((id) => SLOT_BY_ID[id].label + "は不可").join("／")}
+                        {!s.student && !s.ngSlot.length ? "時帯の制限なし" : ""}
+                      </span>
+                    </th>
+                    {DAYS.map((d) => {
+                      const isNg = s.ng.indexOf(d.i) >= 0;
+                      const isWant = s.want.indexOf(d.i) >= 0;
+                      return (
+                        <td key={d.i} className={d.holiday ? "is-holiday" : ""}>
+                          <span className={"p-sign" + (isNg ? " p-sign--ng" : isWant ? " p-sign--want" : "")}>
+                            {isNg ? "不可" : isWant ? "希望" : "―"}
+                          </span>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <p className="p-note">
+            出勤不可がもっとも多い日は<strong>{ngTop.d.d}（{ngTop.d.w}）の{ngTop.n}名</strong>です。
+            {NG_REASON[ngTop.d.i] ? NG_REASON[ngTop.d.i] + "。" : ""}
+            この日は残る{STAFF.length - ngTop.n}名で回すことになり、しかもそのうち何人かは入れる時帯が限られています。
+            出勤希望は期間全体で{wantTotal}件あり、もっとも集中するのは{wantTop.d.d}（{wantTop.d.w}）の{wantTop.n}名です。
+            週の勤務回数には契約上の上限があるため、希望を出した日のすべてに入れるとは限りません。
+            誰も入れない日と、希望が重なる日が同時にあるのが、手で組むと何度も戻ることになる原因です。
+          </p>
+        </section>
+
+        {/* ================= 3 自動生成 ================= */}
+        <section className="p-section">
+          <div className="p-heading">
+            <span className="p-heading__no">三</span>
+            <h2 className="p-heading__text">自動生成</h2>
+          </div>
+          <p className="p-lead">
+            設定した条件と、集めた希望から、シフトを組みます。押した瞬間に組み上がります。
+            条件を変えて押し直すと、別の組み方になります。
+          </p>
+
+          <div className="p-actions" style={{ marginTop: 0, marginBottom: "var(--sp-3)" }}>
+            <button type="button" className="p-btn p-btn--main" onClick={regenerate}>この条件で自動生成する</button>
+            {touched ? <span className="p-mark p-mark--alert">手直し後です。押すと手直しは消えます</span> : null}
+          </div>
+
+          <div className="p-tiles">
+            <div className="p-tile">
+              <p className="p-tile__label">必要なコマ数</p>
+              <p className="p-tile__num">{ev.needTotal}<span className="p-tile__unit">コマ</span></p>
+              <p className="p-tile__sub">{applied.slots.length}時帯 × {DAYS.length}日の合計</p>
+            </div>
+            <div className="p-tile">
+              <p className="p-tile__label">埋まったコマ数</p>
+              <p className="p-tile__num">{ev.filled}<span className="p-tile__unit">コマ</span></p>
+              <p className="p-tile__sub">全体の{Math.round((ev.filled / Math.max(1, ev.needTotal)) * 100)}パーセント</p>
+            </div>
+            <div className={"p-tile" + (ev.count ? " p-tile--alert" : "")}>
+              <p className="p-tile__label">満たせなかった条件</p>
+              <p className="p-tile__num">{ev.count}<span className="p-tile__unit">件</span></p>
+              <p className="p-tile__sub">内訳は次の節に出しています</p>
+            </div>
+            <div className="p-tile p-tile--quiet">
+              <p className="p-tile__label">組むのにかかった時間</p>
+              <p className="p-tile__num">1<span className="p-tile__unit">秒未満</span></p>
+              <p className="p-tile__sub">条件を変えて何度でも組み直せます</p>
+            </div>
+          </div>
+
+          <div className="p-scope">
+            <p>
+              組むときに守る順番は決めてあります。
+              <strong>出勤不可の日・1日1コマ・週の勤務回数の上限は、どんな場合も破りません。</strong>
+              そのうえで{QUAL.label}の必須人数、各時帯の必要人数、連勤の上限と連休、出勤希望の順に見ます。
+            </p>
+            <p className="p-scope__sub">
+              人数が足りなくなるときに限って連勤の上限を超えることがあります。超えた分は、次の節にそのまま出します。
+              黙って条件を緩めることはしません。
+            </p>
+          </div>
+
+          {st.needQ > st.supplyQ ? (
+            <div className="p-scope p-scope--alert">
+              <p>
+                <strong>{QUAL.label}の不足は、組み方では解消できません。</strong>
+                {QUAL.label}が要るコマは期間中<strong>{st.needQ}コマ</strong>ありますが、
+                在籍{st.qCount}名を勤務可能な日いっぱいまで入れても<strong>{st.supplyQ}コマ</strong>が上限です。
+                差の<strong>{st.needQ - st.supplyQ}コマ</strong>は、誰をどこに置いても埋まりません。
+              </p>
+              <p className="p-scope__sub">
+                打てる手は3つです。人を増やすか、資格を取ってもらうか、
+                {QUAL.label}が必須の時帯を絞るか。上の設定で必須人数を下げると、この数字がその場で変わります。
+                手で組んでいると、この「そもそも足りない」が半日かけた後に分かります。
+              </p>
+            </div>
+          ) : null}
+
+          <div className="p-scope">
+            <p>
+              延べで見ると、必要なコマ数<strong>{st.needAll}コマ</strong>に対して、
+              全員を契約上限まで入れた場合の配置可能数は<strong>{st.supplyAll}コマ</strong>です。
+              {st.supplyAll >= st.needAll
+                ? "数のうえでは足りていますが、入れる時帯が人によって決まっているため、実際には空きが出ます。"
+                : "数のうえで先に足りていません。"}
+            </p>
+            <p className="p-scope__sub">
+              余力は{st.supplyAll - st.needAll}コマです。急な欠勤が1件出れば、その分がそのまま穴になります。
+            </p>
+          </div>
+        </section>
+
+        {/* ================= 4 満たせなかった制約 ================= */}
+        <section className="p-section">
+          <div className="p-heading">
+            <span className="p-heading__no">四</span>
+            <h2 className="p-heading__text">満たせなかった制約</h2>
+          </div>
+          <p className="p-lead">
+            この節がこの画面の中心です。組み上がった表を最初から最後まで見直す必要はありません。
+            ここに出ている場所だけを見てください。手直しをすると、この一覧はその場で組み替わります。
+          </p>
+
+          <Flags ev={ev} rules={applied.rules} />
+        </section>
+
+        {/* ================= 5 シフト表と手直し ================= */}
+        <section className="p-section">
+          <div className="p-heading">
+            <span className="p-heading__no">五</span>
+            <h2 className="p-heading__text">シフト表と手直し</h2>
+          </div>
+          <p className="p-lead">
+            ますを押すと、その人のその日の勤務を変えられます。変えた瞬間に、上の一覧と下の表の判定が変わります。
+            機械が出した案を、そのまま使う必要はありません。
+          </p>
+
+          <div className="p-legend">
+            <span>朝・昼・夕＝割り当てた時帯</span>
+            <span>―＝休み</span>
+            <span>不可＝出勤できない日</span>
+            <span>希望＝出勤希望に応えられていない日</span>
+            <span>表は横に動きます</span>
+          </div>
+
+          <div className="p-scroll">
+            <table className="p-grid">
+              <thead>
+                <tr>
+                  <th scope="col" className="is-fix">スタッフ</th>
+                  {DAYS.map((d) => {
+                    // 見出しの印は人数不足のときだけ。資格の不足は下の集計行に出します
+                    const short = applied.slots.some((sl) => {
+                      const c = ev.byCell[d.i][sl.id];
+                      return c && c.have < c.need;
+                    });
+                    return (
+                      <th scope="col" key={d.i} className={(d.holiday ? "is-holiday" : "") + (short ? " is-short" : "")}>
+                        {d.s}<small>{short ? d.w + "・不足" : d.w}</small>
+                      </th>
+                    );
+                  })}
+                  <th scope="col">計</th>
+                </tr>
+              </thead>
+              <tbody>
+                {STAFF.map((s) => {
+                  const info = ev.byStaff[s.id];
+                  return (
+                    <tr key={s.id}>
+                      <th scope="row" className="is-fix">
+                        <span className="p-grid__name">{s.name}</span>
+                        <span className="p-grid__sub">
+                          {s.kind}／週{s.cap}回まで{s.q ? "／" + QUAL.label : ""}
+                        </span>
+                        {info.run || info.rest || info.cap ? (
+                          <span className="p-grid__sub p-grid__sub--alert">
+                            {[
+                              info.run ? info.maxRun + "連勤" : "",
+                              info.rest ? "連休なし" : "",
+                              info.cap ? "週の上限超過" : "",
+                            ].filter(Boolean).join("／")}
+                          </span>
+                        ) : null}
+                      </th>
+                      {DAYS.map((d) => {
+                        const cur = plan[s.id][d.i];
+                        const isNg = s.ng.indexOf(d.i) >= 0;
+                        const unmet = !cur && s.want.indexOf(d.i) >= 0;
+                        const on = sel && sel.staff === s.id && sel.day === d.i;
+                        return (
+                          <td key={d.i} className={d.holiday ? "is-holiday" : ""}>
+                            <button
+                              type="button"
+                              className={
+                                "p-cell" +
+                                (cur ? " p-cell--on" : "") +
+                                (isNg ? " p-cell--ng" : "") +
+                                (unmet ? " p-cell--want" : "")
+                              }
+                              aria-pressed={on ? "true" : "false"}
+                              aria-label={s.name + " " + d.d + " " + (cur ? SLOT_BY_ID[cur].label : isNg ? "出勤不可" : "休み")}
+                              onClick={() => setSel(on ? null : { staff: s.id, day: d.i })}
+                            >
+                              {cur ? SLOT_BY_ID[cur].short : isNg ? "不可" : unmet ? "希望" : "―"}
+                            </button>
+                          </td>
+                        );
+                      })}
+                      <td className="is-num">{info.count}</td>
+                    </tr>
+                  );
+                })}
+
+                {applied.slots.map((sl) => (
+                  <tr className="is-sum" key={sl.id}>
+                    <th scope="row" className="is-fix">
+                      <span className="p-grid__name">{sl.label}　配置／必要</span>
+                      <span className="p-grid__sub">
+                        {sl.time}／{QUAL.label}は{sl.needQualified}名必要
+                      </span>
+                    </th>
+                    {DAYS.map((d) => {
+                      const c = ev.byCell[d.i][sl.id];
+                      const bad = c.have < c.need || c.q < c.needQ;
+                      return (
+                        <td key={d.i} className={bad ? "is-short" : ""}>
+                          {c.have}／{c.need}
+                          {c.q < c.needQ ? <span className="p-grid__q">資格{c.q}</span> : null}
+                        </td>
+                      );
+                    })}
+                    <td className="is-num">
+                      {DAYS.reduce((a, d) => a + ev.byCell[d.i][sl.id].have, 0)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <Editor
+            sel={sel}
+            plan={plan}
+            slots={applied.slots}
+            onAssign={assign}
+            onClose={() => setSel(null)}
+          />
+
+          <div className="p-actions">
+            <button type="button" className="p-btn p-btn--quiet" onClick={regenerate} disabled={!touched}>
+              手直しを取り消して組み直す
+            </button>
+            <span className="p-note" style={{ margin: 0 }}>
+              満たせなかった条件は現在{ev.count}件です。
+            </span>
+          </div>
+        </section>
+
+        {/* ================= 6 手作業との比較 ================= */}
+        <section className="p-section">
+          <div className="p-heading">
+            <span className="p-heading__no">六</span>
+            <h2 className="p-heading__text">手作業との比較</h2>
+          </div>
+          <p className="p-lead">
+            いまシフト作成にかけている時間を入れると、削減できる時間の目安が出ます。
+            自動化しても、確認と手直しの時間は残ります。そこを差し引いた数字です。
+          </p>
+
+          <div className="p-fieldset">
+            <div className="p-field">
+              <span className="p-field__label">
+                <span className="p-field__name">スタッフの人数</span>
+                <span className="p-field__desc">
+                  確認にかかる時間の見積りに使います。上のシフト表は{STAFF.length}名のデモ用データで固定です。
+                </span>
+              </span>
+              <NumInput label="スタッフの人数" value={cmp.staffCount} min={1} max={200}
+                onChange={(v) => setCmp(Object.assign({}, cmp, { staffCount: v }))} unit="名" />
+            </div>
+            <div className="p-field">
+              <span className="p-field__label">
+                <span className="p-field__name">手で1回組むのにかかる時間</span>
+                <span className="p-field__desc">希望を並べ直して、埋めて、確認するまでの合計です。</span>
+              </span>
+              <NumInput label="手で1回組むのにかかる時間" value={cmp.minutesPerRound} min={10} max={2400} step={10}
+                onChange={(v) => setCmp(Object.assign({}, cmp, { minutesPerRound: v }))} unit="分" />
+            </div>
+            <div className="p-field">
+              <span className="p-field__label">
+                <span className="p-field__name">月に組む回数</span>
+                <span className="p-field__desc">最初に組む1回と、欠勤や希望の変更で組み直す回数の合計です。</span>
+              </span>
+              <NumInput label="月に組む回数" value={cmp.roundsPerMonth} min={1} max={30}
+                onChange={(v) => setCmp(Object.assign({}, cmp, { roundsPerMonth: v }))} unit="回" />
+            </div>
+          </div>
+
+          <div className="p-tiles" style={{ marginTop: "var(--sp-3)" }}>
+            <div className="p-tile p-tile--quiet">
+              <p className="p-tile__label">いまの作業時間</p>
+              <p className="p-tile__num">{fmtHour(manualMin)}<span className="p-tile__unit">時間／月</span></p>
+              <p className="p-tile__sub">{cmp.minutesPerRound}分 × {cmp.roundsPerMonth}回</p>
+            </div>
+            <div className="p-tile p-tile--quiet">
+              <p className="p-tile__label">自動化した場合</p>
+              <p className="p-tile__num">{fmtHour(autoMin)}<span className="p-tile__unit">時間／月</span></p>
+              <p className="p-tile__sub">1回あたり{autoPerRound}分 × {cmp.roundsPerMonth}回</p>
+            </div>
+            <div className="p-tile">
+              <p className="p-tile__label">削減できる時間</p>
+              <p className="p-tile__num">{fmtHour(savedMin)}<span className="p-tile__unit">時間／月</span></p>
+              <p className="p-tile__sub">差し引きの目安です</p>
+            </div>
+            <div className="p-tile">
+              <p className="p-tile__label">年間に直すと</p>
+              <p className="p-tile__num">{fmtHour(savedMin * 12)}<span className="p-tile__unit">時間／年</span></p>
+              <p className="p-tile__sub">上の数字の12か月分</p>
+            </div>
+          </div>
+
+          <div className="p-scope">
+            <p>
+              自動化した場合の1回は、
+              <strong>通しの確認{COMPARE.checkBase}分 ＋ 1人あたり{COMPARE.checkPerStaff}分 × {cmp.staffCount}名
+              ＋ 満たせなかった条件1件あたり{COMPARE.checkPerIssue}分 × {ev.count}件</strong>
+              で見積もっています。組み上げ自体の時間は入れていません。押した瞬間に終わるためです。
+            </p>
+            <p className="p-scope__sub">
+              満たせない条件が多いほど、確認と手直しの時間は増えます。
+              上の設定を実態に合った値へ直すと、この数字も動きます。制約の置き方そのものが、作業時間に効いてきます。
+            </p>
+          </div>
+
+          {savedMin === 0 ? (
+            <p className="p-note p-note--alert">
+              この条件では、確認と手直しの時間が現状の作業時間を上回っています。削減にはなりません。
+            </p>
+          ) : null}
+
+          <p className="p-note">
+            ここに出る時間は<strong>想定値</strong>です。1件あたりの確認時間は現場によって変わります。
+            導入を検討する際は、実際に1か月ぶんを並行して回し、実測に置き換えてください。
+          </p>
+        </section>
+
+        {/* ================= 7 読み方と転用 ================= */}
+        <section className="p-section">
+          <div className="p-heading">
+            <span className="p-heading__no">七</span>
+            <h2 className="p-heading__text">この画面の読み方</h2>
+          </div>
+
+          <ol className="p-steps">
+            <li>
+              <span className="p-steps__no">一</span>
+              <span className="p-steps__body">
+                <p>頭の中の条件を、設定に書き出す</p>
+                <p className="p-steps__note">
+                  必要人数・資格・連勤・連休。この4つを数字にした時点で、引き継ぎができる形になります。
+                  条件が人の頭の中にしかないと、その人が休んだ月にシフトが組めません。
+                </p>
+              </span>
+            </li>
+            <li>
+              <span className="p-steps__no">二</span>
+              <span className="p-steps__body">
+                <p>組むこと自体は機械に渡す</p>
+                <p className="p-steps__note">
+                  組み合わせを探す作業に、人の判断は要りません。条件が変わるたびに一から組み直しても、時間はかかりません。
+                </p>
+              </span>
+            </li>
+            <li>
+              <span className="p-steps__no">三</span>
+              <span className="p-steps__body">
+                <p>満たせなかった条件だけを人が見る</p>
+                <p className="p-steps__note">
+                  ここが人の仕事です。誰に頼むか、どの条件を今回だけ緩めるか。
+                  埋まっている部分を見直す必要はありません。
+                </p>
+              </span>
+            </li>
+            <li>
+              <span className="p-steps__no">四</span>
+              <span className="p-steps__body">
+                <p>そもそも足りていない分を、経営の判断に上げる</p>
+                <p className="p-steps__note">
+                  資格者が構造的に足りないなら、配置をいくら工夫しても埋まりません。
+                  採用・資格取得の支援・営業時間の見直しといった判断に切り替える材料になります。
+                </p>
+              </span>
+            </li>
+          </ol>
+
+          <div className="p-def">
+            <p className="p-def__label">完全な自動化ではありません</p>
+            <p className="p-def__body">
+              この仕組みが引き受けるのは、条件を満たす組み合わせを探す部分だけです。
+              「今回は誰に無理を頼めるか」「この日は多少薄くても回るか」といった判断は人に残ります。
+              残るからこそ、どこを見ればよいかを機械の側から示す必要があります。
+            </p>
+          </div>
+
+          <div className="p-def">
+            <p className="p-def__label">他の業種への転用</p>
+            <p className="p-def__body">
+              条件はファイル冒頭の設定オブジェクトにまとめています（
+              <code>ORG</code> / <code>QUAL</code> / <code>SLOTS</code> / <code>RULES</code> /
+              <code>DAYS</code> / <code>STAFF</code> / <code>COMPARE</code>）。
+              時帯の定義と資格の呼び名を差し替えれば、介護の早番・日勤・遅番と介護福祉士、
+              飲食の仕込み・ランチ・ディナーと食品衛生責任者、
+              警備の日勤・夜勤と警備員指導教育責任者、といった形にそのまま置き換わります。
+              画面のつくりと判定の仕組みは共通です。
+            </p>
+          </div>
+
+          <div className="p-def">
+            <p className="p-def__label">実装するときの構成</p>
+            <p className="p-def__body">
+              このデモは画面確認用のため、生成も判定もブラウザの中だけで動いています。
+              実装時は、希望の提出をスタッフのスマートフォンから受け、
+              生成と判定をサーバー側に置きます。確定したシフトの配信、
+              勤怠実績との突き合わせ、労働時間の集計まで含めて1本につながります。
+            </p>
+          </div>
+
+          <div className="p-colophon">
+            <p>掲載しているデータは、すべてデモ用の架空のものです。実在する企業・人物・実績とは関係ありません。</p>
+            <p>労働時間・休憩・休日の扱いは、自社の就業規則と労働基準法に合わせて設定してください。この画面はその判断を代替するものではありません。</p>
+            <p>React ＋ Tailwind CSS の1ファイル構成（CDN読み込み・ビルド不要）。意匠は索引ページと共通です。</p>
+            <p>
+              ほかのサンプルは
+              <a href="../../index.html">業務の悩み 索引</a>
+              から見られます。
+            </p>
+          </div>
+        </section>
+      </div>
+    </React.Fragment>
+  );
+}
+
+/* ==================================================================
+   増減の操作
+================================================================== */
+function Stepper({ label, caption, value, min, max, onChange, after }) {
+  const cap = (side) => (
+    <span className="p-field__unit" style={side === "left" ? { marginRight: "var(--sp-1)" } : { marginLeft: "var(--sp-1)" }}>
+      {caption}
+    </span>
+  );
+  return (
+    <span>
+      {after ? null : cap("left")}
+      <span className="p-step">
+        <button type="button" className="p-step__btn" aria-label={label + "を減らす"}
+          disabled={value <= min} onClick={() => onChange(Math.max(min, value - 1))}>−</button>
+        <span className={"p-step__val" + (value === 0 ? " p-step__val--zero" : "")}>{value}</span>
+        <button type="button" className="p-step__btn" aria-label={label + "を増やす"}
+          disabled={value >= max} onClick={() => onChange(Math.min(max, value + 1))}>＋</button>
+      </span>
+      {after ? cap("right") : null}
+    </span>
+  );
+}
+
+function NumInput({ label, value, min, max, step, onChange, unit }) {
+  return (
+    <span>
+      <input
+        className="p-input"
+        type="number"
+        inputMode="numeric"
+        aria-label={label}
+        value={value}
+        min={min}
+        max={max}
+        step={step || 1}
+        onChange={(e) => {
+          const v = parseInt(e.target.value, 10);
+          if (!isNaN(v)) onChange(Math.min(max, Math.max(min, v)));
+        }}
+      />
+      <span className="p-field__unit" style={{ marginLeft: "var(--sp-1)" }}>{unit}</span>
+    </span>
+  );
+}
+
+/* ==================================================================
+   満たせなかった制約の一覧
+================================================================== */
+function Flags({ ev, rules }) {
+  const groups = [];
+
+  if (ev.shortages.length) {
+    groups.push({
+      title: "人数が足りない時帯",
+      count: ev.shortages.length,
+      why: "その時間に店を回す人数が確保できていません。ほかの日から動かすか、この日だけ人数を減らして回すかの判断が要ります。",
+      items: ev.shortages.map((x) => ({
+        where: x.day.d + "（" + x.day.w + "）" + x.slot.label,
+        text: (x.need - x.have) + "名不足（必要" + x.need + "名／配置" + x.have + "名）",
+      })),
+    });
+  }
+
+  if (ev.qshortages.length) {
+    groups.push({
+      title: QUAL.label + "がいない時帯",
+      count: ev.qshortages.length,
+      why: "資格が要る業務をその時間に行えません。時帯ごとの必須人数を見直すか、資格者を増やすかの判断になります。",
+      items: ev.qshortages.map((x) => ({
+        where: x.day.d + "（" + x.day.w + "）" + x.slot.label,
+        text: QUAL.label + "が" + (x.need - x.have) + "名不足（必要" + x.need + "名／配置" + x.have + "名）",
+      })),
+    });
+  }
+
+  if (ev.runs.length) {
+    groups.push({
+      title: "連勤の上限を超えた人",
+      count: ev.runs.length,
+      why: "人数を確保するために連勤の上限を超えています。本人に確認するか、上限を守って人数不足を受け入れるかの選択です。",
+      items: ev.runs.map((x) => ({
+        where: x.staff.name,
+        text: x.len + "連勤（上限" + rules.maxRun + "日）　" + x.from.d + "から" + x.to.d + "まで",
+      })),
+    });
+  }
+
+  if (ev.rests.length) {
+    groups.push({
+      title: "連休が取れていない人",
+      count: ev.rests.length,
+      why: "期間中に連続した休みが確保できていません。休みの位置を動かせないか、表の上で確認してください。",
+      items: ev.rests.map((x) => ({
+        where: x.staff.name,
+        text: "続けて休めるのが最長" + x.maxRest + "日（保証したいのは" + rules.restRun + "日連続）",
+      })),
+    });
+  }
+
+  if (ev.caps.length) {
+    groups.push({
+      title: "週の勤務回数の上限を超えた人",
+      count: ev.caps.length,
+      why: "手直しによって、契約上の勤務回数を超えています。自動生成ではここは超えません。",
+      items: ev.caps.map((x) => ({
+        where: x.staff.name,
+        text: "第" + x.week + "週が" + x.count + "回（契約は週" + x.cap + "回まで）",
+      })),
+    });
+  }
+
+  if (ev.wants.length) {
+    const byStaff = {};
+    ev.wants.forEach((x) => {
+      if (!byStaff[x.staff.id]) byStaff[x.staff.id] = { staff: x.staff, days: [] };
+      byStaff[x.staff.id].days.push(x.day);
+    });
+    groups.push({
+      title: "出勤希望に応えられなかった分",
+      count: ev.wants.length,
+      why: "必要人数と契約上の回数の範囲に収まらなかった希望です。人数の条件と直接ぶつかるため、優先順位は最後に置いています。",
+      items: Object.keys(byStaff).map((k) => ({
+        where: byStaff[k].staff.name,
+        text: joinDays(byStaff[k].days, (d) => d.d + "（" + d.w + "）") + "　計" + byStaff[k].days.length + "件",
+      })),
+    });
+  }
+
+  const okList = [];
+  okList.push("出勤不可として申告された日に、勤務を入れていません");
+  okList.push("1人が1日に2コマ以上入ることはありません");
+  if (!ev.caps.length) okList.push("週の勤務回数は、全員が契約の範囲に収まっています");
+  if (!ev.shortages.length) okList.push("すべての時帯で必要人数を満たしています");
+  if (!ev.qshortages.length) okList.push(QUAL.label + "の必須人数を、すべての時帯で満たしています");
+  if (!ev.runs.length) okList.push("連勤の上限（" + rules.maxRun + "日）を超えた人はいません");
+  if (!ev.rests.length) okList.push(rules.restRun + "日連続の休みが、全員に確保されています");
+  if (!ev.wants.length) okList.push("出勤希望はすべて反映しています");
+
+  return (
+    <div className="p-flags">
+      {groups.length === 0 ? (
+        <div className="p-flag p-flag--ok">
+          <p className="p-flag__head">
+            <span className="p-flag__title">満たせなかった条件はありません</span>
+          </p>
+          <p className="p-flag__why">
+            設定したすべての条件を満たすシフトが組めています。それでも、当日の欠勤や体調は表に出ません。最終の確認は人が行ってください。
+          </p>
+        </div>
+      ) : (
+        groups.map((g) => (
+          <div className="p-flag" key={g.title}>
+            <p className="p-flag__head">
+              <span className="p-flag__title">{g.title}</span>
+              <span className="p-flag__count">{g.count}件</span>
+            </p>
+            <ul className="p-flag__list">
+              {g.items.map((it, i) => (
+                <li key={i}>
+                  <span className="p-flag__where">{it.where}</span>
+                  <span>{it.text}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="p-flag__why">{g.why}</p>
+          </div>
+        ))
+      )}
+
+      <div className="p-flag p-flag--ok">
+        <p className="p-flag__head">
+          <span className="p-flag__title">守られている条件</span>
+          <span className="p-flag__count">{okList.length}件</span>
+        </p>
+        <ul className="p-flag__list">
+          {okList.map((t, i) => <li key={i}>{t}</li>)}
+        </ul>
+        <p className="p-flag__why">
+          ここに並ぶ条件は、表を見て確かめる必要がありません。人が見るのは、上の臙脂の部分だけで足ります。
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/* ==================================================================
+   手直しの操作盤
+================================================================== */
+function Editor({ sel, plan, slots, onAssign, onClose }) {
+  if (!sel) {
+    return (
+      <div className="p-editor p-editor--idle">
+        <p className="p-editor__title">手直し</p>
+        <p className="p-editor__note">
+          上の表のますを押すと、ここに変更の操作が出ます。変えた内容は、上の一覧と表にすぐ反映されます。
+        </p>
+      </div>
+    );
+  }
+
+  const staff = STAFF.filter((s) => s.id === sel.staff)[0];
+  const day = DAYS[sel.day];
+  const cur = plan[staff.id][day.i];
+  const isNg = staff.ng.indexOf(day.i) >= 0;
+
+  const reasonFor = (sl) => {
+    if (isNg) return "出勤不可の申告があります";
+    if (staff.ngSlot.indexOf(sl.id) >= 0) return sl.label + "には入れません";
+    if (staff.student && !day.holiday && sl.id !== "yoru") return "学生のため平日の昼間は不可";
+    return null;
+  };
+
+  const weekN = DAYS.filter((d) => weekOf(d.i) === weekOf(day.i) && plan[staff.id][d.i]).length;
+
+  return (
+    <div className="p-editor">
+      <p className="p-editor__title">手直し</p>
+      <p className="p-editor__who">
+        {staff.name}　{day.d}（{day.w}）
+      </p>
+      <div className="p-editor__row">
+        {slots.map((sl) => {
+          const reason = reasonFor(sl);
+          return (
+            <button
+              key={sl.id}
+              type="button"
+              className={"p-btn" + (cur === sl.id ? " p-btn--main" : "")}
+              disabled={!!reason}
+              title={reason || sl.time}
+              onClick={() => onAssign(staff.id, day.i, sl.id)}
+            >
+              {sl.label}
+            </button>
+          );
+        })}
+        <button
+          type="button"
+          className={"p-btn" + (!cur ? " p-btn--main" : " p-btn--quiet")}
+          onClick={() => onAssign(staff.id, day.i, null)}
+        >
+          休みにする
+        </button>
+        <span className="p-actions__spacer" />
+        <button type="button" className="p-btn p-btn--quiet" onClick={onClose}>閉じる</button>
+      </div>
+
+      {isNg ? (
+        <p className="p-editor__note p-editor__note--alert">
+          この日は{staff.name}から出勤不可の申告が出ています。
+          {NG_REASON[day.i] ? NG_REASON[day.i] + "。" : ""}
+          申告に反する割り当てはできない作りにしています。
+        </p>
+      ) : (
+        <p className="p-editor__note">
+          {staff.kind}／週{staff.cap}回まで／この週はいま{weekN}回
+          {staff.q ? "／" + QUAL.label : ""}
+          {staff.ngSlot.length ? "／" + staff.ngSlot.map((id) => SLOT_BY_ID[id].label + "は不可").join("・") : ""}
+          {staff.student ? "／平日の昼間は不可" : ""}
+          。押せない時帯には理由があります。
+        </p>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
